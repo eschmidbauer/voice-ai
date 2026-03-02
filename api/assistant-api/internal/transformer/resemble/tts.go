@@ -34,6 +34,10 @@ type resembleTTS struct {
 	contextId  string
 	connection *websocket.Conn
 
+	// TTS latency tracking
+	ttsStartedAt  time.Time
+	ttsMetricSent bool
+
 	logger   commons.Logger
 	onPacket func(pkt ...internal_type.Packet) error
 }
@@ -152,7 +156,21 @@ func (rt *resembleTTS) textToSpeechCallback(conn *websocket.Conn, ctx context.Co
 
 			rt.mu.Lock()
 			contextId := rt.contextId
+			startedAt := rt.ttsStartedAt
+			metricSent := rt.ttsMetricSent
+			if !metricSent && !startedAt.IsZero() {
+				rt.ttsMetricSent = true
+			}
 			rt.mu.Unlock()
+			if !metricSent && !startedAt.IsZero() {
+				rt.onPacket(internal_type.MessageMetricPacket{
+					ContextID: contextId,
+					Metrics: []*protos.Metric{{
+						Name:  "tts_latency_ms",
+						Value: fmt.Sprintf("%d", time.Since(startedAt).Milliseconds()),
+					}},
+				})
+			}
 			rt.onPacket(internal_type.TextToSpeechAudioPacket{ContextID: contextId, AudioChunk: rawAudioData})
 
 		default:
@@ -166,6 +184,8 @@ func (rt *resembleTTS) Transform(ctx context.Context, in internal_type.LLMPacket
 	currentCtx := rt.contextId
 	if in.ContextId() != rt.contextId {
 		rt.contextId = in.ContextId()
+		rt.ttsStartedAt = time.Time{}
+		rt.ttsMetricSent = false
 	}
 	connection := rt.connection
 	rt.mu.Unlock()
@@ -177,6 +197,10 @@ func (rt *resembleTTS) Transform(ctx context.Context, in internal_type.LLMPacket
 	switch input := in.(type) {
 	case internal_type.InterruptionPacket:
 		if currentCtx != "" {
+			rt.mu.Lock()
+			rt.ttsStartedAt = time.Time{}
+			rt.ttsMetricSent = false
+			rt.mu.Unlock()
 			rt.onPacket(internal_type.ConversationEventPacket{
 				Name: "tts",
 				Data: map[string]string{"type": "interrupted"},
@@ -185,6 +209,11 @@ func (rt *resembleTTS) Transform(ctx context.Context, in internal_type.LLMPacket
 		}
 		return nil
 	case internal_type.LLMResponseDeltaPacket:
+		rt.mu.Lock()
+		if rt.ttsStartedAt.IsZero() {
+			rt.ttsStartedAt = time.Now()
+		}
+		rt.mu.Unlock()
 		if err := connection.WriteJSON(rt.GetTextToSpeechRequest(currentCtx, input.Text)); err != nil {
 			rt.logger.Errorf("resemble-tts: error while writing request to websocket: %v", err)
 			return err

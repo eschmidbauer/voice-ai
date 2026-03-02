@@ -36,6 +36,10 @@ type elevenlabsTTS struct {
 	mu        sync.Mutex
 	contextId string
 
+	// TTS latency tracking
+	ttsStartedAt  time.Time
+	ttsMetricSent bool
+
 	logger     commons.Logger
 	connection *websocket.Conn
 	onPacket   func(pkt ...internal_type.Packet) error
@@ -114,7 +118,24 @@ func (elt *elevenlabsTTS) textToSpeechCallback(conn *websocket.Conn, ctx context
 
 			if rawAudioData, err := base64.StdEncoding.DecodeString(audioData.Audio); err == nil {
 				if audioData.ContextId != nil {
-					elt.onPacket(internal_type.TextToSpeechAudioPacket{ContextID: *audioData.ContextId, AudioChunk: rawAudioData})
+					elt.mu.Lock()
+					startedAt := elt.ttsStartedAt
+					metricSent := elt.ttsMetricSent
+					ctxId := *audioData.ContextId
+					if !metricSent && !startedAt.IsZero() {
+						elt.ttsMetricSent = true
+					}
+					elt.mu.Unlock()
+					if !metricSent && !startedAt.IsZero() {
+						elt.onPacket(internal_type.MessageMetricPacket{
+							ContextID: ctxId,
+							Metrics: []*protos.Metric{{
+								Name:  "tts_latency_ms",
+								Value: fmt.Sprintf("%d", time.Since(startedAt).Milliseconds()),
+							}},
+						})
+					}
+					elt.onPacket(internal_type.TextToSpeechAudioPacket{ContextID: ctxId, AudioChunk: rawAudioData})
 				}
 			}
 
@@ -141,6 +162,8 @@ func (t *elevenlabsTTS) Transform(ctx context.Context, in internal_type.LLMPacke
 	currentCtx := t.contextId
 	if in.ContextId() != t.contextId {
 		t.contextId = in.ContextId()
+		t.ttsStartedAt = time.Time{}
+		t.ttsMetricSent = false
 	}
 	t.mu.Unlock()
 
@@ -151,6 +174,10 @@ func (t *elevenlabsTTS) Transform(ctx context.Context, in internal_type.LLMPacke
 	switch input := in.(type) {
 	case internal_type.InterruptionPacket:
 		if currentCtx != "" {
+			t.mu.Lock()
+			t.ttsStartedAt = time.Time{}
+			t.ttsMetricSent = false
+			t.mu.Unlock()
 			t.onPacket(internal_type.ConversationEventPacket{
 				Name: "tts",
 				Data: map[string]string{"type": "interrupted"},
@@ -159,6 +186,11 @@ func (t *elevenlabsTTS) Transform(ctx context.Context, in internal_type.LLMPacke
 		}
 		return nil
 	case internal_type.LLMResponseDeltaPacket:
+		t.mu.Lock()
+		if t.ttsStartedAt.IsZero() {
+			t.ttsStartedAt = time.Now()
+		}
+		t.mu.Unlock()
 		if err := cnn.WriteJSON(map[string]interface{}{
 			"text":       input.Text,
 			"context_id": t.contextId,

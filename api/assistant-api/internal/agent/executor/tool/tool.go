@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -123,20 +124,45 @@ func (executor *toolExecutor) execute(ctx context.Context, contextID string, cal
 		return &protos.ToolMessage_Tool{Name: call.GetFunction().GetName(), Id: call.Id, Content: "unable to find tool: " + call.GetFunction().GetName()}
 	}
 	arguments := executor.parseArgument(call.GetFunction().GetArguments())
-	communication.OnPacket(ctx, internal_type.LLMToolCallPacket{
-		ToolID:    call.GetId(),
-		Name:      call.GetFunction().GetName(),
-		ContextID: contextID,
-		Arguments: arguments,
-	})
+	communication.OnPacket(ctx,
+		internal_type.LLMToolCallPacket{
+			ToolID:    call.GetId(),
+			Name:      call.GetFunction().GetName(),
+			ContextID: contextID,
+			Arguments: arguments,
+		},
+		internal_type.ConversationEventPacket{
+			ContextID: contextID,
+			Name:      "tool",
+			Data: map[string]string{
+				"type": "calling",
+				"name": call.GetFunction().GetName(),
+				"id":   call.GetId(),
+			},
+			Time: start,
+		},
+	)
 	output := funC.Call(ctx, contextID, call.GetId(), arguments, communication)
-	communication.OnPacket(ctx, internal_type.LLMToolResultPacket{
-		ToolID:    call.GetId(),
-		Name:      call.GetFunction().GetName(),
-		ContextID: contextID,
-		TimeTaken: int64(time.Since(start)),
-		Result:    output,
-	})
+	communication.OnPacket(ctx,
+		internal_type.LLMToolResultPacket{
+			ToolID:    call.GetId(),
+			Name:      call.GetFunction().GetName(),
+			ContextID: contextID,
+			TimeTaken: int64(time.Since(start)),
+			Result:    output,
+		},
+		internal_type.ConversationEventPacket{
+			ContextID: contextID,
+			Name:      "tool",
+			Data: map[string]string{
+				"type":    "completed",
+				"name":    call.GetFunction().GetName(),
+				"id":      call.GetId(),
+				"time_ms": fmt.Sprintf("%d", time.Since(start).Milliseconds()),
+			},
+			Time: time.Now(),
+		},
+	)
 	return &protos.ToolMessage_Tool{Name: call.GetFunction().GetName(), Id: call.Id, Content: output.Result()}
 }
 

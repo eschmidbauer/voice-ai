@@ -109,54 +109,77 @@ func (r *genericRequestor) OnPacket(ctx context.Context, pkts ...internal_type.P
 // runDispatcher — single consumer goroutine
 // =============================================================================
 
-// runDispatcher reads packets from the three priority channels and dispatches
-// them. It uses a two-stage select so critical packets always preempt normal
-// and low-priority ones.
-//
-// Stage 1: non-blocking drain of criticalCh — if anything is there, process
-//
-//	it immediately and loop again before checking normal/low.
-//
-// Stage 2: blocking select across all three channels; criticalCh gets the
-//
-//	head-start advantage from Stage 1 on every iteration.
-func (r *genericRequestor) runDispatcher(ctx context.Context) {
+// runCriticalDispatcher processes critical-priority packets (interrupts,
+// directives) on a dedicated goroutine so they are never queued behind
+// normal or low-priority work.
+func (r *genericRequestor) runCriticalDispatcher(ctx context.Context) {
 	for {
-		// Stage 1 — drain critical without blocking
-		select {
-		case e := <-r.criticalCh:
-			r.dispatch(e.ctx, e.pkt)
-			continue
-		default:
-		}
-
-		// Stage 2 — wait for any packet; critical still wins if it arrives
 		select {
 		case <-ctx.Done():
-			// Drain remaining packets so completion metrics (STATUS, TIME_TAKEN)
-			// that were enqueued just before Disconnect() are not lost.
-			r.drainChannels()
+			r.drainCriticalChannel()
 			return
 		case e := <-r.criticalCh:
 			r.dispatch(e.ctx, e.pkt)
+		}
+	}
+}
+
+func (r *genericRequestor) drainCriticalChannel() {
+	for {
+		select {
+		case e := <-r.criticalCh:
+			r.dispatch(e.ctx, e.pkt)
+		default:
+			return
+		}
+	}
+}
+
+// runNormalDispatcher processes normal-priority packets (audio, STT, LLM,
+// TTS pipeline) on a dedicated goroutine.
+func (r *genericRequestor) runNormalDispatcher(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			r.drainNormalChannel()
+			return
 		case e := <-r.normalCh:
 			r.dispatch(e.ctx, e.pkt)
+		}
+	}
+}
+
+func (r *genericRequestor) drainNormalChannel() {
+	for {
+		select {
+		case e := <-r.normalCh:
+			r.dispatch(e.ctx, e.pkt)
+		default:
+			return
+		}
+	}
+}
+
+// runLowDispatcher processes low-priority packets (persistence, metrics,
+// events, tools) on a dedicated goroutine so DB writes never stall audio
+// or LLM processing.
+func (r *genericRequestor) runLowDispatcher(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			// Drain remaining low packets so completion metrics (STATUS,
+			// TIME_TAKEN) enqueued just before Disconnect() are not lost.
+			r.drainLowChannel()
+			return
 		case e := <-r.lowCh:
 			r.dispatch(e.ctx, e.pkt)
 		}
 	}
 }
 
-// drainChannels processes all packets remaining in the priority channels.
-// Called when the session context is cancelled to ensure final metrics
-// (conversation status, duration) are persisted before the dispatcher exits.
-func (r *genericRequestor) drainChannels() {
+func (r *genericRequestor) drainLowChannel() {
 	for {
 		select {
-		case e := <-r.criticalCh:
-			r.dispatch(e.ctx, e.pkt)
-		case e := <-r.normalCh:
-			r.dispatch(e.ctx, e.pkt)
 		case e := <-r.lowCh:
 			r.dispatch(e.ctx, e.pkt)
 		default:
@@ -602,11 +625,9 @@ func (talking *genericRequestor) handleTTSEnd(ctx context.Context, vl internal_t
 // =============================================================================
 
 func (talking *genericRequestor) handleSaveMessage(ctx context.Context, vl internal_type.SaveMessagePacket) {
-	utils.Go(ctx, func() {
-		if err := talking.onCreateMessage(ctx, vl); err != nil {
-			talking.logger.Errorf("Error in onCreateMessage: %v", err)
-		}
-	})
+	if err := talking.onCreateMessage(ctx, vl); err != nil {
+		talking.logger.Errorf("Error in onCreateMessage: %v", err)
+	}
 }
 
 func (talking *genericRequestor) handleConversationMetric(ctx context.Context, vl internal_type.ConversationMetricPacket) {
@@ -615,29 +636,23 @@ func (talking *genericRequestor) handleConversationMetric(ctx context.Context, v
 			AssistantConversationId: vl.ContextID,
 			Metrics:                 vl.Metrics,
 		})
-		utils.Go(ctx, func() {
-			if err := talking.onAddMetrics(ctx, vl.Metrics...); err != nil {
-				talking.logger.Errorf("Error in onAddMetrics: %v", err)
-			}
-		})
-		utils.Go(ctx, func() {
-			talking.metrics.Collect(ctx, observe.ConversationMetricRecord{
-				ConversationID: vl.ContextId(),
-				Metrics:        vl.Metrics,
-				Time:           time.Now(),
-			})
+		if err := talking.onAddMetrics(ctx, vl.Metrics...); err != nil {
+			talking.logger.Errorf("Error in onAddMetrics: %v", err)
+		}
+		talking.metrics.Collect(ctx, observe.ConversationMetricRecord{
+			ConversationID: vl.ContextId(),
+			Metrics:        vl.Metrics,
+			Time:           time.Now(),
 		})
 	}
 }
 
 func (talking *genericRequestor) handleConversationMetadata(ctx context.Context, vl internal_type.ConversationMetadataPacket) {
-	utils.Go(ctx, func() {
-		if len(vl.Metadata) > 0 {
-			if err := talking.onAddMetadata(ctx, vl.Metadata...); err != nil {
-				talking.logger.Errorf("Error in onAddMetadata: %v", err)
-			}
+	if len(vl.Metadata) > 0 {
+		if err := talking.onAddMetadata(ctx, vl.Metadata...); err != nil {
+			talking.logger.Errorf("Error in onAddMetadata: %v", err)
 		}
-	})
+	}
 }
 
 func (talking *genericRequestor) handleMessageMetric(ctx context.Context, vl internal_type.MessageMetricPacket) {
@@ -649,28 +664,22 @@ func (talking *genericRequestor) handleMessageMetric(ctx context.Context, vl int
 			AssistantConversationId: talking.Conversation().Id,
 			Metrics:                 vl.Metrics,
 		})
-		utils.Go(ctx, func() {
-			if err := talking.onMessageMetric(ctx, vl.ContextID, vl.Metrics); err != nil {
-				talking.logger.Errorf("Error in onMessageMetric: %v", err)
-			}
-		})
-		utils.Go(ctx, func() {
-			talking.metrics.Collect(ctx, observe.MessageMetricRecord{
-				MessageID:      vl.ContextID,
-				ConversationID: fmt.Sprintf("%d", talking.Conversation().Id),
-				Metrics:        vl.Metrics,
-				Time:           time.Now(),
-			})
+		if err := talking.onMessageMetric(ctx, vl.ContextID, vl.Metrics); err != nil {
+			talking.logger.Errorf("Error in onMessageMetric: %v", err)
+		}
+		talking.metrics.Collect(ctx, observe.MessageMetricRecord{
+			MessageID:      vl.ContextID,
+			ConversationID: fmt.Sprintf("%d", talking.Conversation().Id),
+			Metrics:        vl.Metrics,
+			Time:           time.Now(),
 		})
 	}
 }
 
 func (talking *genericRequestor) handleMessageMetadata(ctx context.Context, vl internal_type.MessageMetadataPacket) {
-	utils.Go(ctx, func() {
-		if len(vl.Metadata) > 0 {
-			talking.logger.Debugf("message metadata received for context %s", vl.ContextID)
-		}
-	})
+	if len(vl.Metadata) > 0 {
+		talking.logger.Debugf("message metadata received for context %s", vl.ContextID)
+	}
 }
 
 // =============================================================================
@@ -678,25 +687,21 @@ func (talking *genericRequestor) handleMessageMetadata(ctx context.Context, vl i
 // =============================================================================
 
 func (talking *genericRequestor) handleToolCall(ctx context.Context, vl internal_type.LLMToolCallPacket) {
-	utils.Go(ctx, func() {
-		req, _ := json.Marshal(map[string]interface{}{
-			"id":        vl.ToolID,
-			"name":      vl.Name,
-			"arguments": vl.Arguments,
-		})
-		if err := talking.CreateToolLog(ctx, vl.ContextID, vl.ToolID, vl.Name, type_enums.RECORD_IN_PROGRESS, req); err != nil {
-			talking.logger.Errorf("error logging tool call start: %v", err)
-		}
+	req, _ := json.Marshal(map[string]interface{}{
+		"id":        vl.ToolID,
+		"name":      vl.Name,
+		"arguments": vl.Arguments,
 	})
+	if err := talking.CreateToolLog(ctx, vl.ContextID, vl.ToolID, vl.Name, type_enums.RECORD_IN_PROGRESS, req); err != nil {
+		talking.logger.Errorf("error logging tool call start: %v", err)
+	}
 }
 
 func (talking *genericRequestor) handleToolResult(ctx context.Context, vl internal_type.LLMToolResultPacket) {
-	utils.Go(ctx, func() {
-		res, _ := json.Marshal(vl.Result)
-		if err := talking.UpdateToolLog(ctx, vl.ToolID, vl.TimeTaken, type_enums.RECORD_COMPLETE, res); err != nil {
-			talking.logger.Errorf("error logging tool call result: %v", err)
-		}
-	})
+	res, _ := json.Marshal(vl.Result)
+	if err := talking.UpdateToolLog(ctx, vl.ToolID, vl.TimeTaken, type_enums.RECORD_COMPLETE, res); err != nil {
+		talking.logger.Errorf("error logging tool call result: %v", err)
+	}
 }
 
 // =============================================================================

@@ -32,6 +32,10 @@ type sarvamTextToSpeech struct {
 	connection *websocket.Conn
 	contextId  string
 
+	// TTS latency tracking
+	ttsStartedAt  time.Time
+	ttsMetricSent bool
+
 	logger   commons.Logger
 	onPacket func(pkt ...internal_type.Packet) error
 }
@@ -132,7 +136,21 @@ func (rt *sarvamTextToSpeech) textToSpeechCallback(conn *websocket.Conn, ctx con
 			}
 			rt.mu.Lock()
 			contextId := rt.contextId
+			startedAt := rt.ttsStartedAt
+			metricSent := rt.ttsMetricSent
+			if !metricSent && !startedAt.IsZero() {
+				rt.ttsMetricSent = true
+			}
 			rt.mu.Unlock()
+			if !metricSent && !startedAt.IsZero() {
+				rt.onPacket(internal_type.MessageMetricPacket{
+					ContextID: contextId,
+					Metrics: []*protos.Metric{{
+						Name:  "tts_latency_ms",
+						Value: fmt.Sprintf("%d", time.Since(startedAt).Milliseconds()),
+					}},
+				})
+			}
 			rt.onPacket(internal_type.TextToSpeechAudioPacket{ContextID: contextId, AudioChunk: rawAudioData})
 		case "event":
 			eventData, err := response.AsEvent()
@@ -160,6 +178,8 @@ func (rt *sarvamTextToSpeech) Transform(ctx context.Context, in internal_type.LL
 	rt.mu.Lock()
 	if in.ContextId() != rt.contextId {
 		rt.contextId = in.ContextId()
+		rt.ttsStartedAt = time.Time{}
+		rt.ttsMetricSent = false
 	}
 	connection := rt.connection
 	rt.mu.Unlock()
@@ -170,8 +190,17 @@ func (rt *sarvamTextToSpeech) Transform(ctx context.Context, in internal_type.LL
 
 	switch input := in.(type) {
 	case internal_type.InterruptionPacket:
+		rt.mu.Lock()
+		rt.ttsStartedAt = time.Time{}
+		rt.ttsMetricSent = false
+		rt.mu.Unlock()
 		return nil
 	case internal_type.LLMResponseDeltaPacket:
+		rt.mu.Lock()
+		if rt.ttsStartedAt.IsZero() {
+			rt.ttsStartedAt = time.Now()
+		}
+		rt.mu.Unlock()
 		if err := connection.WriteJSON(map[string]interface{}{
 			"type": "text",
 			"data": map[string]interface{}{

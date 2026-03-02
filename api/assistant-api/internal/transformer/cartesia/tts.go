@@ -31,6 +31,10 @@ type cartesiaTTS struct {
 
 	contextId string
 
+	// TTS latency tracking
+	ttsStartedAt  time.Time
+	ttsMetricSent bool
+
 	logger     commons.Logger
 	connection *websocket.Conn
 	onPacket   func(pkt ...internal_type.Packet) error
@@ -112,7 +116,24 @@ func (cst *cartesiaTTS) textToSpeechCallback(conn *websocket.Conn, ctx context.C
 				cst.logger.Error("cartesia-tts: failed to decode audio payload error: %v", err)
 				continue
 			}
-			_ = cst.onPacket(internal_type.TextToSpeechAudioPacket{ContextID: payload.ContextID, AudioChunk: decoded})
+			cst.mu.Lock()
+			startedAt := cst.ttsStartedAt
+			metricSent := cst.ttsMetricSent
+			ctxId := payload.ContextID
+			if !metricSent && !startedAt.IsZero() {
+				cst.ttsMetricSent = true
+			}
+			cst.mu.Unlock()
+			if !metricSent && !startedAt.IsZero() {
+				_ = cst.onPacket(internal_type.MessageMetricPacket{
+					ContextID: ctxId,
+					Metrics: []*protos.Metric{{
+						Name:  "tts_latency_ms",
+						Value: fmt.Sprintf("%d", time.Since(startedAt).Milliseconds()),
+					}},
+				})
+			}
+			_ = cst.onPacket(internal_type.TextToSpeechAudioPacket{ContextID: ctxId, AudioChunk: decoded})
 		}
 	}
 }
@@ -128,6 +149,8 @@ func (ct *cartesiaTTS) Transform(ctx context.Context, in internal_type.LLMPacket
 	currentCtx := ct.contextId
 	if in.ContextId() != ct.contextId {
 		ct.contextId = in.ContextId()
+		ct.ttsStartedAt = time.Time{}
+		ct.ttsMetricSent = false
 	}
 	ct.mu.Unlock()
 
@@ -142,6 +165,10 @@ func (ct *cartesiaTTS) Transform(ctx context.Context, in internal_type.LLMPacket
 				"context_id": currentCtx,
 				"cancel":     true,
 			})
+			ct.mu.Lock()
+			ct.ttsStartedAt = time.Time{}
+			ct.ttsMetricSent = false
+			ct.mu.Unlock()
 			ct.onPacket(internal_type.ConversationEventPacket{
 				Name: "tts",
 				Data: map[string]string{"type": "interrupted"},
@@ -150,6 +177,11 @@ func (ct *cartesiaTTS) Transform(ctx context.Context, in internal_type.LLMPacket
 		}
 		return nil
 	case internal_type.LLMResponseDeltaPacket:
+		ct.mu.Lock()
+		if ct.ttsStartedAt.IsZero() {
+			ct.ttsStartedAt = time.Now()
+		}
+		ct.mu.Unlock()
 		message := ct.GetTextToSpeechInput(input.Text, map[string]interface{}{"continue": true, "context_id": ct.contextId, "max_buffer_delay_ms": "0ms"})
 		if err := conn.WriteJSON(message); err != nil {
 			return err

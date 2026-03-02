@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"time"
 
+	observe "github.com/rapidaai/api/assistant-api/internal/observe"
 	internal_type "github.com/rapidaai/api/assistant-api/internal/type"
 	"github.com/rapidaai/pkg/types"
 	type_enums "github.com/rapidaai/pkg/types/enums"
@@ -56,6 +57,11 @@ func (t *genericRequestor) Talk(_ context.Context, auth types.SimplePrinciple) e
 				if err := t.onAddMetrics(context.Background(), completionMetrics...); err != nil {
 					t.logger.Errorf("talk: failed to persist completion metrics: %v", err)
 				}
+				t.metrics.Collect(context.Background(), observe.ConversationMetricRecord{
+					ConversationID: fmt.Sprintf("%d", t.Conversation().Id),
+					Metrics:        completionMetrics,
+					Time:           time.Now(),
+				})
 				t.Disconnect(context.Background())
 			}
 			return nil

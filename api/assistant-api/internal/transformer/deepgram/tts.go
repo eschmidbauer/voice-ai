@@ -37,6 +37,10 @@ type deepgramTTS struct {
 	contextId string
 	mu        sync.Mutex
 
+	// TTS latency tracking
+	ttsStartedAt  time.Time
+	ttsMetricSent bool
+
 	logger     commons.Logger
 	connection *websocket.Conn
 	onPacket   func(pkt ...internal_type.Packet) error
@@ -114,8 +118,25 @@ func (t *deepgramTTS) textToSpeechCallback(conn *websocket.Conn, ctx context.Con
 			}
 
 			if msgType == websocket.BinaryMessage {
+				t.mu.Lock()
+				startedAt := t.ttsStartedAt
+				metricSent := t.ttsMetricSent
+				ctxId := t.contextId
+				if !metricSent && !startedAt.IsZero() {
+					t.ttsMetricSent = true
+				}
+				t.mu.Unlock()
+				if !metricSent && !startedAt.IsZero() {
+					t.onPacket(internal_type.MessageMetricPacket{
+						ContextID: ctxId,
+						Metrics: []*protos.Metric{{
+							Name:  "tts_latency_ms",
+							Value: fmt.Sprintf("%d", time.Since(startedAt).Milliseconds()),
+						}},
+					})
+				}
 				t.onPacket(internal_type.TextToSpeechAudioPacket{
-					ContextID:  t.contextId,
+					ContextID:  ctxId,
 					AudioChunk: data,
 				})
 				continue
@@ -162,6 +183,8 @@ func (t *deepgramTTS) Transform(ctx context.Context, in internal_type.LLMPacket)
 	currentCtx := t.contextId
 	if in.ContextId() != t.contextId {
 		t.contextId = in.ContextId()
+		t.ttsStartedAt = time.Time{}
+		t.ttsMetricSent = false
 	}
 	t.mu.Unlock()
 
@@ -175,14 +198,23 @@ func (t *deepgramTTS) Transform(ctx context.Context, in internal_type.LLMPacket)
 			_ = conn.WriteJSON(map[string]interface{}{
 				"type": "Clear",
 			})
+			t.mu.Lock()
+			t.ttsStartedAt = time.Time{}
+			t.ttsMetricSent = false
+			t.mu.Unlock()
 			t.onPacket(internal_type.ConversationEventPacket{
-				Name:      "tts",
-				Data:      map[string]string{"type": "interrupted"},
-				Time:      time.Now(),
+				Name: "tts",
+				Data: map[string]string{"type": "interrupted"},
+				Time: time.Now(),
 			})
 		}
 		return nil
 	case internal_type.LLMResponseDeltaPacket:
+		t.mu.Lock()
+		if t.ttsStartedAt.IsZero() {
+			t.ttsStartedAt = time.Now()
+		}
+		t.mu.Unlock()
 		normalized := t.normalizer.Normalize(ctx, input.Text)
 		if err := conn.WriteJSON(map[string]interface{}{
 			"type": "Speak",
@@ -191,7 +223,7 @@ func (t *deepgramTTS) Transform(ctx context.Context, in internal_type.LLMPacket)
 			t.logger.Errorf("deepgram-tts: failed to send Speak message %v", err)
 		}
 		t.onPacket(internal_type.ConversationEventPacket{
-			Name:      "tts",
+			Name: "tts",
 			Data: map[string]string{
 				"type": "speaking",
 				"text": normalized,

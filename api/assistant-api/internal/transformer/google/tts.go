@@ -34,6 +34,10 @@ type googleTextToSpeech struct {
 	client       *texttospeech.Client                                  // Google TTS client.
 	streamClient texttospeechpb.TextToSpeech_StreamingSynthesizeClient // Streaming client for real-time TTS.
 	onPacket     func(pkt ...internal_type.Packet) error               // Callback for handling audio packets.
+
+	// TTS latency tracking
+	ttsStartedAt  time.Time
+	ttsMetricSent bool
 }
 
 // Name returns the name of this transformer implementation.
@@ -125,6 +129,8 @@ func (google *googleTextToSpeech) Transform(ctx context.Context, in internal_typ
 	currentCtx := google.contextId
 	if in.ContextId() != google.contextId {
 		google.contextId = in.ContextId()
+		google.ttsStartedAt = time.Time{}
+		google.ttsMetricSent = false
 	}
 	sCli := google.streamClient
 	google.mu.Unlock()
@@ -135,6 +141,10 @@ func (google *googleTextToSpeech) Transform(ctx context.Context, in internal_typ
 	switch input := in.(type) {
 	case internal_type.InterruptionPacket:
 		if currentCtx != "" {
+			google.mu.Lock()
+			google.ttsStartedAt = time.Time{}
+			google.ttsMetricSent = false
+			google.mu.Unlock()
 			google.onPacket(internal_type.ConversationEventPacket{
 				Name: "tts",
 				Data: map[string]string{"type": "interrupted"},
@@ -149,6 +159,11 @@ func (google *googleTextToSpeech) Transform(ctx context.Context, in internal_typ
 		}
 		return nil
 	case internal_type.LLMResponseDeltaPacket:
+		google.mu.Lock()
+		if google.ttsStartedAt.IsZero() {
+			google.ttsStartedAt = time.Now()
+		}
+		google.mu.Unlock()
 		google.logger.Debugf("google-tts: sending text for synthesis: %s", input.Text)
 		if err := sCli.Send(&texttospeechpb.StreamingSynthesizeRequest{
 			StreamingRequest: &texttospeechpb.StreamingSynthesizeRequest_Input{
@@ -238,6 +253,22 @@ func (g *googleTextToSpeech) textToSpeechCallback(streamClient texttospeechpb.Te
 			}
 
 			audioContent := resp.GetAudioContent()
+			g.mu.Lock()
+			startedAt := g.ttsStartedAt
+			metricSent := g.ttsMetricSent
+			if !metricSent && !startedAt.IsZero() {
+				g.ttsMetricSent = true
+			}
+			g.mu.Unlock()
+			if !metricSent && !startedAt.IsZero() {
+				g.onPacket(internal_type.MessageMetricPacket{
+					ContextID: effectiveContextId,
+					Metrics: []*protos.Metric{{
+						Name:  "tts_latency_ms",
+						Value: fmt.Sprintf("%d", time.Since(startedAt).Milliseconds()),
+					}},
+				})
+			}
 			if err := g.onPacket(internal_type.TextToSpeechAudioPacket{ContextID: effectiveContextId, AudioChunk: audioContent}); err != nil {
 				g.logger.Errorf("google-tts: failed to send packet: %v", err)
 			}

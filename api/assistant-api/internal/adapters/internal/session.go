@@ -127,10 +127,11 @@ func (r *genericRequestor) Connect(
 	auth types.SimplePrinciple,
 	config *protos.ConversationInitialization,
 ) error {
-	// Start the packet dispatcher before any OnPacket calls can happen.
-	// Uses the session ctx so the dispatcher goroutine exits when the
-	// session ends (streamer context cancelled).
-	go r.runDispatcher(ctx)
+	// Start three dedicated dispatchers before any OnPacket calls can happen.
+	// Each channel gets its own goroutine so no priority level can stall another.
+	go r.runCriticalDispatcher(ctx) // interrupts, directives
+	go r.runNormalDispatcher(ctx)   // audio, STT, LLM, TTS pipeline
+	go r.runLowDispatcher(ctx)      // DB writes, metrics, events, tools
 
 	r.SetAuth(auth)
 
@@ -369,10 +370,16 @@ func (r *genericRequestor) initSessionBackground(ctx context.Context, isNew bool
 	})
 
 	utils.Go(ctx, func() {
-		r.onAddMetrics(ctx, &protos.Metric{
+		metrics := []*protos.Metric{{
 			Name:        type_enums.STATUS.String(),
 			Value:       type_enums.RECORD_IN_PROGRESS.String(),
 			Description: "Conversation is currently in progress",
+		}}
+		r.onAddMetrics(ctx, metrics...)
+		r.metrics.Collect(ctx, observe.ConversationMetricRecord{
+			ConversationID: fmt.Sprintf("%d", r.Conversation().Id),
+			Metrics:        metrics,
+			Time:           time.Now(),
 		})
 	})
 

@@ -68,7 +68,7 @@ func (kr *genericRequestor) RetrieveToolKnowledge(ctx context.Context, knowledge
 				Name: "knowledge",
 				Data: map[string]string{
 					"knowledge_id": knowledgeIDStr,
-					"type":         "retrieving",
+					"type":         "completed",
 					"method":       kc.RetrievalMethod,
 					"result_count": fmt.Sprintf("%d", len(result)),
 					"top_score":    fmt.Sprintf("%.4f", topScore),

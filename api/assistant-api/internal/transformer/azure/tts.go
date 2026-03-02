@@ -28,7 +28,12 @@ type azureTextToSpeech struct {
 	ctx       context.Context
 	ctxCancel context.CancelFunc
 
-	contextId   string
+	contextId string
+
+	// TTS latency tracking
+	ttsStartedAt  time.Time
+	ttsMetricSent bool
+
 	logger      commons.Logger
 	stream      *audio.PullAudioOutputStream
 	audioConfig *audio.AudioConfig
@@ -145,13 +150,21 @@ func (azure *azureTextToSpeech) Transform(ctx context.Context, in internal_type.
 
 	azure.mu.Lock()
 	currentCtx := azure.contextId
-	azure.contextId = in.ContextId()
+	if in.ContextId() != azure.contextId {
+		azure.contextId = in.ContextId()
+		azure.ttsStartedAt = time.Time{}
+		azure.ttsMetricSent = false
+	}
 	azure.mu.Unlock()
 
 	switch input := in.(type) {
 	case internal_type.InterruptionPacket:
 		if currentCtx != "" {
 			<-cl.StopSpeakingAsync()
+			azure.mu.Lock()
+			azure.ttsStartedAt = time.Time{}
+			azure.ttsMetricSent = false
+			azure.mu.Unlock()
 			azure.onPacket(internal_type.ConversationEventPacket{
 				Name: "tts",
 				Data: map[string]string{"type": "interrupted"},
@@ -160,6 +173,11 @@ func (azure *azureTextToSpeech) Transform(ctx context.Context, in internal_type.
 		}
 		return nil
 	case internal_type.LLMResponseDeltaPacket:
+		azure.mu.Lock()
+		if azure.ttsStartedAt.IsZero() {
+			azure.ttsStartedAt = time.Now()
+		}
+		azure.mu.Unlock()
 		res := <-cl.StartSpeakingTextAsync(input.Text)
 		if res.Error != nil {
 			return res.Error
@@ -189,7 +207,21 @@ func (azCallback *azureTextToSpeech) OnSpeech(event speech.SpeechSynthesisEventA
 	defer event.Close()
 	azCallback.mu.Lock()
 	ctxId := azCallback.contextId
+	startedAt := azCallback.ttsStartedAt
+	metricSent := azCallback.ttsMetricSent
+	if !metricSent && !startedAt.IsZero() {
+		azCallback.ttsMetricSent = true
+	}
 	azCallback.mu.Unlock()
+	if !metricSent && !startedAt.IsZero() {
+		azCallback.onPacket(internal_type.MessageMetricPacket{
+			ContextID: ctxId,
+			Metrics: []*protos.Metric{{
+				Name:  "tts_latency_ms",
+				Value: fmt.Sprintf("%d", time.Since(startedAt).Milliseconds()),
+			}},
+		})
+	}
 	azCallback.onPacket(internal_type.TextToSpeechAudioPacket{ContextID: ctxId, AudioChunk: event.Result.AudioData})
 }
 
