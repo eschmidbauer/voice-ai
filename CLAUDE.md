@@ -135,9 +135,17 @@ Use typed gRPC clients from `pkg/clients/` for service-to-service calls (never d
 - **Frontend state**: Custom hooks (`use-*-page-store.ts`) — no Redux
 - **Provider metadata**: JSON files under `ui/src/providers/` define voices, languages, and models per AI provider
 
+## Developer Docs
+
+Detailed step-by-step guides for common development tasks live in `.claude/developer/`. Always check these before starting work on a new integration:
+
+| Guide | File | Covers |
+|-------|------|--------|
+| Adding STT/TTS Provider | `.claude/developer/adding-stt-tts-provider.md` | Full frontend-to-backend walkthrough: provider registry, UI config components, backend transformer, factory wiring, required events/metrics, checklist |
+
 ## Adding New Integrations
 
-- **New STT/TTS provider**: Add a directory under `api/assistant-api/internal/transformer/`, implement `Transformers` interface
+- **New STT/TTS provider**: Follow `.claude/developer/adding-stt-tts-provider.md` for the complete guide
 - **New LLM provider**: Add a directory under `api/integration-api/internal/caller/`, register in the router
 - **New telephony channel**: Add under `api/assistant-api/internal/channel/`
 - **New OAuth connector**: Add under `api/web-api/internal/connect/`

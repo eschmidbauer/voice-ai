@@ -1,0 +1,14 @@
+[
+    {
+        "model_id": "mist",
+        "name": "Mist"
+    },
+    {
+        "model_id": "mistv2",
+        "name": "Mist v2"
+    },
+    {
+        "model_id": "arcana",
+        "name": "Arcana"
+    }
+]

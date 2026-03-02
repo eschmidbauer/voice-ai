@@ -472,6 +472,23 @@
         "website": "https://elevenlabs.io"
     },
     {
+        "code": "rime",
+        "name": "Rime",
+        "description": "Rime offers ultra-low-latency text-to-speech with natural-sounding voices via WebSocket streaming.",
+        "featureList": [
+            "tts",
+            "external"
+        ],
+        "configurations": [
+            {
+                "name": "key",
+                "type": "string",
+                "label": "API Key"
+            }
+        ],
+        "website": "https://rime.ai"
+    },
+    {
         "code": "assemblyai",
         "name": "AssemblyAI",
         "description": "AssemblyAI offers state-of-the-art speech recognition and audio intelligence APIs. Known for high accuracy and advanced features like speaker diarization and sentiment analysis.",

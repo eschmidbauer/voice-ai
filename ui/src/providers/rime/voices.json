@@ -1,0 +1,77 @@
+[
+    {
+        "voice_id": "luna",
+        "name": "Luna",
+        "category": "arcana"
+    },
+    {
+        "voice_id": "celeste",
+        "name": "Celeste",
+        "category": "arcana"
+    },
+    {
+        "voice_id": "orion",
+        "name": "Orion",
+        "category": "arcana"
+    },
+    {
+        "voice_id": "ursa",
+        "name": "Ursa",
+        "category": "arcana"
+    },
+    {
+        "voice_id": "astra",
+        "name": "Astra",
+        "category": "arcana"
+    },
+    {
+        "voice_id": "esther",
+        "name": "Esther",
+        "category": "arcana"
+    },
+    {
+        "voice_id": "estelle",
+        "name": "Estelle",
+        "category": "arcana"
+    },
+    {
+        "voice_id": "andromeda",
+        "name": "Andromeda",
+        "category": "arcana"
+    },
+    {
+        "voice_id": "river",
+        "name": "River",
+        "category": "mist"
+    },
+    {
+        "voice_id": "cove",
+        "name": "Cove",
+        "category": "mist"
+    },
+    {
+        "voice_id": "peak",
+        "name": "Peak",
+        "category": "mist"
+    },
+    {
+        "voice_id": "colby",
+        "name": "Colby",
+        "category": "mist"
+    },
+    {
+        "voice_id": "tibur",
+        "name": "Tibur",
+        "category": "mist"
+    },
+    {
+        "voice_id": "ana",
+        "name": "Ana",
+        "category": "mist"
+    },
+    {
+        "voice_id": "vespera",
+        "name": "Vespera",
+        "category": "mist"
+    }
+]

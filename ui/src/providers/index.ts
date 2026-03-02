@@ -190,6 +190,21 @@ export const ELEVENLABS_LANGUAGE = () => {
 };
 
 /**
+ * Rime
+ */
+export const RIME_MODEL = () => {
+  return require('./rime/models.json');
+};
+
+export const RIME_VOICE = () => {
+  return require('./rime/voices.json');
+};
+
+export const RIME_LANGUAGE = () => {
+  return require('./rime/languages.json');
+};
+
+/**
  * cartesia
  */
 

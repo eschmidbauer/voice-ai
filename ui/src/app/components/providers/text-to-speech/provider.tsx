@@ -42,6 +42,11 @@ import {
 } from '@/app/components/providers/text-to-speech/playht';
 import { ProviderComponentProps } from '@/app/components/providers';
 import {
+  ConfigureRimeTextToSpeech,
+  GetRimeDefaultOptions,
+  ValidateRimeOptions,
+} from '@/app/components/providers/text-to-speech/rime';
+import {
   ConfigureSarvamTextToSpeech,
   GetSarvamDefaultOptions,
   ValidateSarvamOptions,
@@ -102,6 +107,8 @@ export const GetDefaultTextToSpeechIfInvalid = (
       return GetCartesiaDefaultOptions(parameters);
     case 'sarvamai':
       return GetSarvamDefaultOptions(parameters);
+    case 'rime':
+      return GetRimeDefaultOptions(parameters);
     default:
       return parameters;
   }
@@ -128,6 +135,8 @@ export const ValidateTextToSpeechIfInvalid = (
       return ValidateCartesiaOptions(parameters);
     case 'sarvamai':
       return ValidateSarvamOptions(parameters);
+    case 'rime':
+      return ValidateRimeOptions(parameters);
     default:
       return undefined;
   }
@@ -191,6 +200,13 @@ export const TextToSpeechConfigComponent: FC<ProviderComponentProps> = ({
     case 'sarvamai':
       return (
         <ConfigureSarvamTextToSpeech
+          parameters={parameters}
+          onParameterChange={onChangeParameter}
+        />
+      );
+    case 'rime':
+      return (
+        <ConfigureRimeTextToSpeech
           parameters={parameters}
           onParameterChange={onChangeParameter}
         />
