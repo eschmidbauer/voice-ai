@@ -1,5 +1,8 @@
 .vscode
 *.onnx
+# Allow small VAD models to be committed (< 3 MB each)
+!api/assistant-api/internal/vad/internal/silero_vad/models/*.onnx
+!api/assistant-api/internal/vad/internal/firered_vad/models/*.onnx
 .DS_Store
 .venv/
 license-check-and-add.json
