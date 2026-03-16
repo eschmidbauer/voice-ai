@@ -71,6 +71,7 @@ COPY --from=builder /usr/local/lib /usr/local/lib
 
 # Copy ML model files (VAD + turn detector)
 COPY --from=builder /app/api/assistant-api/internal/vad/internal/silero_vad/models/ ./models/silero_vad/
+COPY --from=builder /app/api/assistant-api/internal/vad/internal/firered_vad/models/ ./models/firered_vad/
 COPY --from=builder /app/api/assistant-api/internal/end_of_speech/internal/livekit/models/ ./models/livekit_turn/
 COPY --from=builder /app/api/assistant-api/internal/end_of_speech/internal/pipecat/models/ ./models/pipecat_turn/
 
@@ -82,6 +83,7 @@ USER rapida-app
 
 ENV LD_LIBRARY_PATH="/usr/local/lib:/opt/onnxruntime/lib:/opt/azure-speech-sdk/lib/x64:/opt/ten_vad/lib"
 ENV SILERO_MODEL_PATH="./models/silero_vad/silero_vad_20251001.onnx"
+ENV FIRERED_VAD_MODEL_PATH="./models/firered_vad/fireredvad_stream_vad_with_cache.onnx"
 ENV LIVEKIT_TURN_MODEL_PATH="./models/livekit_turn/model_q8.onnx"
 ENV LIVEKIT_TURN_TOKENIZER_PATH="./models/livekit_turn/tokenizer.json"
 ENV PIPECAT_TURN_MODEL_PATH="./models/pipecat_turn/smart-turn-v3.2-cpu.onnx"
