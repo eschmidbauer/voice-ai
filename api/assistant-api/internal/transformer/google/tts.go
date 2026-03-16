@@ -167,7 +167,6 @@ func (google *googleTextToSpeech) Transform(ctx context.Context, in internal_typ
 		}
 		google.mu.Unlock()
 		normalized := google.normalizer.Normalize(ctx, input.Text)
-		google.logger.Debugf("google-tts: sending text for synthesis: %s", normalized)
 		if err := sCli.Send(&texttospeechpb.StreamingSynthesizeRequest{
 			StreamingRequest: &texttospeechpb.StreamingSynthesizeRequest_Input{
 				Input: &texttospeechpb.StreamingSynthesisInput{

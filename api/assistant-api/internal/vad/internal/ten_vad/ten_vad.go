@@ -30,6 +30,11 @@ const (
 
 	// Default speech detection threshold [0.0, 1.0]
 	defaultThreshold = 0.5
+
+	// Default durations — aligned with FireRedVAD defaults
+	// (20 frames × 10 ms = 200 ms silence, 8 frames × 10 ms = 80 ms pad)
+	defaultMinSilenceDurationMs = 200
+	defaultSpeechPadMs          = 80
 )
 
 // -----------------------------------------------------------------------------
@@ -88,8 +93,8 @@ func NewTenVAD(
 		detector:             detector,
 		hopSize:              hopSize,
 		threshold:            float32(threshold),
-		minSilenceDurationMs: 100,
-		speechPadMs:          30,
+		minSilenceDurationMs: resolveMinSilenceDurationMs(options),
+		speechPadMs:          resolveSpeechPadMs(options),
 		isTerminated:         false,
 	}
 
@@ -138,8 +143,27 @@ func (t *TenVAD) Process(ctx context.Context, pkt internal_type.UserAudioPacket)
 		return err
 	}
 
-	if len(segments) > 0 {
+	// Emit InterruptionPacket only on confirmed speech onset — this is the
+	// signal to interrupt assistant TTS/LLM.
+	if hasSpeechStart(segments) {
 		t.notifyActivity(ctx, segments)
+	}
+
+	// Emit a heartbeat while the user is actively speaking so the EOS
+	// silence timer keeps extending during sustained speech.
+	t.mu.RLock()
+	isSpeaking := t.triggered
+	t.mu.RUnlock()
+	if isSpeaking && t.onPacket != nil {
+		_ = t.onPacket(ctx,
+			internal_type.VadSpeechActivityPacket{},
+			internal_type.ConversationEventPacket{
+				Name: "vad",
+				Data: map[string]string{
+					"type": "heartbeat",
+				},
+			},
+		)
 	}
 
 	return nil
@@ -161,6 +185,16 @@ func (t *TenVAD) Close() error {
 	}
 
 	return nil
+}
+
+// hasSpeechStart returns true if any segment contains a speech onset.
+func hasSpeechStart(segments []segment) bool {
+	for _, seg := range segments {
+		if seg.startAt > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // -----------------------------------------------------------------------------
@@ -297,4 +331,30 @@ func resolveThreshold(options utils.Option) float64 {
 		return threshold
 	}
 	return defaultThreshold
+}
+
+// resolveMinSilenceDurationMs extracts min silence duration from options.
+// The option key uses frame count (consistent with FireRedVAD config);
+// each frame is 10 ms, so we multiply by 10 to get milliseconds.
+func resolveMinSilenceDurationMs(options utils.Option) int {
+	if options == nil {
+		return defaultMinSilenceDurationMs
+	}
+	if v, err := options.GetFloat64("microphone.vad.min_silence_frame"); err == nil {
+		return int(v) * 10
+	}
+	return defaultMinSilenceDurationMs
+}
+
+// resolveSpeechPadMs extracts speech pad duration from options.
+// The option key uses frame count (consistent with FireRedVAD config);
+// each frame is 10 ms, so we multiply by 10 to get milliseconds.
+func resolveSpeechPadMs(options utils.Option) int {
+	if options == nil {
+		return defaultSpeechPadMs
+	}
+	if v, err := options.GetFloat64("microphone.vad.min_speech_frame"); err == nil {
+		return int(v) * 10
+	}
+	return defaultSpeechPadMs
 }

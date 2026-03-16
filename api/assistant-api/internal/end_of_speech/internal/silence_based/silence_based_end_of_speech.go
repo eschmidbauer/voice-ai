@@ -127,6 +127,20 @@ func (eos *SilenceBasedEOS) Analyze(ctx context.Context, pkt internal_type.Packe
 			timeout: eos.silenceTimeout,
 		})
 
+	case internal_type.VadSpeechActivityPacket:
+		eos.mu.RLock()
+		seg := eos.state.segment
+		eos.mu.RUnlock()
+
+		if seg.Text == "" {
+			return nil
+		}
+		eos.send(command{
+			ctx:     ctx,
+			segment: seg,
+			timeout: eos.silenceTimeout,
+		})
+
 	case internal_type.SpeechToTextPacket:
 		eos.mu.Lock()
 		if p.Interim {

@@ -74,7 +74,9 @@ func (gO *googleOption) GetClientOptions() []option.ClientOption {
 // SpeechToTextOptions generates a configuration for Google Speech-to-Text streaming recognition.
 // Default language and model are used unless overridden via mdlOpts.
 func (gog *googleOption) SpeechToTextOptions() *speechpb.StreamingRecognitionConfig {
+
 	opts := &speechpb.StreamingRecognitionConfig{
+
 		Config: &speechpb.RecognitionConfig{
 			DecodingConfig: &speechpb.RecognitionConfig_ExplicitDecodingConfig{
 				ExplicitDecodingConfig: &speechpb.ExplicitDecodingConfig{
@@ -97,6 +99,7 @@ func (gog *googleOption) SpeechToTextOptions() *speechpb.StreamingRecognitionCon
 			// 	DenoiseAudio: true,
 			// },
 		},
+
 		StreamingFeatures: &speechpb.StreamingRecognitionFeatures{
 			EnableVoiceActivityEvents: false,
 			InterimResults:            true,

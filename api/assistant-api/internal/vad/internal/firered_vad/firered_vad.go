@@ -25,8 +25,7 @@ import (
 // -----------------------------------------------------------------------------
 
 const (
-	vadName = "firered_vad"
-
+	vadName          = "firered_vad"
 	envModelPathKey  = "FIRERED_VAD_MODEL_PATH"
 	defaultModelFile = "models/fireredvad_stream_vad_with_cache.onnx"
 )
@@ -159,10 +158,10 @@ func (v *FireRedVAD) Process(ctx context.Context, pkt internal_type.UserAudioPac
 			speechEndAt = float64(result.SpeechEndFrame-1) / float64(framesPerSecond)
 		}
 
-		// Track any speech activity in this chunk — the pipeline expects
-		// InterruptionPacket on every chunk with speech so the EOS silence
-		// timer keeps resetting (matching Silero's behaviour).
-		if result.IsSpeech {
+		// Only treat as speech when the postprocessor has confirmed onset
+		// (past MinSpeechFrame). Frames in statePossibleSpeech are
+		// unconfirmed and likely noise — skip them.
+		if v.postprocessor.InSpeech() {
 			hasSpeech = true
 		}
 
@@ -171,9 +170,24 @@ func (v *FireRedVAD) Process(ctx context.Context, pkt internal_type.UserAudioPac
 	}
 	v.mu.Unlock()
 
-	// Emit interruption when any frame in this chunk contained speech
-	if hasSpeech {
+	// Emit InterruptionPacket only on confirmed speech onset — this is the
+	// signal to interrupt assistant TTS/LLM. Speech end and sustained speech
+	// don't need interruption; the heartbeat handles EOS extension.
+	if speechStartAt > 0 {
 		v.notifyActivity(ctx, speechStartAt, speechEndAt)
+	}
+
+	// Emit a heartbeat while in confirmed speech so the EOS silence
+	// timer keeps extending during sustained speech.
+	if hasSpeech && v.onPacket != nil {
+		_ = v.onPacket(ctx,
+			internal_type.VadSpeechActivityPacket{},
+			internal_type.ConversationEventPacket{
+				Name: "vad",
+				Data: map[string]string{
+					"type": "heartbeat",
+				},
+			})
 	}
 
 	return nil

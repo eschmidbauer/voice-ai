@@ -127,10 +127,11 @@ func (r *genericRequestor) Connect(
 	auth types.SimplePrinciple,
 	config *protos.ConversationInitialization,
 ) error {
-	// Start three dedicated dispatchers before any OnPacket calls can happen.
-	// Each channel gets its own goroutine so no priority level can stall another.
+	// Start four dedicated dispatchers before any OnPacket calls can happen.
+	// Each channel gets its own goroutine so no priority tier can stall another.
 	go r.runCriticalDispatcher(ctx) // interrupts, directives
-	go r.runNormalDispatcher(ctx)   // audio, STT, LLM, TTS pipeline
+	go r.runInputDispatcher(ctx)    // inbound: user audio, denoise, VAD, STT, EOS
+	go r.runOutputDispatcher(ctx)   // outbound: LLM, text aggregator, TTS
 	go r.runLowDispatcher(ctx)      // DB writes, metrics, events, tools
 
 	r.SetAuth(auth)

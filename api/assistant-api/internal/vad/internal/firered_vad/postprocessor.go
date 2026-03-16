@@ -90,6 +90,14 @@ func NewPostprocessor(cfg PostprocessorConfig) *Postprocessor {
 	}
 }
 
+// InSpeech returns true when the state machine has confirmed an active speech
+// segment — i.e. the state is stateSpeech or statePossibleSilence. Frames in
+// statePossibleSpeech (not yet past MinSpeechFrame) are treated as unconfirmed
+// and should not trigger interruptions or heartbeats.
+func (p *Postprocessor) InSpeech() bool {
+	return p.state == stateSpeech || p.state == statePossibleSilence
+}
+
 // Reset clears all state for reuse with a new audio stream.
 func (p *Postprocessor) Reset() {
 	p.frameCnt = 0

@@ -214,6 +214,21 @@ func (eos *LivekitEOS) Analyze(ctx context.Context, pkt internal_type.Packet) er
 			timeout: timeout,
 		})
 
+	case internal_type.VadSpeechActivityPacket:
+		eos.mu.RLock()
+		seg := eos.state.segment
+		eos.mu.RUnlock()
+
+		if seg.FullText() == "" {
+			return nil
+		}
+		timeout := eos.computeTimeout(seg.FullText())
+		eos.send(command{
+			ctx:     ctx,
+			segment: seg,
+			timeout: timeout,
+		})
+
 	case internal_type.SpeechToTextPacket:
 		eos.mu.Lock()
 

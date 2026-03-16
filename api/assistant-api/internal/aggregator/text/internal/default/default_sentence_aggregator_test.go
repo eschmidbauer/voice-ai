@@ -644,3 +644,110 @@ func TestLLMStreamingUnformattedButComplete(t *testing.T) {
 		t.Error("expected IsFinal=true for done packet")
 	}
 }
+
+// TestRealisticLLMStream_CafeConversation replays a real production LLM
+// stream (61 chunks) and verifies the aggregator flushes at every sentence
+// boundary and emits a final IsFinal=true packet on done.
+//
+// Production contextID: c85c1cc3-1535-4a58-bb5f-dce9e1f6def3
+// Full text: "Oh, I like that idea—something chill and cozy sounds perfect
+// right now. I definitely want to relax, maybe find some nice spots to
+// unwind. Do you have any places in mind that are more laid-back but still
+// beautiful? Like, maybe with good cafes, pretty scenery, and not too hectic?"
+func TestRealisticLLMStream_CafeConversation(t *testing.T) {
+	logger, _ := commons.NewApplicationLogger()
+	onPacket, collect := newCollector()
+
+	aggregator, err := NewDefaultLLMTextAggregator(t.Context(), logger, onPacket)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	ctx := t.Context()
+	ctxID := "c85c1cc3-1535-4a58-bb5f-dce9e1f6def3"
+
+	// Exact 61 chunks from production LLM stream.
+	chunks := []string{
+		"Oh", ",", " I", " like", " that", " idea", "—something", " chill",
+		" and", " cozy", " sounds", " perfect", " right", " now", ".",
+		" I", " definitely", " want", " to", " relax", ",", " maybe",
+		" find", " some", " nice", " spots", " to", " unwind", ".",
+		" Do", " you", " have", " any", " places", " in", " mind",
+		" that", " are", " more", " laid", "-back", " but", " still",
+		" beautiful", "?",
+		" Like", ",", " maybe", " with", " good", " cafes", ",",
+		" pretty", " scenery", ",", " and", " not", " too", " hectic",
+		"?",
+		"",
+	}
+
+	for _, chunk := range chunks {
+		if err := aggregator.Aggregate(ctx, internal_type.LLMResponseDeltaPacket{
+			ContextID: ctxID,
+			Text:      chunk,
+		}); err != nil {
+			t.Fatalf("Aggregate delta failed: %v", err)
+		}
+	}
+
+	// Signal done — aggregator must flush any remaining buffer.
+	if err := aggregator.Aggregate(ctx, internal_type.LLMResponseDonePacket{
+		ContextID: ctxID,
+	}); err != nil {
+		t.Fatalf("Aggregate done failed: %v", err)
+	}
+
+	results := collect()
+
+	// Expected flushes:
+	//   1. "Oh, I like that idea—something chill and cozy sounds perfect right now."  (at ".")
+	//   2. " I definitely want to relax, maybe find some nice spots to unwind."       (at ".")
+	//   3. " Do you have any places in mind that are more laid-back but still beautiful?" (at "?")
+	//   4. " Like, maybe with good cafes, pretty scenery, and not too hectic?"         (at "?" — trailing flush or boundary)
+	//   5. IsFinal=true done packet
+	//
+	// The exact count depends on whether the aggregator flushes on the second "?"
+	// during streaming or defers it to the done flush. We verify at minimum:
+	//   - At least 3 mid-stream sentence flushes
+	//   - The last packet is IsFinal=true
+	//   - All packets carry the correct contextID
+
+	if len(results) < 4 {
+		t.Fatalf("expected at least 4 results (sentence flushes + final), got %d", len(results))
+	}
+
+	// Verify every result is a SpeakTextPacket with the correct contextID.
+	for i, r := range results {
+		sp, ok := r.(internal_type.SpeakTextPacket)
+		if !ok {
+			t.Errorf("result[%d]: expected SpeakTextPacket, got %T", i, r)
+			continue
+		}
+		if sp.ContextID != ctxID {
+			t.Errorf("result[%d]: contextID = %q, want %q", i, sp.ContextID, ctxID)
+		}
+	}
+
+	// Last packet must be the done/final marker.
+	last := results[len(results)-1].(internal_type.SpeakTextPacket)
+	if !last.IsFinal {
+		t.Error("last packet: expected IsFinal=true")
+	}
+
+	// Reconstruct the full text from non-final packets and verify completeness.
+	var fullText string
+	for _, r := range results {
+		sp := r.(internal_type.SpeakTextPacket)
+		if !sp.IsFinal {
+			fullText += sp.Text
+		}
+	}
+
+	expected := "Oh, I like that idea—something chill and cozy sounds perfect right now." +
+		" I definitely want to relax, maybe find some nice spots to unwind." +
+		" Do you have any places in mind that are more laid-back but still beautiful?" +
+		" Like, maybe with good cafes, pretty scenery, and not too hectic?"
+	if fullText != expected {
+		t.Errorf("reconstructed text mismatch:\n got: %q\nwant: %q", fullText, expected)
+	}
+}

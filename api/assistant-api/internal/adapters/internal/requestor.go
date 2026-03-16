@@ -144,10 +144,11 @@ type genericRequestor struct {
 	idleTimeoutCount    uint64
 	maxSessionTimer     *time.Timer
 
-	// packet dispatcher channels — critical preempts normal, normal preempts low
-	criticalCh chan packetEnvelope // interrupts and directives        (cap 16)
-	normalCh   chan packetEnvelope // audio, STT, LLM, TTS pipeline    (cap 4096)
-	lowCh      chan packetEnvelope // recording, metrics, persistence   (cap 512)
+	// packet dispatcher channels — four priority tiers, each with its own goroutine
+	criticalCh chan packetEnvelope // interrupts and directives                        (cap 16)
+	inputCh    chan packetEnvelope // inbound: user audio, denoise, VAD, STT, EOS      (cap 4096)
+	outputCh   chan packetEnvelope // outbound: LLM, text aggregator, TTS pipeline     (cap 2048)
+	lowCh      chan packetEnvelope // recording, metrics, persistence, events           (cap 512)
 }
 
 func NewGenericRequestor(
@@ -198,7 +199,8 @@ func NewGenericRequestor(
 
 		// dispatcher channels
 		criticalCh: make(chan packetEnvelope, 16),
-		normalCh:   make(chan packetEnvelope, 4096),
+		inputCh:    make(chan packetEnvelope, 4096),
+		outputCh:   make(chan packetEnvelope, 2048),
 		lowCh:      make(chan packetEnvelope, 512),
 	}
 }

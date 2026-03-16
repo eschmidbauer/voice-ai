@@ -440,6 +440,13 @@ type VadAudioPacket struct {
 
 func (f VadAudioPacket) ContextId() string { return f.ContextID }
 
+// VadSpeechActivityPacket is a lightweight heartbeat emitted by the VAD on every
+// audio chunk where the user is actively speaking. The EOS detector uses it to
+// keep extending the silence timer during sustained speech.
+type VadSpeechActivityPacket struct{}
+
+func (f VadSpeechActivityPacket) ContextId() string { return "" }
+
 // =============================================================================
 // LLM Execution Packet
 // =============================================================================

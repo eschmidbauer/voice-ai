@@ -203,7 +203,7 @@ func (g *googleSpeechToText) recvLoop(stream speechpb.Speech_StreamingRecognizeC
 					internal_type.InterruptionPacket{Source: internal_type.InterruptionSourceWord},
 					internal_type.SpeechToTextPacket{
 						Script:     transcript,
-						Confidence: float64(alt.GetConfidence()),
+						Confidence: float64(result.GetStability()),
 						Language:   result.GetLanguageCode(),
 						Interim:    true,
 					},

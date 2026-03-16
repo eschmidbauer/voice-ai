@@ -67,23 +67,49 @@ func (talking *genericRequestor) callSpeechToText(ctx context.Context, vl intern
 // =============================================================================
 
 // OnPacket enqueues each packet into the appropriate priority channel.
-// The dispatcher goroutine (started by runDispatcher) drains and processes them.
+// Each channel has a dedicated dispatcher goroutine so no tier can stall another.
 //
 // Priority:
 //
-//	critical — interrupts, directives          (preempts everything)
-//	normal   — audio, STT, LLM, TTS pipeline   (default)
-//	low      — recording, metrics, persistence  (background work)
+//	critical — interrupts, directives                        (preempts everything)
+//	input    — inbound audio, denoise, VAD, STT, EOS         (user → system)
+//	output   — LLM generation, text aggregation, TTS          (system → user)
+//	low      — recording, metrics, persistence, events         (background work)
 func (r *genericRequestor) OnPacket(ctx context.Context, pkts ...internal_type.Packet) error {
 	for _, p := range pkts {
 		e := packetEnvelope{ctx: ctx, pkt: p}
 		switch p.(type) {
+		// Critical — interrupts and directives
 		case internal_type.InterruptionPacket,
 			internal_type.InterruptTTSPacket,
 			internal_type.InterruptLLMPacket,
 			internal_type.DirectivePacket:
 			r.criticalCh <- e
 
+		// Input — inbound audio pipeline, VAD, STT, EOS
+		case internal_type.UserAudioPacket,
+			internal_type.UserTextPacket,
+			internal_type.DenoiseAudioPacket,
+			internal_type.DenoisedAudioPacket,
+			internal_type.VadAudioPacket,
+			internal_type.VadSpeechActivityPacket,
+			internal_type.SpeechToTextPacket,
+			internal_type.EndOfSpeechPacket,
+			internal_type.InterimEndOfSpeechPacket:
+			r.inputCh <- e
+
+		// Output — LLM generation, TTS, outbound pipeline
+		case internal_type.ExecuteLLMPacket,
+			internal_type.LLMResponseDeltaPacket,
+			internal_type.LLMResponseDonePacket,
+			internal_type.LLMErrorPacket,
+			internal_type.SpeakTextPacket,
+			internal_type.TextToSpeechAudioPacket,
+			internal_type.TextToSpeechEndPacket,
+			internal_type.StaticPacket:
+			r.outputCh <- e
+
+		// Low — recording, metrics, persistence, events, tools
 		case internal_type.RecordUserAudioPacket,
 			internal_type.RecordAssistantAudioPacket,
 			internal_type.SaveMessagePacket,
@@ -97,14 +123,15 @@ func (r *genericRequestor) OnPacket(ctx context.Context, pkts ...internal_type.P
 			r.lowCh <- e
 
 		default:
-			r.normalCh <- e
+			r.logger.Warnf("OnPacket: unrouted packet type %T, falling back to inputCh", p)
+			r.inputCh <- e
 		}
 	}
 	return nil
 }
 
 // =============================================================================
-// runDispatcher — single consumer goroutine
+// runDispatcher — dedicated consumer goroutines per priority tier
 // =============================================================================
 
 // runCriticalDispatcher processes critical-priority packets (interrupts,
@@ -133,24 +160,51 @@ func (r *genericRequestor) drainCriticalChannel() {
 	}
 }
 
-// runNormalDispatcher processes normal-priority packets (audio, STT, LLM,
-// TTS pipeline) on a dedicated goroutine.
-func (r *genericRequestor) runNormalDispatcher(ctx context.Context) {
+// runInputDispatcher processes inbound pipeline packets (user audio, denoise,
+// VAD, STT, EOS) on a dedicated goroutine. Kept separate from the output
+// pipeline so a burst of inbound audio never delays LLM/TTS streaming.
+func (r *genericRequestor) runInputDispatcher(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			r.drainNormalChannel()
+			r.drainInputChannel()
 			return
-		case e := <-r.normalCh:
+		case e := <-r.inputCh:
 			r.dispatch(e.ctx, e.pkt)
 		}
 	}
 }
 
-func (r *genericRequestor) drainNormalChannel() {
+func (r *genericRequestor) drainInputChannel() {
 	for {
 		select {
-		case e := <-r.normalCh:
+		case e := <-r.inputCh:
+			r.dispatch(e.ctx, e.pkt)
+		default:
+			return
+		}
+	}
+}
+
+// runOutputDispatcher processes outbound pipeline packets (LLM generation,
+// text aggregation, TTS audio) on a dedicated goroutine. Kept separate from
+// the input pipeline so LLM response streaming is never queued behind audio.
+func (r *genericRequestor) runOutputDispatcher(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			r.drainOutputChannel()
+			return
+		case e := <-r.outputCh:
+			r.dispatch(e.ctx, e.pkt)
+		}
+	}
+}
+
+func (r *genericRequestor) drainOutputChannel() {
+	for {
+		select {
+		case e := <-r.outputCh:
 			r.dispatch(e.ctx, e.pkt)
 		default:
 			return
@@ -204,6 +258,8 @@ func (r *genericRequestor) dispatch(ctx context.Context, p internal_type.Packet)
 		r.handleDenoisedAudio(ctx, vl)
 	case internal_type.VadAudioPacket:
 		r.handleVadAudio(ctx, vl)
+	case internal_type.VadSpeechActivityPacket:
+		r.callEndOfSpeech(ctx, vl)
 	// Recording
 	case internal_type.RecordUserAudioPacket:
 		r.handleRecordUserAudio(ctx, vl)

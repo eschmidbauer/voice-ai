@@ -29,10 +29,11 @@ const (
 	// vadName is the identifier for this VAD implementation
 	vadName = "silero_vad"
 
-	// Default configuration values
+	// Default configuration values — aligned with FireRedVAD defaults
+	// (20 frames × 10 ms = 200 ms silence, 8 frames × 10 ms = 80 ms pad)
 	defaultThreshold            = 0.5
-	defaultMinSilenceDurationMs = 100
-	defaultSpeechPadMs          = 30
+	defaultMinSilenceDurationMs = 200
+	defaultSpeechPadMs          = 80
 
 	// Environment variable for model path
 	envModelPathKey = "SILERO_MODEL_PATH"
@@ -134,14 +135,28 @@ func (s *SileroVAD) Process(ctx context.Context, pkt internal_type.UserAudioPack
 	samples := linear16ToFloat32(pkt.Audio)
 
 	// Perform detection with CGO safety
-	segments, err := s.detectSafely(samples)
+	segments, isSpeaking, err := s.detectSafely(samples)
 	if err != nil {
 		return err
 	}
 
-	// Notify callback if speech detected
-	if len(segments) > 0 {
+	// Emit InterruptionPacket only on confirmed speech onset — this is the
+	// signal to interrupt assistant TTS/LLM.
+	if hasSpeechStart(segments) {
 		s.notifyActivity(ctx, segments)
+	}
+
+	// Emit a heartbeat while the user is actively speaking so the EOS
+	// silence timer keeps extending during sustained speech.
+	if isSpeaking && s.onPacket != nil {
+		_ = s.onPacket(ctx,
+			internal_type.VadSpeechActivityPacket{},
+			internal_type.ConversationEventPacket{
+				Name: "vad",
+				Data: map[string]string{
+					"type": "heartbeat",
+				},
+			})
 	}
 
 	return nil
@@ -180,8 +195,8 @@ func createDetector(options utils.Option) (*Detector, error) {
 		ModelPath:            modelPath,
 		SampleRate:           16000, // Silero requires 16kHz
 		Threshold:            float32(threshold),
-		MinSilenceDurationMs: defaultMinSilenceDurationMs,
-		SpeechPadMs:          defaultSpeechPadMs,
+		MinSilenceDurationMs: resolveMinSilenceDurationMs(options),
+		SpeechPadMs:          resolveSpeechPadMs(options),
 	}
 	return NewDetector(config)
 }
@@ -209,9 +224,45 @@ func resolveThreshold(options utils.Option) float64 {
 	return defaultThreshold
 }
 
+// resolveMinSilenceDurationMs extracts min silence duration from options.
+// The option key uses frame count (consistent with FireRedVAD config);
+// each frame is 10 ms, so we multiply by 10 to get milliseconds.
+func resolveMinSilenceDurationMs(options utils.Option) int {
+	if options == nil {
+		return defaultMinSilenceDurationMs
+	}
+	if v, err := options.GetFloat64("microphone.vad.min_silence_frame"); err == nil {
+		return int(v) * 10
+	}
+	return defaultMinSilenceDurationMs
+}
+
+// resolveSpeechPadMs extracts speech pad duration from options.
+// The option key uses frame count (consistent with FireRedVAD config);
+// each frame is 10 ms, so we multiply by 10 to get milliseconds.
+func resolveSpeechPadMs(options utils.Option) int {
+	if options == nil {
+		return defaultSpeechPadMs
+	}
+	if v, err := options.GetFloat64("microphone.vad.min_speech_frame"); err == nil {
+		return int(v) * 10
+	}
+	return defaultSpeechPadMs
+}
+
 // -----------------------------------------------------------------------------
 // Private Helper Methods - Lifecycle
 // -----------------------------------------------------------------------------
+
+// hasSpeechStart returns true if any segment contains a speech onset.
+func hasSpeechStart(segments []Segment) bool {
+	for _, seg := range segments {
+		if seg.SpeechStartAt > 0 {
+			return true
+		}
+	}
+	return false
+}
 
 // startLifecycleManager spawns a goroutine that closes the VAD
 // when the context is cancelled.
@@ -250,20 +301,21 @@ func linear16ToFloat32(data []byte) []float32 {
 // detectSafely performs voice activity detection with CGO resource protection.
 // Holds the write lock for the duration of the CGO call: Detector
 // mutates internal ONNX state and is not safe for concurrent use.
-func (s *SileroVAD) detectSafely(samples []float32) ([]Segment, error) {
+// Returns segments and whether the detector is currently in a triggered (speech active) state.
+func (s *SileroVAD) detectSafely(samples []float32) ([]Segment, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if s.isTerminated || s.detector == nil {
-		return nil, nil
+		return nil, false, nil
 	}
 
 	segments, err := s.detector.Detect(samples)
 	if err != nil {
-		return nil, fmt.Errorf("detection failed: %w", err)
+		return nil, false, fmt.Errorf("detection failed: %w", err)
 	}
 
-	return segments, nil
+	return segments, s.detector.triggered, nil
 }
 
 // notifyActivity calculates speech boundaries and invokes the callback.
