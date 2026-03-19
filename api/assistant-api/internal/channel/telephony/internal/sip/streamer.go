@@ -98,6 +98,17 @@ func NewStreamer(ctx context.Context,
 		cancel: cancel,
 	}
 
+	// Bridge SIP streamer context to BaseStreamer context.
+	// BaseStreamer.Ctx is created from context.Background() (by design), so
+	// cancelling callCtx/streamerCtx does NOT make Recv() return. This
+	// goroutine ensures that when the SIP session ends (BYE received,
+	// callCtx cancelled), Recv() also returns io.EOF — preventing Talk()
+	// from blocking indefinitely and leaking the RTP handler.
+	go func() {
+		<-streamerCtx.Done()
+		s.BaseStreamer.Cancel()
+	}()
+
 	// --- Inbound: reuse existing session's RTP handler ---
 	if sipSession != nil {
 		// Check if parent context is already cancelled
