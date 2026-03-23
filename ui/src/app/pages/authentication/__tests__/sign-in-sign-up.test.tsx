@@ -1,0 +1,298 @@
+import React from 'react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import '@testing-library/jest-dom';
+
+import { SignInPage } from '@/app/pages/authentication/sign-in';
+import { SignUpPage } from '@/app/pages/authentication/sign-up';
+import { AuthContext } from '@/context/auth-context';
+import {
+  AuthenticateUser,
+  Google,
+  RegisterUser,
+} from '@rapidaai/react';
+
+const mockNavigate = jest.fn();
+const mockShowLoader = jest.fn();
+const mockHideLoader = jest.fn();
+const mockGoTo = jest.fn();
+
+let mockSearchParams = new URLSearchParams();
+let mockLocationState: any = undefined;
+let mockParams: Record<string, string | undefined> = {};
+
+let mockWorkspace = {
+  authentication: {
+    signIn: {
+      providers: {
+        password: true,
+        google: true,
+        linkedin: false,
+        github: false,
+      },
+    },
+    signUp: {
+      enable: true,
+      providers: {
+        password: true,
+        google: true,
+        linkedin: false,
+        github: false,
+      },
+    },
+  },
+};
+
+jest.mock('@rapidaai/react', () => {
+  class ConnectionConfig {
+    constructor(_: unknown) {}
+
+    static WithDebugger(config: unknown) {
+      return config;
+    }
+  }
+
+  return {
+    ConnectionConfig,
+    AuthenticateUser: jest.fn(),
+    Google: jest.fn(),
+    Linkedin: jest.fn(),
+    Github: jest.fn(),
+    RegisterUser: jest.fn(),
+  };
+});
+
+jest.mock('react-router-dom', () => ({
+  ...jest.requireActual('react-router-dom'),
+  useNavigate: () => mockNavigate,
+  useSearchParams: () => [mockSearchParams],
+  useLocation: () => ({ state: mockLocationState }),
+  useParams: () => mockParams,
+}));
+
+jest.mock('@/workspace', () => ({
+  useWorkspace: () => mockWorkspace,
+}));
+
+jest.mock('@/hooks', () => ({
+  useRapidaStore: () => ({
+    loading: false,
+    showLoader: mockShowLoader,
+    hideLoader: mockHideLoader,
+  }),
+}));
+
+jest.mock('@/hooks/use-global-navigator', () => ({
+  useGlobalNavigation: () => ({
+    goTo: mockGoTo,
+  }),
+}));
+
+jest.mock('@/app/components/helmet', () => ({
+  Helmet: () => null,
+}));
+
+jest.mock('@/app/components/form/button-group/SocialButtonGroup', () => ({
+  SocialButtonGroup: () => <div data-testid="social-buttons" />,
+}));
+
+jest.mock('@/app/components/form/input', () => ({
+  Input: require('react').forwardRef((props: any, ref: any) => (
+    <input ref={ref} {...props} />
+  )),
+}));
+
+jest.mock('@/app/components/form/error-message', () => ({
+  ErrorMessage: ({ message }: { message: string }) =>
+    message ? <div>{message}</div> : null,
+}));
+
+jest.mock('@/app/components/form/button', () => ({
+  IBlueBGArrowButton: ({ children, isLoading, ...props }: any) => (
+    <button {...props}>{children}</button>
+  ),
+}));
+
+jest.mock('@/app/components/form-label', () => ({
+  FormLabel: ({ children }: { children: React.ReactNode }) => (
+    <label>{children}</label>
+  ),
+}));
+
+jest.mock('@/app/components/form/fieldset', () => ({
+  FieldSet: ({ children, ...props }: any) => <fieldset {...props}>{children}</fieldset>,
+}));
+
+jest.mock('@/app/components/heading/action-heading/form-action-heading', () => ({
+  FormActionHeading: ({ heading, action }: any) => (
+    <div>
+      <h2>{heading}</h2>
+      {action}
+    </div>
+  ),
+}));
+
+const renderWithAuth = (
+  ui: React.ReactElement,
+  setAuthentication = jest.fn(),
+) => {
+  render(
+    <AuthContext.Provider value={{ setAuthentication } as any}>
+      {ui}
+    </AuthContext.Provider>,
+  );
+  return { setAuthentication };
+};
+
+describe('Authentication pages', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockSearchParams = new URLSearchParams();
+    mockLocationState = undefined;
+    mockParams = {};
+    mockWorkspace = {
+      authentication: {
+        signIn: {
+          providers: {
+            password: true,
+            google: true,
+            linkedin: false,
+            github: false,
+          },
+        },
+        signUp: {
+          enable: true,
+          providers: {
+            password: true,
+            google: true,
+            linkedin: false,
+            github: false,
+          },
+        },
+      },
+    };
+  });
+
+  it('sign-in submits credentials and navigates to dashboard on success', async () => {
+    const setAuthentication = jest.fn((_auth, cb) => cb());
+    (AuthenticateUser as jest.Mock).mockImplementation(
+      (_cfg, _email, _password, callback) => {
+        callback(null, {
+          getSuccess: () => true,
+          getData: () => ({ id: 'auth-1' }),
+        });
+      },
+    );
+
+    renderWithAuth(<SignInPage />, setAuthentication);
+
+    fireEvent.change(screen.getByPlaceholderText('eg: john@rapida.ai'), {
+      target: { value: 'john@rapida.ai' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('******'), {
+      target: { value: 'secret' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+
+    await waitFor(() => {
+      expect(AuthenticateUser).toHaveBeenCalled();
+    });
+
+    expect(mockShowLoader).toHaveBeenCalled();
+    expect(mockHideLoader).toHaveBeenCalled();
+    expect(setAuthentication).toHaveBeenCalled();
+    expect(mockNavigate).toHaveBeenCalledWith('/dashboard');
+  });
+
+  it('sign-in triggers social google auth when code/state are present', async () => {
+    mockSearchParams = new URLSearchParams('state=google&code=abc123');
+
+    renderWithAuth(<SignInPage />);
+
+    await waitFor(() => {
+      expect(Google).toHaveBeenCalled();
+    });
+
+    expect(mockShowLoader).toHaveBeenCalled();
+  });
+
+  it('sign-up disabled shows 403 and routes back to signin', () => {
+    mockWorkspace.authentication.signUp.enable = false;
+
+    renderWithAuth(<SignUpPage />);
+
+    expect(screen.getByText('403')).toBeInTheDocument();
+    expect(screen.getByText('Sign-up not enabled')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Go to signin' }));
+    expect(mockGoTo).toHaveBeenCalledWith('/');
+  });
+
+  it('sign-up prefills email from location state and submits register', async () => {
+    mockLocationState = { email: 'prefilled@rapida.ai' };
+    mockParams = { next: '/workspace/overview' };
+
+    const setAuthentication = jest.fn((_auth, cb) => cb());
+    (RegisterUser as jest.Mock).mockImplementation(
+      (_cfg, _email, _password, _name, callback) => {
+        callback(null, {
+          getSuccess: () => true,
+          getData: () => ({ id: 'auth-2' }),
+        });
+      },
+    );
+
+    renderWithAuth(<SignUpPage />, setAuthentication);
+
+    const emailInput = screen.getByPlaceholderText(
+      'eg: john@rapida.ai',
+    ) as HTMLInputElement;
+    await waitFor(() => {
+      expect(emailInput.value).toBe('prefilled@rapida.ai');
+    });
+
+    fireEvent.change(screen.getByPlaceholderText('eg: John deo'), {
+      target: { value: 'John Doe' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('********'), {
+      target: { value: 'secret' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+
+    await waitFor(() => {
+      expect(RegisterUser).toHaveBeenCalled();
+    });
+
+    expect(mockShowLoader).toHaveBeenCalledWith('overlay');
+    expect(mockHideLoader).toHaveBeenCalled();
+    expect(setAuthentication).toHaveBeenCalled();
+    expect(mockNavigate).toHaveBeenCalledWith('/workspace/overview');
+  });
+
+  it('sign-up shows API human error message on register failure', async () => {
+    (RegisterUser as jest.Mock).mockImplementation(
+      (_cfg, _email, _password, _name, callback) => {
+        callback(null, {
+          getSuccess: () => false,
+          getError: () => ({ getHumanmessage: () => 'Email already exists' }),
+        });
+      },
+    );
+
+    renderWithAuth(<SignUpPage />);
+
+    fireEvent.change(screen.getByPlaceholderText('eg: John deo'), {
+      target: { value: 'John Doe' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('eg: john@rapida.ai'), {
+      target: { value: 'john@rapida.ai' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('********'), {
+      target: { value: 'secret' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+
+    expect(await screen.findByText('Email already exists')).toBeInTheDocument();
+  });
+});
