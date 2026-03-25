@@ -324,6 +324,9 @@ type UserTextPacket struct {
 
 	// text
 	Text string
+
+	// Language detected by STT for this turn (may be empty for text-mode input).
+	Language string
 }
 
 func (f UserTextPacket) ContextId() string {
@@ -454,7 +457,8 @@ func (f VadSpeechActivityPacket) ContextId() string { return "" }
 // ExecuteLLMPacket triggers the LLM pipeline with the user's final transcript.
 type ExecuteLLMPacket struct {
 	ContextID string
-	Input     string
+
+	Input string
 
 	// Language detected by the STT provider for this turn.
 	Language string

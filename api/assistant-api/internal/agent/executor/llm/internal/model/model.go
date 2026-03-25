@@ -38,7 +38,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
 	"sync"
 	"time"
 
@@ -151,13 +150,14 @@ func (e *modelAssistantExecutor) Initialize(ctx context.Context, communication i
 }
 
 func (e *modelAssistantExecutor) chat(
-	ctx context.Context,
+	_ context.Context,
 	communication internal_type.Communication,
 	contextID string,
+	promptArgs map[string]interface{},
 	in *protos.Message,
 	histories ...*protos.Message,
 ) error {
-	request := e.buildChatRequest(communication, contextID, append(histories, in)...)
+	request := e.buildChatRequest(communication, contextID, promptArgs, append(histories, in)...)
 
 	e.mu.RLock()
 	stream := e.stream
@@ -181,9 +181,10 @@ func (e *modelAssistantExecutor) chat(
 // Unlike chat(), it does not append any new message — the caller is responsible
 // for ensuring history is already up-to-date before calling this.
 func (e *modelAssistantExecutor) chatWithHistory(
-	ctx context.Context,
+	_ context.Context,
 	communication internal_type.Communication,
 	contextID string,
+	promptArgs map[string]interface{},
 ) error {
 	e.mu.RLock()
 	stream := e.stream
@@ -194,7 +195,10 @@ func (e *modelAssistantExecutor) chatWithHistory(
 	if stream == nil {
 		return fmt.Errorf("stream not connected")
 	}
-	request := e.buildChatRequest(communication, contextID, snapshot...)
+	if err := e.validateHistorySequence(snapshot); err != nil {
+		return err
+	}
+	request := e.buildChatRequest(communication, contextID, promptArgs, snapshot...)
 	if err := stream.Send(request); err != nil {
 		e.logger.Errorf("error sending chat request: %v", err)
 		return fmt.Errorf("failed to send chat request: %w", err)
@@ -257,132 +261,7 @@ func (e *modelAssistantExecutor) streamErrorReason(err error) string {
 
 // handleResponse processes a single response from the server.
 func (e *modelAssistantExecutor) handleResponse(ctx context.Context, communication internal_type.Communication, resp *protos.ChatResponse) {
-	// Drop stale responses from a previous turn that was already interrupted.
-	// The activeContextID is cleared on interrupt and set on each new chat().
-	e.mu.RLock()
-	isStale := e.activeContextID != "" && resp.GetRequestId() != e.activeContextID
-	e.mu.RUnlock()
-	if isStale {
-		return
-	}
-
-	output := resp.GetData()
-	metrics := resp.GetMetrics()
-
-	if !resp.GetSuccess() && resp.GetError() != nil {
-		errMsg := resp.GetError().GetErrorMessage()
-		communication.OnPacket(ctx,
-			internal_type.LLMErrorPacket{
-				ContextID: resp.GetRequestId(),
-				Error:     errors.New(errMsg),
-			},
-			internal_type.ConversationEventPacket{
-				ContextID: resp.GetRequestId(),
-				Name:      "llm",
-				Data:      map[string]string{"type": "error", "error": errMsg},
-				Time:      time.Now(),
-			},
-		)
-		return
-	}
-	if output == nil {
-		return
-	}
-
-	if len(metrics) > 0 {
-		hasToolCalls := len(output.GetAssistant().GetToolCalls()) > 0
-		responseText := strings.Join(output.GetAssistant().GetContents(), "")
-		now := time.Now()
-
-		// When tool_calls are present, defer adding the assistant message to history
-		// until tool results are ready. This prevents a race where a concurrent user
-		// message could see the assistant message with tool_calls but no tool results,
-		// causing OpenAI to reject with: "An assistant message with 'tool_calls' must
-		// be followed by tool messages responding to each 'tool_call_id'."
-		if !hasToolCalls {
-			e.mu.Lock()
-			e.history = append(e.history, output)
-			e.mu.Unlock()
-		}
-
-		communication.OnPacket(ctx,
-			internal_type.LLMResponseDonePacket{
-				ContextID: resp.GetRequestId(),
-				Text:      responseText,
-			},
-			internal_type.ConversationEventPacket{
-				ContextID: resp.GetRequestId(),
-				Name:      "llm",
-				Data: map[string]string{
-					"type":                "completed",
-					"text":                responseText,
-					"response_char_count": fmt.Sprintf("%d", len(responseText)),
-					"finish_reason":       resp.GetFinishReason(),
-				},
-				Time: now,
-			},
-			internal_type.MessageMetricPacket{
-				ContextID: resp.GetRequestId(),
-				Metrics:   metrics,
-			},
-		)
-
-		if hasToolCalls {
-			if err := e.executeToolCalls(ctx, communication, resp.GetRequestId(), output); err != nil {
-				e.logger.Errorf("tool call follow-up failed: %v", err)
-				communication.OnPacket(ctx, internal_type.LLMErrorPacket{
-					ContextID: resp.GetRequestId(),
-					Error:     fmt.Errorf("tool call follow-up failed: %w", err),
-				})
-			}
-		}
-		return
-	}
-	if len(output.GetAssistant().GetContents()) > 0 {
-		text := strings.Join(output.GetAssistant().GetContents(), "")
-		communication.OnPacket(ctx,
-			internal_type.LLMResponseDeltaPacket{
-				ContextID: resp.GetRequestId(),
-				Text:      text,
-			},
-			internal_type.ConversationEventPacket{
-				Name: "llm",
-				Data: map[string]string{
-					"type":                "chunk",
-					"text":                text,
-					"response_char_count": fmt.Sprintf("%d", len(text)),
-				},
-				Time: time.Now(),
-			})
-	}
-}
-
-// buildChatRequest constructs the chat request with all necessary parameters.
-// The caller provides the complete conversation messages (system prompt is prepended automatically).
-func (e *modelAssistantExecutor) buildChatRequest(communication internal_type.Communication, contextID string, messages ...*protos.Message) *protos.ChatRequest {
-	assistant := communication.Assistant()
-	template := assistant.AssistantProviderModel.Template.GetTextChatCompleteTemplate()
-	systemMessages := e.inputBuilder.Message(
-		template.Prompt,
-		utils.MergeMaps(e.inputBuilder.PromptArguments(template.Variables), communication.GetArgs()),
-	)
-	req := e.inputBuilder.Chat(
-		contextID,
-		&protos.Credential{
-			Id:    e.providerCredential.GetId(),
-			Value: e.providerCredential.GetValue(),
-		},
-		e.inputBuilder.Options(utils.MergeMaps(assistant.AssistantProviderModel.GetOptions(), communication.GetOptions()), nil),
-		e.toolExecutor.GetFunctionDefinitions(),
-		map[string]string{
-			"assistant_id":                fmt.Sprintf("%d", assistant.Id),
-			"message_id":                  contextID,
-			"assistant_provider_model_id": fmt.Sprintf("%d", assistant.AssistantProviderModel.Id),
-		},
-		append(systemMessages, messages...)...,
-	)
-	req.ProviderName = strings.ToLower(assistant.AssistantProviderModel.ModelProviderName)
-	return req
+	e.executeResponseFlow(ctx, communication, resp)
 }
 
 // executeToolCalls executes all requested tool calls and sends the follow-up
@@ -391,6 +270,7 @@ func (e *modelAssistantExecutor) buildChatRequest(communication internal_type.Co
 // prevent a concurrent user message from seeing tool_calls without results
 // (which causes OpenAI 400 errors).
 func (e *modelAssistantExecutor) executeToolCalls(ctx context.Context, communication internal_type.Communication, contextID string, output *protos.Message,
+	promptArgs map[string]interface{},
 ) error {
 	toolExecution := e.toolExecutor.ExecuteAll(ctx, contextID, output.GetAssistant().GetToolCalls(), communication)
 	e.mu.Lock()
@@ -401,49 +281,14 @@ func (e *modelAssistantExecutor) executeToolCalls(ctx context.Context, communica
 	}
 	e.history = append(e.history, output, toolExecution)
 	e.mu.Unlock()
-	return e.chatWithHistory(ctx, communication, contextID)
+	return e.chatWithHistory(ctx, communication, contextID, promptArgs)
 }
 
 // Execute forwards an incoming packet to the LLM.
 //
 // Emits ConversationEventPacket: {type: "executing"} for UserTextPacket.
 func (e *modelAssistantExecutor) Execute(ctx context.Context, communication internal_type.Communication, pctk internal_type.Packet) error {
-	switch plt := pctk.(type) {
-	case internal_type.UserTextPacket:
-		snapshot := e.snapshotHistory()
-		communication.OnPacket(ctx, internal_type.ConversationEventPacket{
-			ContextID: plt.ContextID,
-			Name:      "llm",
-			Data: map[string]string{
-				"type":             "executing",
-				"script":           plt.Text,
-				"input_char_count": fmt.Sprintf("%d", len(plt.Text)),
-				"history_count":    fmt.Sprintf("%d", len(snapshot)),
-			},
-			Time: time.Now(),
-		})
-		return e.chat(ctx, communication, plt.ContextID, &protos.Message{Role: "user", Message: &protos.Message_User{User: &protos.UserMessage{Content: plt.Text}}}, snapshot...)
-
-	case internal_type.StaticPacket:
-		e.mu.Lock()
-		e.history = append(e.history, &protos.Message{
-			Role: "assistant",
-			Message: &protos.Message_Assistant{Assistant: &protos.AssistantMessage{
-				Contents: []string{plt.Text},
-			}},
-		})
-		e.mu.Unlock()
-		return nil
-
-	case internal_type.InterruptionPacket:
-		e.mu.Lock()
-		e.activeContextID = ""
-		e.mu.Unlock()
-		return nil
-
-	default:
-		return fmt.Errorf("unsupported packet type: %T", pctk)
-	}
+	return e.executeRequest(ctx, communication, pctk)
 }
 
 // snapshotHistory returns a point-in-time copy of the conversation history.

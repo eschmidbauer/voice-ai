@@ -338,7 +338,7 @@ func (talking *genericRequestor) handleUserText(ctx context.Context, vl internal
 	talking.handleInterruption(ctx, internal_type.InterruptionPacket{ContextID: talking.GetID(), Source: internal_type.InterruptionSourceWord})
 	vl.ContextID = talking.GetID()
 	if err := talking.callEndOfSpeech(ctx, vl); err != nil {
-		talking.OnPacket(ctx, internal_type.EndOfSpeechPacket{ContextID: vl.ContextID, Speech: vl.Text})
+		talking.OnPacket(ctx, internal_type.EndOfSpeechPacket{ContextID: vl.ContextID, Speech: vl.Text, Language: vl.Language})
 	}
 }
 
@@ -531,11 +531,8 @@ func (talking *genericRequestor) handleInterruptLLM(ctx context.Context, vl inte
 // handleExecuteLLM runs the LLM executor in a goroutine so the dispatcher
 // is not blocked for the duration of the LLM response (which can be seconds).
 func (talking *genericRequestor) handleExecuteLLM(ctx context.Context, vl internal_type.ExecuteLLMPacket) {
-	if vl.Language != "" {
-		talking.args["language"] = vl.Language
-	}
 	utils.Go(ctx, func() {
-		if err := talking.assistantExecutor.Execute(ctx, talking, internal_type.UserTextPacket{ContextID: vl.ContextID, Text: vl.Input}); err != nil {
+		if err := talking.assistantExecutor.Execute(ctx, talking, internal_type.UserTextPacket{ContextID: vl.ContextID, Text: vl.Input, Language: vl.Language}); err != nil {
 			talking.logger.Errorf("assistant executor error: %v", err)
 			talking.OnPacket(ctx, internal_type.LLMErrorPacket{ContextID: vl.ContextID, Error: err})
 		}

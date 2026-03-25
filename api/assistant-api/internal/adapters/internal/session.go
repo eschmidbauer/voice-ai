@@ -34,9 +34,6 @@ import (
 // =============================================================================
 
 const (
-	// clientInfoMetadataKey is the metadata key used to store client information.
-	clientInfoMetadataKey = "talk.client_information"
-
 	// dbWriteTimeout is the maximum duration allowed for database write operations
 	// (inserts, updates, metric flushes). Uses a background context so that writes
 	// are not cancelled by the caller's context lifecycle.
@@ -454,12 +451,34 @@ func (r *genericRequestor) storeClientInformation(ctx context.Context) {
 	if clientInfo == nil {
 		return
 	}
-	clientJSON, err := clientInfo.ToJson()
-	if err != nil {
-		r.logger.Tracef(ctx, "failed to serialize client information: %+v", err)
-		return
+
+	// Flatten client info into metadata with "client." prefix (same pattern
+	// as telephony.toPhone, telephony.fromPhone). This makes fields like
+	// timezone, platform, language directly available in prompt context via
+	// r.metadata["client.timezone"] etc.
+	flat := map[string]interface{}{}
+	if clientInfo.Timezone != "" {
+		flat["client.timezone"] = clientInfo.Timezone
 	}
-	r.onSetMetadata(ctx, r.Auth(), map[string]interface{}{
-		clientInfoMetadataKey: clientJSON,
-	})
+	if clientInfo.Platform != "" {
+		flat["client.platform"] = clientInfo.Platform
+	}
+	if clientInfo.Language != "" {
+		flat["client.language"] = clientInfo.Language
+	}
+	if clientInfo.UserAgent != "" {
+		flat["client.user_agent"] = clientInfo.UserAgent
+	}
+	if clientInfo.Referrer != "" {
+		flat["client.referrer"] = clientInfo.Referrer
+	}
+	if clientInfo.ConnectionType != "" {
+		flat["client.connection_type"] = clientInfo.ConnectionType
+	}
+	if clientInfo.Latitude != 0 || clientInfo.Longitude != 0 {
+		flat["client.latitude"] = fmt.Sprintf("%f", clientInfo.Latitude)
+		flat["client.longitude"] = fmt.Sprintf("%f", clientInfo.Longitude)
+	}
+
+	r.onSetMetadata(ctx, r.Auth(), flat)
 }

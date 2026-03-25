@@ -75,9 +75,7 @@ func TestInitializeCollectors_LoggingProvider_UsesFanoutCollectors(t *testing.T)
 			Enabled:      true,
 		},
 	})
-
 	r.initializeCollectors(context.Background())
-
 	assert.True(t, strings.Contains(fmt.Sprintf("%T", r.events), "fanoutEventCollector"))
 	assert.True(t, strings.Contains(fmt.Sprintf("%T", r.metrics), "fanoutMetricCollector"))
 	assert.NotPanics(t, func() {
@@ -125,9 +123,7 @@ func TestInitializeCollectors_UnknownProvider_SkipsToNoopCollectors(t *testing.T
 			Enabled:      true,
 		},
 	})
-
 	r.initializeCollectors(context.Background())
-
 	assert.True(t, strings.Contains(fmt.Sprintf("%T", r.events), "noopEventCollector"))
 	assert.True(t, strings.Contains(fmt.Sprintf("%T", r.metrics), "noopMetricCollector"))
 }

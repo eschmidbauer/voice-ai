@@ -1,3 +1,8 @@
+// Copyright (c) 2023-2025 RapidaAI
+// Author: Prashant Srivastav <prashant@rapida.ai>
+//
+// Licensed under GPL-2.0 with Rapida Additional Terms.
+// See LICENSE.md or contact sales@rapida.ai for commercial usage.
 package internal_model
 
 import (
@@ -11,10 +16,13 @@ import (
 
 	internal_agent_executor "github.com/rapidaai/api/assistant-api/internal/agent/executor"
 	internal_assistant_entity "github.com/rapidaai/api/assistant-api/internal/entity/assistants"
+	internal_conversation_entity "github.com/rapidaai/api/assistant-api/internal/entity/conversations"
 	internal_type "github.com/rapidaai/api/assistant-api/internal/type"
 	integration_client_builders "github.com/rapidaai/pkg/clients/integration/builders"
 	"github.com/rapidaai/pkg/commons"
+	gorm_models "github.com/rapidaai/pkg/models/gorm"
 	gorm_types "github.com/rapidaai/pkg/models/gorm/types"
+	type_enums "github.com/rapidaai/pkg/types/enums"
 	"github.com/rapidaai/pkg/utils"
 	"github.com/rapidaai/protos"
 	"github.com/stretchr/testify/assert"
@@ -103,6 +111,22 @@ type mockCommunication struct {
 	internal_type.Communication // embedded nil for unimplemented methods
 	collector                   *packetCollector
 	assistant                   *internal_assistant_entity.Assistant
+	args                        map[string]interface{}
+	metadata                    map[string]interface{}
+	conversation                *internal_conversation_entity.AssistantConversation
+	histories                   []internal_type.MessagePacket
+	source                      utils.RapidaSource
+	mode                        type_enums.MessageMode
+}
+
+type noModeCommunication struct {
+	internal_type.Communication // embedded nil for unimplemented methods
+	assistant                   *internal_assistant_entity.Assistant
+	args                        map[string]interface{}
+	metadata                    map[string]interface{}
+	conversation                *internal_conversation_entity.AssistantConversation
+	histories                   []internal_type.MessagePacket
+	source                      utils.RapidaSource
 }
 
 func (m *mockCommunication) OnPacket(ctx context.Context, pkts ...internal_type.Packet) error {
@@ -114,11 +138,68 @@ func (m *mockCommunication) Assistant() *internal_assistant_entity.Assistant {
 }
 
 func (m *mockCommunication) GetArgs() map[string]interface{} {
-	return nil
+	return m.args
 }
 
 func (m *mockCommunication) GetOptions() utils.Option {
 	return nil
+}
+
+func (m *mockCommunication) Source() utils.RapidaSource {
+	if m.source == "" {
+		return utils.WebPlugin
+	}
+	return m.source
+}
+
+func (m *mockCommunication) Conversation() *internal_conversation_entity.AssistantConversation {
+	return m.conversation
+}
+
+func (m *mockCommunication) GetHistories() []internal_type.MessagePacket {
+	return m.histories
+}
+
+func (m *mockCommunication) GetMetadata() map[string]interface{} {
+	return m.metadata
+}
+
+func (m *mockCommunication) GetMode() type_enums.MessageMode {
+	if m.mode == "" {
+		return type_enums.TextMode
+	}
+	return m.mode
+}
+
+func (m *noModeCommunication) Assistant() *internal_assistant_entity.Assistant {
+	return m.assistant
+}
+
+func (m *noModeCommunication) GetArgs() map[string]interface{} {
+	return m.args
+}
+
+func (m *noModeCommunication) GetOptions() utils.Option {
+	return nil
+}
+
+func (m *noModeCommunication) Source() utils.RapidaSource {
+	if m.source == "" {
+		return utils.WebPlugin
+	}
+	return m.source
+}
+
+func (m *noModeCommunication) Conversation() *internal_conversation_entity.AssistantConversation {
+	return m.conversation
+}
+
+func (m *noModeCommunication) GetHistories() []internal_type.MessagePacket {
+	return m.histories
+}
+
+func (m *noModeCommunication) GetMetadata() map[string]interface{} {
+	return m.metadata
 }
 
 // =============================================================================
@@ -164,6 +245,8 @@ func newTestComm() (*mockCommunication, *packetCollector) {
 				AssistantModelOptions: []*internal_assistant_entity.AssistantProviderModelOption{},
 			},
 		},
+		source: utils.WebPlugin,
+		mode:   type_enums.TextMode,
 	}, c
 }
 
@@ -195,6 +278,213 @@ func findPackets[T internal_type.Packet](pkts []internal_type.Packet) []T {
 		}
 	}
 	return out
+}
+
+func TestBuildPromptContext_IncludesNamespaces(t *testing.T) {
+	e := newTestExecutor()
+	comm, _ := newTestComm()
+	comm.assistant.Id = 123
+	comm.assistant.Name = "Lex"
+	comm.assistant.Language = "en"
+	comm.assistant.Description = "Assistant description"
+	comm.source = utils.PhoneCall
+	comm.mode = type_enums.AudioMode
+	comm.args = map[string]interface{}{"custom_key": "custom_value"}
+	comm.conversation = &internal_conversation_entity.AssistantConversation{
+		Audited: gorm_models.Audited{
+			Id:          999,
+			CreatedDate: gorm_models.TimeWrapper(time.Now().Add(-3 * time.Minute)),
+		},
+		Identifier: "user-42",
+		Source:     utils.PhoneCall,
+		Direction:  type_enums.DIRECTION_INBOUND,
+	}
+	comm.histories = []internal_type.MessagePacket{
+		internal_type.UserTextPacket{Text: "hello"},
+		internal_type.StaticPacket{Text: "hi"},
+	}
+
+	ctxMap := e.buildPromptContext(comm, internal_type.UserTextPacket{
+		ContextID: "ctx-1",
+		Language:  "en-IN",
+		Text:      "hello there",
+	})
+	system, ok := ctxMap["system"].(map[string]interface{})
+	require.True(t, ok)
+	assert.NotEmpty(t, system["current_date"])
+	assert.NotEmpty(t, system["current_time"])
+	assert.NotEmpty(t, system["current_datetime"])
+	assert.NotEmpty(t, system["day_of_week"])
+	assert.NotEmpty(t, system["date_rfc1123"])
+	assert.NotEmpty(t, system["date_unix"])
+	assert.NotEmpty(t, system["date_unix_ms"])
+
+	assistant, ok := ctxMap["assistant"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "Lex", assistant["name"])
+	assert.Equal(t, "123", assistant["id"])
+	assert.Equal(t, "en", assistant["language"])
+	assert.Equal(t, "Assistant description", assistant["description"])
+
+	session, ok := ctxMap["session"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "audio", session["mode"])
+
+	conversation, ok := ctxMap["conversation"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "999", conversation["id"])
+	assert.Equal(t, "user-42", conversation["identifier"])
+	assert.Equal(t, "phone-call", conversation["source"])
+	assert.Equal(t, "inbound", conversation["direction"])
+	assert.NotEmpty(t, conversation["created_date"])
+	assert.NotEmpty(t, conversation["duration"])
+
+	message, ok := ctxMap["message"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "en-IN", message["language"])
+	assert.Equal(t, "hello there", message["text"])
+
+	assert.Equal(t, "custom_value", ctxMap["custom_key"])
+	_, hasArgsNamespace := ctxMap["args"]
+	assert.True(t, hasArgsNamespace, "arguments should be available via {{args.*}}")
+}
+
+func TestBuildPromptContext_ArgumentsRemainRootLevel(t *testing.T) {
+	e := newTestExecutor()
+	comm, _ := newTestComm()
+	comm.args = map[string]interface{}{
+		"name": "Prashant",
+		"city": "Singapore",
+	}
+
+	ctxMap := e.buildPromptContext(comm, internal_type.UserTextPacket{
+		ContextID: "ctx-root-args",
+		Text:      "hello",
+		Language:  "en",
+	})
+
+	assert.Equal(t, "Prashant", ctxMap["name"])
+	assert.Equal(t, "Singapore", ctxMap["city"])
+	args, hasArgsNamespace := ctxMap["args"].(map[string]interface{})
+	require.True(t, hasArgsNamespace)
+	assert.Equal(t, "Prashant", args["name"])
+	assert.Equal(t, "Singapore", args["city"])
+}
+
+func TestBuildPromptContext_ModeOmittedWhenNotAvailable(t *testing.T) {
+	e := newTestExecutor()
+	comm, _ := newTestComm()
+	noMode := &noModeCommunication{
+		assistant:    comm.assistant,
+		args:         comm.args,
+		metadata:     comm.metadata,
+		conversation: comm.conversation,
+		histories:    comm.histories,
+		source:       comm.source,
+	}
+
+	ctxMap := e.buildPromptContext(noMode, internal_type.UserTextPacket{
+		ContextID: "ctx-1",
+		Language:  "en",
+		Text:      "hello",
+	})
+
+	session, ok := ctxMap["session"].(map[string]interface{})
+	require.True(t, ok)
+	_, hasMode := session["mode"]
+	assert.False(t, hasMode)
+}
+
+func TestPreparePromptArgumentsForResponse_UsesLatestUserAndClientLanguage(t *testing.T) {
+	e := newTestExecutor()
+	comm, _ := newTestComm()
+	comm.metadata = map[string]interface{}{"client.language": "es"}
+	comm.histories = []internal_type.MessagePacket{
+		internal_type.UserTextPacket{Text: "old"},
+	}
+	e.mu.Lock()
+	e.history = []*protos.Message{
+		{Role: "assistant", Message: &protos.Message_Assistant{Assistant: &protos.AssistantMessage{Contents: []string{"hi"}}}},
+		{Role: "user", Message: &protos.Message_User{User: &protos.UserMessage{Content: "hola"}}},
+	}
+	e.mu.Unlock()
+
+	args := e.preparePromptArgumentsForResponse(comm, "ctx-1")
+	message, ok := args["message"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "hola", message["text"])
+	assert.Equal(t, "es", message["language"])
+}
+
+func TestPreparePromptArgumentsForResponse_NoUserMessage(t *testing.T) {
+	e := newTestExecutor()
+	comm, _ := newTestComm()
+	comm.args = map[string]interface{}{"name": "lex"}
+	e.mu.Lock()
+	e.history = []*protos.Message{
+		{Role: "assistant", Message: &protos.Message_Assistant{Assistant: &protos.AssistantMessage{Contents: []string{"hi"}}}},
+	}
+	e.mu.Unlock()
+
+	args := e.preparePromptArgumentsForResponse(comm, "ctx-2")
+	message, ok := args["message"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "", message["text"])
+	assert.Equal(t, "", message["language"])
+	assert.Equal(t, "lex", args["name"])
+}
+
+func TestPreparePromptArgumentsForResponse_PrefersLatestHistoryLanguage(t *testing.T) {
+	e := newTestExecutor()
+	comm, _ := newTestComm()
+	comm.metadata = map[string]interface{}{"client.language": "es"}
+	comm.histories = []internal_type.MessagePacket{
+		internal_type.SaveMessagePacket{ContextID: "ctx-3", MessageRole: "user", Text: "bonjour", Language: "fr-FR"},
+	}
+	e.mu.Lock()
+	e.history = []*protos.Message{
+		{Role: "user", Message: &protos.Message_User{User: &protos.UserMessage{Content: "bonjour"}}},
+	}
+	e.mu.Unlock()
+
+	args := e.preparePromptArgumentsForResponse(comm, "ctx-3")
+	message, ok := args["message"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "bonjour", message["text"])
+	assert.Equal(t, "fr-FR", message["language"])
+}
+
+func TestClonePromptArguments_DeepClone(t *testing.T) {
+	in := map[string]interface{}{
+		"message": map[string]interface{}{
+			"text": "hello",
+		},
+		"name": "a",
+	}
+	cloned := clonePromptArguments(in)
+	nested := cloned["message"].(map[string]interface{})
+	nested["text"] = "changed"
+	assert.Equal(t, "hello", in["message"].(map[string]interface{})["text"])
+}
+
+func TestRequestPipeline_DefaultStages(t *testing.T) {
+	e := newTestExecutor()
+	stages := e.requestPipeline()
+	require.Len(t, stages, 4)
+	assert.Equal(t, "build_user_message", stages[0].Name())
+	assert.Equal(t, "snapshot_history", stages[1].Name())
+	assert.Equal(t, "validate_history", stages[2].Name())
+	assert.Equal(t, "prepare_prompt_arguments", stages[3].Name())
+}
+
+func TestResponsePipeline_DefaultStages(t *testing.T) {
+	e := newTestExecutor()
+	stages := e.responsePipeline()
+	require.Len(t, stages, 4)
+	assert.Equal(t, "validate_response", stages[0].Name())
+	assert.Equal(t, "build_response_view", stages[1].Name())
+	assert.Equal(t, "emit_response_upstream", stages[2].Name())
+	assert.Equal(t, "tool_follow_up", stages[3].Name())
 }
 
 // =============================================================================
@@ -237,6 +527,184 @@ func TestHandleResponse_NilOutput(t *testing.T) {
 	}
 	e.handleResponse(context.Background(), comm, resp)
 	assert.Empty(t, collector.all(), "nil output should emit no packets")
+}
+
+func TestHandleResponse_StaleResponse_Dropped(t *testing.T) {
+	e := newTestExecutor()
+	comm, collector := newTestComm()
+	e.activeContextID = "ctx-active"
+	e.mu.Lock()
+	e.history = append(e.history, &protos.Message{Role: "user", Message: &protos.Message_User{User: &protos.UserMessage{Content: "q"}}})
+	e.mu.Unlock()
+
+	resp := &protos.ChatResponse{
+		RequestId: "ctx-stale",
+		Success:   true,
+		Data: &protos.Message{
+			Role: "assistant",
+			Message: &protos.Message_Assistant{
+				Assistant: &protos.AssistantMessage{Contents: []string{"should-drop"}},
+			},
+		},
+		Metrics: []*protos.Metric{{Name: "tokens", Value: "1"}},
+	}
+	e.handleResponse(context.Background(), comm, resp)
+	assert.Empty(t, collector.all(), "stale response should be ignored")
+	snap := e.snapshotHistory()
+	require.Len(t, snap, 1)
+}
+
+func TestValidateHistorySequence_SandwichRuleViolation(t *testing.T) {
+	e := newTestExecutor()
+	err := e.validateHistorySequence([]*protos.Message{
+		{
+			Role: "assistant",
+			Message: &protos.Message_Assistant{
+				Assistant: &protos.AssistantMessage{
+					ToolCalls: []*protos.ToolCall{{Id: "tc1", Type: "function"}},
+				},
+			},
+		},
+		{
+			Role:    "user",
+			Message: &protos.Message_User{User: &protos.UserMessage{Content: "next"}},
+		},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "immediately followed by tool response")
+}
+
+func TestValidateHistorySequence_IDMismatch(t *testing.T) {
+	e := newTestExecutor()
+	err := e.validateHistorySequence([]*protos.Message{
+		{
+			Role: "assistant",
+			Message: &protos.Message_Assistant{
+				Assistant: &protos.AssistantMessage{
+					ToolCalls: []*protos.ToolCall{{Id: "tc1", Type: "function"}},
+				},
+			},
+		},
+		{
+			Role: "tool",
+			Message: &protos.Message_Tool{
+				Tool: &protos.ToolMessage{
+					Tools: []*protos.ToolMessage_Tool{{Id: "tc2", Name: "fn", Content: "{}"}},
+				},
+			},
+		},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "missing tool response")
+}
+
+func TestValidateHistorySequence_OrphanTool(t *testing.T) {
+	e := newTestExecutor()
+	err := e.validateHistorySequence([]*protos.Message{
+		{
+			Role: "tool",
+			Message: &protos.Message_Tool{
+				Tool: &protos.ToolMessage{Tools: []*protos.ToolMessage_Tool{{Id: "tc1"}}},
+			},
+		},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "orphan tool response")
+}
+
+func TestValidateHistorySequence_StrictSequencingViolation(t *testing.T) {
+	e := newTestExecutor()
+	err := e.validateHistorySequence([]*protos.Message{
+		{
+			Role: "assistant",
+			Message: &protos.Message_Assistant{
+				Assistant: &protos.AssistantMessage{
+					ToolCalls: []*protos.ToolCall{{Id: "tc1", Type: "function"}},
+				},
+			},
+		},
+		{
+			Role: "tool",
+			Message: &protos.Message_Tool{
+				Tool: &protos.ToolMessage{
+					Tools: []*protos.ToolMessage_Tool{{Id: "tc1", Name: "fn", Content: "{}"}},
+				},
+			},
+		},
+		{
+			Role:    "user",
+			Message: &protos.Message_User{User: &protos.UserMessage{Content: "oops"}},
+		},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "strict sequencing violated")
+}
+
+func TestValidateHistorySequence_ValidChain(t *testing.T) {
+	e := newTestExecutor()
+	err := e.validateHistorySequence([]*protos.Message{
+		{
+			Role:    "user",
+			Message: &protos.Message_User{User: &protos.UserMessage{Content: "q"}},
+		},
+		{
+			Role: "assistant",
+			Message: &protos.Message_Assistant{
+				Assistant: &protos.AssistantMessage{
+					ToolCalls: []*protos.ToolCall{{Id: "tc1", Type: "function"}},
+				},
+			},
+		},
+		{
+			Role: "tool",
+			Message: &protos.Message_Tool{
+				Tool: &protos.ToolMessage{
+					Tools: []*protos.ToolMessage_Tool{{Id: "tc1", Name: "fn", Content: "{}"}},
+				},
+			},
+		},
+		{
+			Role: "assistant",
+			Message: &protos.Message_Assistant{
+				Assistant: &protos.AssistantMessage{Contents: []string{"done"}},
+			},
+		},
+	})
+	require.NoError(t, err)
+}
+
+func TestExecuteUserTurn_InvalidHistoryRejectedByPipeline(t *testing.T) {
+	e := newTestExecutor()
+	stream := newMockStream()
+	e.stream = stream
+	comm, _ := newTestComm()
+	e.mu.Lock()
+	e.history = []*protos.Message{
+		{
+			Role: "assistant",
+			Message: &protos.Message_Assistant{
+				Assistant: &protos.AssistantMessage{
+					ToolCalls: []*protos.ToolCall{{Id: "tc1", Type: "function"}},
+				},
+			},
+		},
+		{
+			Role:    "user",
+			Message: &protos.Message_User{User: &protos.UserMessage{Content: "bad"}},
+		},
+	}
+	e.mu.Unlock()
+
+	err := e.Execute(context.Background(), comm, internal_type.UserTextPacket{
+		ContextID: "ctx-invalid-history",
+		Text:      "new",
+		Language:  "en",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "immediately followed by tool response")
+	stream.mu.Lock()
+	defer stream.mu.Unlock()
+	assert.Len(t, stream.sendCalls, 0)
 }
 
 func TestHandleResponse_FinalWithoutToolCalls(t *testing.T) {
@@ -328,6 +796,67 @@ func TestHandleResponse_FinalWithToolCalls(t *testing.T) {
 	// Verify history: output + toolExecution were appended atomically
 	snapshot := e.snapshotHistory()
 	require.Len(t, snapshot, 2, "assistant msg + tool result should be in history")
+}
+
+func TestHandleResponse_ToolFollowUpRetainsUserMessageContext(t *testing.T) {
+	e := newTestExecutor()
+	stream := newMockStream()
+	e.stream = stream
+	e.toolExecutor = &mockToolExecutor{
+		executeFn: func(_ context.Context, _ string, _ []*protos.ToolCall, _ internal_type.Communication) *protos.Message {
+			return &protos.Message{
+				Role: "tool",
+				Message: &protos.Message_Tool{Tool: &protos.ToolMessage{
+					Tools: []*protos.ToolMessage_Tool{{Id: "tc1", Name: "fn", Content: "{}"}},
+				}},
+			}
+		},
+	}
+	comm, collector := newTestComm()
+	comm.metadata = map[string]interface{}{"client.language": "fr"}
+	comm.assistant.AssistantProviderModel.Template = gorm_types.PromptMap{
+		"prompt": []map[string]string{
+			{
+				"role":    "system",
+				"content": "lang={{ message.language }} text={{ message.text }}",
+			},
+		},
+		"promptVariables": []map[string]string{},
+	}
+
+	err := e.Execute(context.Background(), comm, internal_type.UserTextPacket{
+		ContextID: "req-tool",
+		Text:      "bonjour",
+		Language:  "fr",
+	})
+	require.NoError(t, err)
+
+	resp := &protos.ChatResponse{
+		RequestId: "req-tool",
+		Success:   true,
+		Data: &protos.Message{
+			Role: "assistant",
+			Message: &protos.Message_Assistant{
+				Assistant: &protos.AssistantMessage{
+					Contents:  []string{"tooling"},
+					ToolCalls: []*protos.ToolCall{{Id: "tc1", Type: "function"}},
+				},
+			},
+		},
+		Metrics: []*protos.Metric{{Name: "tokens", Value: "5"}},
+	}
+	e.handleResponse(context.Background(), comm, resp)
+
+	stream.mu.Lock()
+	defer stream.mu.Unlock()
+	require.Len(t, stream.sendCalls, 2, "initial send + tool follow-up send")
+	require.NotNil(t, stream.sendCalls[0].GetConversations()[0].GetSystem())
+	require.NotNil(t, stream.sendCalls[1].GetConversations()[0].GetSystem())
+	assert.Equal(t, "lang=fr text=bonjour", stream.sendCalls[0].GetConversations()[0].GetSystem().GetContent())
+	assert.Equal(t, "lang=fr text=bonjour", stream.sendCalls[1].GetConversations()[0].GetSystem().GetContent(), "tool follow-up must preserve original user packet context")
+
+	errPkts := findPackets[internal_type.LLMErrorPacket](collector.all())
+	assert.Empty(t, errPkts)
 }
 
 func TestHandleResponse_StreamDelta(t *testing.T) {
@@ -529,7 +1058,7 @@ func TestSend_NilStream(t *testing.T) {
 	e.stream = nil
 	comm, _ := newTestComm()
 
-	err := e.chat(context.Background(), comm, "ctx-1", &protos.Message{Role: "user"})
+	err := e.chat(context.Background(), comm, "ctx-1", map[string]interface{}{}, &protos.Message{Role: "user"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "stream not connected")
 }
@@ -540,7 +1069,7 @@ func TestSend_Success(t *testing.T) {
 	e.stream = stream
 	comm, _ := newTestComm()
 
-	err := e.chat(context.Background(), comm, "ctx-1", &protos.Message{Role: "user"})
+	err := e.chat(context.Background(), comm, "ctx-1", map[string]interface{}{}, &protos.Message{Role: "user"})
 	require.NoError(t, err)
 
 	stream.mu.Lock()

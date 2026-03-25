@@ -30,6 +30,10 @@ func sttInput(msg string, complete bool) internal_type.SpeechToTextPacket {
 	return internal_type.SpeechToTextPacket{Script: msg, Interim: !complete}
 }
 
+func sttInputWithLanguage(msg, language string, complete bool) internal_type.SpeechToTextPacket {
+	return internal_type.SpeechToTextPacket{Script: msg, Interim: !complete, Language: language}
+}
+
 // newTestOpts creates a utils.Option (which is just map[string]interface{})
 func newTestOpts(m map[string]any) utils.Option {
 	return utils.Option(m)
@@ -248,6 +252,131 @@ func TestContextCancelStillFiresCallback(t *testing.T) {
 		}
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("callback should have been called even after context cancel")
+	}
+}
+
+func TestSTTLanguagePreservedInEndOfSpeechPacket(t *testing.T) {
+	logger, _ := commons.NewApplicationLogger()
+	called := make(chan internal_type.EndOfSpeechPacket, 1)
+	callback := func(ctx context.Context, res ...internal_type.Packet) error {
+		for _, r := range res {
+			if p, ok := r.(internal_type.EndOfSpeechPacket); ok {
+				select {
+				case called <- p:
+				default:
+				}
+			}
+		}
+		return nil
+	}
+
+	opts := newTestOpts(map[string]any{"microphone.eos.timeout": 100.0})
+	svcIface, err := NewSilenceBasedEndOfSpeech(logger, callback, opts)
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+
+	ctx := context.Background()
+	if err := svcIface.Analyze(ctx, sttInputWithLanguage("hola", "es-ES", true)); err != nil {
+		t.Fatalf("analyze: %v", err)
+	}
+
+	select {
+	case res := <-called:
+		if res.Speech != "hola" {
+			t.Fatalf("unexpected speech: %v", res.Speech)
+		}
+		if res.Language != "es-ES" {
+			t.Fatalf("unexpected language: %v", res.Language)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("timeout waiting for callback")
+	}
+}
+
+func TestSTTLanguage_UsesLatestNonEmptyAcrossChunks(t *testing.T) {
+	logger, _ := commons.NewApplicationLogger()
+	called := make(chan internal_type.EndOfSpeechPacket, 1)
+	callback := func(ctx context.Context, res ...internal_type.Packet) error {
+		for _, r := range res {
+			if p, ok := r.(internal_type.EndOfSpeechPacket); ok {
+				select {
+				case called <- p:
+				default:
+				}
+			}
+		}
+		return nil
+	}
+
+	opts := newTestOpts(map[string]any{"microphone.eos.timeout": 120.0})
+	svcIface, err := NewSilenceBasedEndOfSpeech(logger, callback, opts)
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+
+	ctx := context.Background()
+	requireNoError := func(err error) {
+		if err != nil {
+			t.Fatalf("analyze: %v", err)
+		}
+	}
+	requireNoError(svcIface.Analyze(ctx, sttInputWithLanguage("hello", "en-US", true)))
+	requireNoError(svcIface.Analyze(ctx, sttInputWithLanguage("bonjour", "fr-FR", true)))
+	requireNoError(svcIface.Analyze(ctx, sttInputWithLanguage("hallo", "de-DE", true)))
+
+	select {
+	case res := <-called:
+		if res.Speech != "hello bonjour hallo" {
+			t.Fatalf("unexpected speech: %v", res.Speech)
+		}
+		if res.Language != "de-DE" {
+			t.Fatalf("unexpected language: %v", res.Language)
+		}
+	case <-time.After(600 * time.Millisecond):
+		t.Fatal("timeout waiting for callback")
+	}
+}
+
+func TestSTTLanguage_LastChunkWithoutLanguageRetainsPrevious(t *testing.T) {
+	logger, _ := commons.NewApplicationLogger()
+	called := make(chan internal_type.EndOfSpeechPacket, 1)
+	callback := func(ctx context.Context, res ...internal_type.Packet) error {
+		for _, r := range res {
+			if p, ok := r.(internal_type.EndOfSpeechPacket); ok {
+				select {
+				case called <- p:
+				default:
+				}
+			}
+		}
+		return nil
+	}
+
+	opts := newTestOpts(map[string]any{"microphone.eos.timeout": 120.0})
+	svcIface, err := NewSilenceBasedEndOfSpeech(logger, callback, opts)
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+
+	ctx := context.Background()
+	if err := svcIface.Analyze(ctx, sttInputWithLanguage("hola", "es-ES", true)); err != nil {
+		t.Fatalf("analyze: %v", err)
+	}
+	if err := svcIface.Analyze(ctx, sttInputWithLanguage("mundo", "", true)); err != nil {
+		t.Fatalf("analyze: %v", err)
+	}
+
+	select {
+	case res := <-called:
+		if res.Speech != "hola mundo" {
+			t.Fatalf("unexpected speech: %v", res.Speech)
+		}
+		if res.Language != "es-ES" {
+			t.Fatalf("unexpected language: %v", res.Language)
+		}
+	case <-time.After(600 * time.Millisecond):
+		t.Fatal("timeout waiting for callback")
 	}
 }
 
