@@ -192,19 +192,25 @@ doctor:
 		fi; \
 	done; \
 	if command -v lsof >/dev/null 2>&1; then \
-		for p in 3000 8080 9004 9005 9007 5432 6379 4573; do \
-			if lsof -nP -iTCP:$$p -sTCP:LISTEN >/dev/null 2>&1; then \
-				echo "✗ TCP port $$p is already in use."; \
-				errors=$$((errors + 1)); \
-			else \
+		for p in 3000 8080 9004 9005 9007 4573; do \
+			owner=$$(lsof -nP -iTCP:$$p -sTCP:LISTEN 2>/dev/null | awk 'NR==2 {print $$1}'); \
+			if [ -z "$$owner" ]; then \
 				echo "✓ TCP port $$p is free"; \
+			elif echo "$$owner" | grep -Eq '^(com\.docke|docker-proxy|docker)$$'; then \
+				echo "! TCP port $$p is in use by Docker ($$owner); continuing."; \
+			else \
+				echo "✗ TCP port $$p is already in use by $$owner."; \
+				errors=$$((errors + 1)); \
 			fi; \
 		done; \
-		if lsof -nP -iUDP:5090 >/dev/null 2>&1; then \
-			echo "✗ UDP port 5090 is already in use."; \
-			errors=$$((errors + 1)); \
-		else \
+		udp_owner=$$(lsof -nP -iUDP:5090 2>/dev/null | awk 'NR==2 {print $$1}'); \
+		if [ -z "$$udp_owner" ]; then \
 			echo "✓ UDP port 5090 is free"; \
+		elif echo "$$udp_owner" | grep -Eq '^(com\.docke|docker-proxy|docker)$$'; then \
+			echo "! UDP port 5090 is in use by Docker ($$udp_owner); continuing."; \
+		else \
+			echo "✗ UDP port 5090 is already in use by $$udp_owner."; \
+			errors=$$((errors + 1)); \
 		fi; \
 	else \
 		echo "! lsof not found, skipping port checks."; \
