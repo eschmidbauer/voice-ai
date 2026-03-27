@@ -48,6 +48,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"strings"
 	"sync"
 	"time"
 
@@ -73,6 +74,7 @@ type agentkitExecutor struct {
 	connection *grpc.ClientConn
 	talker     grpc.BidiStreamingClient[protos.TalkInput, protos.TalkOutput]
 	mu         sync.RWMutex
+	currentID  string
 	done       chan struct{} // closed when the listener goroutine exits
 }
 
@@ -268,6 +270,53 @@ func (e *agentkitExecutor) streamErrorReason(err error) string {
 	}
 }
 
+func (e *agentkitExecutor) setCurrentContextID(id string) {
+	e.mu.Lock()
+	e.currentID = id
+	e.mu.Unlock()
+}
+
+func (e *agentkitExecutor) isCurrentContextID(id string) bool {
+	clean := strings.TrimSpace(id)
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	current := strings.TrimSpace(e.currentID)
+	// Preserve historical behavior for id-less packets while still gating stale ids.
+	if clean == "" || current == "" {
+		return true
+	}
+	return clean == current
+}
+
+func (e *agentkitExecutor) sendUserMessage(ctx context.Context, comm internal_type.Communication, contextID string, text string) error {
+	if strings.TrimSpace(contextID) == "" {
+		return nil
+	}
+	e.setCurrentContextID(contextID)
+	comm.OnPacket(ctx, internal_type.ConversationEventPacket{
+		ContextID: contextID,
+		Name:      "agentkit",
+		Data: map[string]string{
+			"type":             "executing",
+			"script":           text,
+			"input_char_count": fmt.Sprintf("%d", len(text)),
+		},
+		Time: time.Now(),
+	})
+	return e.send(&protos.TalkInput{
+		Request: &protos.TalkInput_Message{
+			Message: &protos.ConversationUserMessage{
+				Message: &protos.ConversationUserMessage_Text{
+					Text: text,
+				},
+				Id:        contextID,
+				Completed: true,
+				Time:      timestamppb.Now(),
+			},
+		},
+	})
+}
+
 // handleResponse processes a single response from the external agent.
 //
 // It emits the appropriate Packet(s) for each message type and pairs them with
@@ -288,6 +337,9 @@ func (e *agentkitExecutor) handleResponse(ctx context.Context, resp *protos.Talk
 		})
 
 	case *protos.TalkOutput_Interruption:
+		if !e.isCurrentContextID(data.Interruption.GetId()) {
+			return
+		}
 		// Emits: InterruptionPacket + ConversationEventPacket {type: "interruption"}
 		comm.OnPacket(ctx,
 			internal_type.InterruptionPacket{ContextID: data.Interruption.Id, Source: internal_type.InterruptionSourceWord},
@@ -300,6 +352,9 @@ func (e *agentkitExecutor) handleResponse(ctx context.Context, resp *protos.Talk
 		)
 
 	case *protos.TalkOutput_Assistant:
+		if !e.isCurrentContextID(data.Assistant.GetId()) {
+			return
+		}
 		switch msg := data.Assistant.GetMessage().(type) {
 		case *protos.ConversationAssistantMessage_Text:
 			if data.Assistant.GetCompleted() {
@@ -341,6 +396,9 @@ func (e *agentkitExecutor) handleResponse(ctx context.Context, resp *protos.Talk
 		}
 
 	case *protos.TalkOutput_Tool:
+		if !e.isCurrentContextID(data.Tool.GetId()) {
+			return
+		}
 		// External agent notifying Rapida of an in-progress tool call.
 		// Emits: ConversationEventPacket {type: "tool_call"} (Name="tool")
 		e.logger.Debugf("AgentKit tool call: id=%s toolId=%s name=%s", data.Tool.GetId(), data.Tool.GetToolId(), data.Tool.GetName())
@@ -356,6 +414,9 @@ func (e *agentkitExecutor) handleResponse(ctx context.Context, resp *protos.Talk
 		})
 
 	case *protos.TalkOutput_ToolResult:
+		if !e.isCurrentContextID(data.ToolResult.GetId()) {
+			return
+		}
 		// External agent notifying Rapida of a completed tool result.
 		// Emits: ConversationEventPacket {type: "tool_result"} (Name="tool")
 		e.logger.Debugf("AgentKit tool result: id=%s toolId=%s name=%s success=%v", data.ToolResult.GetId(), data.ToolResult.GetToolId(), data.ToolResult.GetName(), data.ToolResult.GetSuccess())
@@ -396,6 +457,9 @@ func (e *agentkitExecutor) handleResponse(ctx context.Context, resp *protos.Talk
 		)
 
 	case *protos.TalkOutput_Directive:
+		if !e.isCurrentContextID(data.Directive.GetId()) {
+			return
+		}
 		args, _ := utils.AnyMapToInterfaceMap(data.Directive.GetArgs())
 		comm.OnPacket(ctx, internal_type.DirectivePacket{ContextID: data.Directive.GetId(), Directive: data.Directive.GetType(), Arguments: args})
 	}
@@ -406,54 +470,15 @@ func (e *agentkitExecutor) handleResponse(ctx context.Context, resp *protos.Talk
 // Emits ConversationEventPacket: {type: "executing"} for UserTextPacket.
 func (e *agentkitExecutor) Execute(ctx context.Context, comm internal_type.Communication, packet internal_type.Packet) error {
 	switch p := packet.(type) {
-	case internal_type.NormalizedTextPacket:
-		comm.OnPacket(ctx, internal_type.ConversationEventPacket{
-			ContextID: p.ContextID,
-			Name:      "agentkit",
-			Data: map[string]string{
-				"type":             "executing",
-				"script":           p.Text,
-				"input_char_count": fmt.Sprintf("%d", len(p.Text)),
-			},
-			Time: time.Now(),
-		})
-		return e.send(&protos.TalkInput{
-			Request: &protos.TalkInput_Message{
-				Message: &protos.ConversationUserMessage{
-					Message: &protos.ConversationUserMessage_Text{
-						Text: p.Text,
-					},
-					Id:        packet.ContextId(),
-					Completed: true,
-					Time:      timestamppb.Now(),
-				},
-			},
-		})
+	case internal_type.NormalizedUserTextPacket:
+		return e.sendUserMessage(ctx, comm, p.ContextID, p.Text)
 	case internal_type.UserTextPacket:
-		comm.OnPacket(ctx, internal_type.ConversationEventPacket{
-			ContextID: p.ContextID,
-			Name:      "agentkit",
-			Data: map[string]string{
-				"type":             "executing",
-				"script":           p.Text,
-				"input_char_count": fmt.Sprintf("%d", len(p.Text)),
-			},
-			Time: time.Now(),
-		})
-		return e.send(&protos.TalkInput{
-			Request: &protos.TalkInput_Message{
-				Message: &protos.ConversationUserMessage{
-					Message: &protos.ConversationUserMessage_Text{
-						Text: p.Text,
-					},
-					Id:        packet.ContextId(),
-					Completed: true,
-					Time:      timestamppb.Now(),
-				},
-			},
-		})
+		return e.sendUserMessage(ctx, comm, p.ContextID, p.Text)
 	case internal_type.StaticPacket:
 		// No-op: external agent manages its own history
+		return nil
+	case internal_type.InterruptionPacket:
+		e.setCurrentContextID("")
 		return nil
 
 	default:
@@ -474,6 +499,7 @@ func (e *agentkitExecutor) Close(ctx context.Context) error {
 		e.connection = nil
 	}
 	done := e.done
+	e.currentID = ""
 	e.mu.Unlock()
 
 	// Wait for listener goroutine to exit

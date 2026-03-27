@@ -239,7 +239,7 @@ func BenchmarkAnalyze_UserInput(b *testing.B) {
 // BenchmarkAnalyze_STTInput measures STT processing with timer scheduling.
 func BenchmarkAnalyze_STTInput(b *testing.B) {
 	callback := func(context.Context, ...internal_type.Packet) error { return nil }
-	eos := newTestEOS(callback, newTestOpts(map[string]any{"microphone.eos.timeout": 100.0}))
+	eos := newTestEOS(callback, newTestOpts(map[string]any{"microphone.eos.fallback_timeout": 100.0}))
 	defer eos.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -292,7 +292,7 @@ func BenchmarkAnalyze_EmptyInput(b *testing.B) {
 // BenchmarkAnalyze_Concurrent measures thread-safe access under load.
 func BenchmarkAnalyze_Concurrent(b *testing.B) {
 	callback := func(context.Context, ...internal_type.Packet) error { return nil }
-	eos := newTestEOS(callback, newTestOpts(map[string]any{"microphone.eos.timeout": 100.0}))
+	eos := newTestEOS(callback, newTestOpts(map[string]any{"microphone.eos.fallback_timeout": 100.0}))
 	defer eos.Close()
 
 	b.ResetTimer()
@@ -309,7 +309,7 @@ func BenchmarkAnalyze_Concurrent(b *testing.B) {
 // BenchmarkAnalyze_ConcurrentMixed measures concurrent performance with all packet types.
 func BenchmarkAnalyze_ConcurrentMixed(b *testing.B) {
 	callback := func(context.Context, ...internal_type.Packet) error { return nil }
-	eos := newTestEOS(callback, newTestOpts(map[string]any{"microphone.eos.timeout": 100.0}))
+	eos := newTestEOS(callback, newTestOpts(map[string]any{"microphone.eos.fallback_timeout": 100.0}))
 	defer eos.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -402,7 +402,7 @@ func BenchmarkMemory_ReflectPad(b *testing.B) {
 // BenchmarkAnalyze_HighThroughput measures sustained mixed-input throughput.
 func BenchmarkAnalyze_HighThroughput(b *testing.B) {
 	callback := func(context.Context, ...internal_type.Packet) error { return nil }
-	eos := newTestEOS(callback, newTestOpts(map[string]any{"microphone.eos.timeout": 100.0}))
+	eos := newTestEOS(callback, newTestOpts(map[string]any{"microphone.eos.fallback_timeout": 100.0}))
 	defer eos.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -427,7 +427,7 @@ func BenchmarkAnalyze_HighThroughput(b *testing.B) {
 // BenchmarkAnalyze_RapidFireInputs measures generation counter efficiency.
 func BenchmarkAnalyze_RapidFireInputs(b *testing.B) {
 	callback := func(context.Context, ...internal_type.Packet) error { return nil }
-	eos := newTestEOS(callback, newTestOpts(map[string]any{"microphone.eos.timeout": 100.0}))
+	eos := newTestEOS(callback, newTestOpts(map[string]any{"microphone.eos.fallback_timeout": 100.0}))
 	defer eos.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -451,7 +451,7 @@ func BenchmarkAnalyze_RaceDetection(b *testing.B) {
 		atomic.AddInt64(&callCount, 1)
 		return nil
 	}
-	eos := newTestEOS(callback, newTestOpts(map[string]any{"microphone.eos.timeout": 50.0}))
+	eos := newTestEOS(callback, newTestOpts(map[string]any{"microphone.eos.fallback_timeout": 50.0}))
 	defer eos.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())

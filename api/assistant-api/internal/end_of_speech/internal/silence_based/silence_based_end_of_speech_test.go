@@ -1112,6 +1112,21 @@ func TestServiceClose(t *testing.T) {
 	}
 }
 
+func TestSilenceBasedEOS_SendAfterClose_DoesNotEnqueueCommand(t *testing.T) {
+	eos := &SilenceBasedEOS{
+		cmdCh:  make(chan command, 1),
+		stopCh: make(chan struct{}),
+		state:  &eosState{segment: SpeechSegment{}},
+	}
+	close(eos.stopCh)
+
+	eos.send(command{fireNow: true})
+
+	if got := len(eos.cmdCh); got != 0 {
+		t.Fatalf("expected no enqueued commands after close, got=%d", got)
+	}
+}
+
 // === COMPREHENSIVE CONCURRENT & COMBINATION TESTS ===
 // These tests validate behavior under realistic concurrent loads that trigger LLM calls
 

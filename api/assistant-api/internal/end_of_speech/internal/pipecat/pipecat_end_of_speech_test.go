@@ -56,18 +56,30 @@ func newTestOpts(m map[string]any) utils.Option {
 // It uses a nil detector so inference always falls back to the fallback timeout.
 func newTestEOS(callback func(context.Context, ...internal_type.Packet) error, opts utils.Option) *PipecatEOS {
 	fallback := time.Duration(defaultPctFallbackMs) * time.Millisecond
-	if v, err := opts.GetFloat64("microphone.eos.timeout"); err == nil {
+	if v, err := opts.GetFloat64("microphone.eos.fallback_timeout"); err == nil {
+		fallback = time.Duration(v) * time.Millisecond
+	} else if v, err := opts.GetFloat64("microphone.eos.timeout"); err == nil {
 		fallback = time.Duration(v) * time.Millisecond
 	}
 	silenceTimeout := time.Duration(defaultPctSilenceTimeout) * time.Millisecond
-	if v, err := opts.GetFloat64("microphone.eos.silence_timeout"); err == nil {
+	if v, err := opts.GetFloat64("microphone.eos.extended_timeout"); err == nil {
 		silenceTimeout = time.Duration(v) * time.Millisecond
+	} else if v, err := opts.GetFloat64("microphone.eos.silence_timeout"); err == nil {
+		silenceTimeout = time.Duration(v) * time.Millisecond
+	}
+	quickTimeout := time.Duration(defaultPctQuickTimeout) * time.Millisecond
+	if v, err := opts.GetFloat64("microphone.eos.quick_timeout"); err == nil {
+		quickTimeout = time.Duration(v) * time.Millisecond
+	}
+	threshold := defaultPctThreshold
+	if v, err := opts.GetFloat64("microphone.eos.threshold"); err == nil {
+		threshold = v
 	}
 
 	eos := &PipecatEOS{
 		callback:       callback,
-		threshold:      defaultPctThreshold,
-		quickTimeout:   time.Duration(defaultPctQuickTimeout) * time.Millisecond,
+		threshold:      threshold,
+		quickTimeout:   quickTimeout,
 		silenceTimeout: silenceTimeout,
 		fallbackMs:     fallback,
 		audioBuf:       make([]float32, 0, maxAudioSamples),
@@ -76,6 +88,16 @@ func newTestEOS(callback func(context.Context, ...internal_type.Packet) error, o
 		state:          &eosState{segment: SpeechSegment{}},
 	}
 	go eos.worker()
+	return eos
+}
+
+func newTestEOSWithPredictor(
+	callback func(context.Context, ...internal_type.Packet) error,
+	opts utils.Option,
+	predictor func([]float32) (float64, error),
+) *PipecatEOS {
+	eos := newTestEOS(callback, opts)
+	eos.predictor = predictor
 	return eos
 }
 
@@ -548,6 +570,18 @@ func TestAppendAudio_ConcurrentSafety(t *testing.T) {
 	assert.LessOrEqual(t, len(eos.audioBuf), maxAudioSamples)
 }
 
+func TestPredictEOU_EmptyAudioBufferReturnsMinusOne(t *testing.T) {
+	eos := &PipecatEOS{}
+	assert.Equal(t, -1.0, eos.predictEOU())
+}
+
+func TestPredictEOU_DetectorUnavailableReturnsMinusOne(t *testing.T) {
+	eos := &PipecatEOS{
+		audioBuf: []float32{0.1, -0.1, 0.05},
+	}
+	assert.Equal(t, -1.0, eos.predictEOU())
+}
+
 // ============================================================================
 // EOS INTEGRATION TESTS (without ONNX model — fallback timeout path)
 // ============================================================================
@@ -594,7 +628,7 @@ func TestEOS_STTAccumulatesText(t *testing.T) {
 		return nil
 	}
 
-	eos := newTestEOS(callback, newTestOpts(map[string]any{"microphone.eos.timeout": 100.0, "microphone.eos.silence_timeout": 100.0}))
+	eos := newTestEOS(callback, newTestOpts(map[string]any{"microphone.eos.fallback_timeout": 100.0, "microphone.eos.extended_timeout": 100.0}))
 	defer eos.Close()
 
 	ctx := context.Background()
@@ -609,6 +643,167 @@ func TestEOS_STTAccumulatesText(t *testing.T) {
 		assert.Contains(t, p.Speech, "world")
 	case <-time.After(2 * time.Second):
 		t.Fatal("timeout waiting for callback")
+	}
+}
+
+func TestEOS_STTWithoutAudioFallsBackToFallbackTimeout(t *testing.T) {
+	called := make(chan time.Time, 1)
+	callback := func(ctx context.Context, res ...internal_type.Packet) error {
+		for _, r := range res {
+			if _, ok := r.(internal_type.EndOfSpeechPacket); ok {
+				select {
+				case called <- time.Now():
+				default:
+				}
+			}
+		}
+		return nil
+	}
+
+	eos := newTestEOS(callback, newTestOpts(map[string]any{
+		"microphone.eos.fallback_timeout": 80.0,
+		"microphone.eos.extended_timeout": 1000.0,
+	}))
+	defer eos.Close()
+
+	start := time.Now()
+	// No audio sent before final STT -> predictEOU returns -1 via empty audio buffer.
+	err := eos.Analyze(context.Background(), sttInput("hello", true))
+	require.NoError(t, err)
+
+	select {
+	case firedAt := <-called:
+		elapsed := firedAt.Sub(start)
+		assert.Less(t, elapsed, 350*time.Millisecond)
+	case <-time.After(700 * time.Millisecond):
+		t.Fatal("expected fallback timeout path when no audio is buffered")
+	}
+}
+
+func TestEOS_STTWithAudioAndNoDetectorFallsBack(t *testing.T) {
+	called := make(chan time.Time, 1)
+	callback := func(ctx context.Context, res ...internal_type.Packet) error {
+		for _, r := range res {
+			if _, ok := r.(internal_type.EndOfSpeechPacket); ok {
+				select {
+				case called <- time.Now():
+				default:
+				}
+			}
+		}
+		return nil
+	}
+
+	eos := newTestEOS(callback, newTestOpts(map[string]any{
+		"microphone.eos.fallback_timeout": 90.0,
+		"microphone.eos.extended_timeout": 1000.0,
+	}))
+	defer eos.Close()
+
+	// Ensure audio is buffered, but detector is intentionally nil in newTestEOS.
+	err := eos.Analyze(context.Background(), audioInput(1600))
+	require.NoError(t, err)
+
+	start := time.Now()
+	err = eos.Analyze(context.Background(), sttInput("hello", true))
+	require.NoError(t, err)
+
+	select {
+	case firedAt := <-called:
+		elapsed := firedAt.Sub(start)
+		assert.Less(t, elapsed, 350*time.Millisecond)
+	case <-time.After(700 * time.Millisecond):
+		t.Fatal("expected fallback timeout path when detector is unavailable")
+	}
+}
+
+func TestEOS_FinalSTTModelPredictsDone_UsesQuickTimeout(t *testing.T) {
+	called := make(chan time.Time, 1)
+	callback := func(ctx context.Context, res ...internal_type.Packet) error {
+		for _, r := range res {
+			if _, ok := r.(internal_type.EndOfSpeechPacket); ok {
+				select {
+				case called <- time.Now():
+				default:
+				}
+			}
+		}
+		return nil
+	}
+
+	eos := newTestEOSWithPredictor(
+		callback,
+		newTestOpts(map[string]any{
+			"microphone.eos.threshold":        0.5,
+			"microphone.eos.quick_timeout":    80.0,
+			"microphone.eos.extended_timeout": 1000.0,
+			"microphone.eos.fallback_timeout": 500.0,
+		}),
+		func(_ []float32) (float64, error) {
+			return 0.92, nil
+		},
+	)
+	defer eos.Close()
+
+	err := eos.Analyze(context.Background(), audioInput(1600))
+	require.NoError(t, err)
+
+	start := time.Now()
+	err = eos.Analyze(context.Background(), sttInput("ideal quick", true))
+	require.NoError(t, err)
+
+	select {
+	case firedAt := <-called:
+		elapsed := firedAt.Sub(start)
+		assert.GreaterOrEqual(t, elapsed, 45*time.Millisecond)
+		assert.Less(t, elapsed, 300*time.Millisecond)
+	case <-time.After(700 * time.Millisecond):
+		t.Fatal("expected quick timeout EOS callback")
+	}
+}
+
+func TestEOS_FinalSTTModelPredictsNotDone_UsesExtendedTimeout(t *testing.T) {
+	called := make(chan time.Time, 1)
+	callback := func(ctx context.Context, res ...internal_type.Packet) error {
+		for _, r := range res {
+			if _, ok := r.(internal_type.EndOfSpeechPacket); ok {
+				select {
+				case called <- time.Now():
+				default:
+				}
+			}
+		}
+		return nil
+	}
+
+	eos := newTestEOSWithPredictor(
+		callback,
+		newTestOpts(map[string]any{
+			"microphone.eos.threshold":        0.5,
+			"microphone.eos.quick_timeout":    60.0,
+			"microphone.eos.extended_timeout": 260.0,
+			"microphone.eos.fallback_timeout": 80.0,
+		}),
+		func(_ []float32) (float64, error) {
+			return 0.10, nil
+		},
+	)
+	defer eos.Close()
+
+	err := eos.Analyze(context.Background(), audioInput(1600))
+	require.NoError(t, err)
+
+	start := time.Now()
+	err = eos.Analyze(context.Background(), sttInput("ideal extended", true))
+	require.NoError(t, err)
+
+	select {
+	case firedAt := <-called:
+		elapsed := firedAt.Sub(start)
+		assert.GreaterOrEqual(t, elapsed, 180*time.Millisecond)
+		assert.Less(t, elapsed, 700*time.Millisecond)
+	case <-time.After(1 * time.Second):
+		t.Fatal("expected extended timeout EOS callback")
 	}
 }
 
@@ -721,9 +916,22 @@ func TestEOS_CloseStopsWorker(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestEOS_SendAfterClose_DoesNotEnqueueCommand(t *testing.T) {
+	eos := &PipecatEOS{
+		cmdCh:  make(chan command, 1),
+		stopCh: make(chan struct{}),
+		state:  &eosState{segment: SpeechSegment{}},
+	}
+	close(eos.stopCh)
+
+	eos.send(command{fireNow: true})
+
+	assert.Equal(t, 0, len(eos.cmdCh))
+}
+
 func TestEOS_ConcurrentAnalyze(t *testing.T) {
 	callback := func(context.Context, ...internal_type.Packet) error { return nil }
-	eos := newTestEOS(callback, newTestOpts(map[string]any{"microphone.eos.timeout": 100.0, "microphone.eos.silence_timeout": 100.0}))
+	eos := newTestEOS(callback, newTestOpts(map[string]any{"microphone.eos.fallback_timeout": 100.0, "microphone.eos.extended_timeout": 100.0}))
 	defer eos.Close()
 
 	var wg sync.WaitGroup
@@ -763,7 +971,7 @@ func TestEOS_ContextCancelStillFires(t *testing.T) {
 		return nil
 	}
 
-	eos := newTestEOS(callback, newTestOpts(map[string]any{"microphone.eos.timeout": 100.0, "microphone.eos.silence_timeout": 100.0}))
+	eos := newTestEOS(callback, newTestOpts(map[string]any{"microphone.eos.fallback_timeout": 100.0, "microphone.eos.extended_timeout": 100.0}))
 	defer eos.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -789,7 +997,7 @@ func TestEOS_CallbackFiresOnlyOnce(t *testing.T) {
 		return nil
 	}
 
-	eos := newTestEOS(callback, newTestOpts(map[string]any{"microphone.eos.timeout": 50.0, "microphone.eos.silence_timeout": 50.0}))
+	eos := newTestEOS(callback, newTestOpts(map[string]any{"microphone.eos.fallback_timeout": 50.0, "microphone.eos.extended_timeout": 50.0}))
 	defer eos.Close()
 
 	ctx := context.Background()
@@ -817,7 +1025,7 @@ func TestEOS_InterimSTTExtendsTimer(t *testing.T) {
 		return nil
 	}
 
-	eos := newTestEOS(callback, newTestOpts(map[string]any{"microphone.eos.timeout": 150.0, "microphone.eos.silence_timeout": 150.0}))
+	eos := newTestEOS(callback, newTestOpts(map[string]any{"microphone.eos.fallback_timeout": 150.0, "microphone.eos.extended_timeout": 150.0}))
 	defer eos.Close()
 
 	ctx := context.Background()
@@ -836,6 +1044,109 @@ func TestEOS_InterimSTTExtendsTimer(t *testing.T) {
 		assert.Contains(t, p.Speech, "hello")
 	case <-time.After(2 * time.Second):
 		t.Fatal("timeout")
+	}
+}
+
+func TestEOS_FinalSTTInferenceFailure_UsesConfiguredFallbackTimeout(t *testing.T) {
+	called := make(chan time.Time, 1)
+	callback := func(ctx context.Context, res ...internal_type.Packet) error {
+		for _, r := range res {
+			if _, ok := r.(internal_type.EndOfSpeechPacket); ok {
+				select {
+				case called <- time.Now():
+				default:
+				}
+			}
+		}
+		return nil
+	}
+
+	fallbackMs := 60.0
+	eos := newTestEOS(callback, newTestOpts(map[string]any{
+		"microphone.eos.fallback_timeout": fallbackMs,
+		"microphone.eos.extended_timeout": 900.0,
+		"microphone.eos.quick_timeout":   20.0,
+	}))
+	defer eos.Close()
+
+	start := time.Now()
+	err := eos.Analyze(context.Background(), sttInput("fallback path", true))
+	require.NoError(t, err)
+
+	select {
+	case firedAt := <-called:
+		elapsed := firedAt.Sub(start)
+		assert.GreaterOrEqual(t, elapsed, 35*time.Millisecond, "should not fire immediately")
+		assert.Less(t, elapsed, 300*time.Millisecond, "should use microphone.eos.fallback_timeout, not extended timeout")
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("timeout waiting for EOS callback")
+	}
+}
+
+func TestEOS_FinalSTTInferenceFailure_UsesDefaultFallbackTimeoutWhenUnset(t *testing.T) {
+	called := make(chan time.Time, 1)
+	callback := func(ctx context.Context, res ...internal_type.Packet) error {
+		for _, r := range res {
+			if _, ok := r.(internal_type.EndOfSpeechPacket); ok {
+				select {
+				case called <- time.Now():
+				default:
+				}
+			}
+		}
+		return nil
+	}
+
+	eos := newTestEOS(callback, newTestOpts(map[string]any{
+		// No microphone.eos.fallback_timeout -> should use default fallback (500ms)
+		"microphone.eos.extended_timeout": 1500.0,
+	}))
+	defer eos.Close()
+
+	start := time.Now()
+	err := eos.Analyze(context.Background(), sttInput("default fallback", true))
+	require.NoError(t, err)
+
+	select {
+	case firedAt := <-called:
+		elapsed := firedAt.Sub(start)
+		assert.GreaterOrEqual(t, elapsed, 420*time.Millisecond)
+		assert.Less(t, elapsed, 1200*time.Millisecond)
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for EOS callback")
+	}
+}
+
+func TestEOS_FinalSTTInferenceFailure_DoesNotUseSilenceTimeout(t *testing.T) {
+	called := make(chan time.Time, 1)
+	callback := func(ctx context.Context, res ...internal_type.Packet) error {
+		for _, r := range res {
+			if _, ok := r.(internal_type.EndOfSpeechPacket); ok {
+				select {
+				case called <- time.Now():
+				default:
+				}
+			}
+		}
+		return nil
+	}
+
+	eos := newTestEOS(callback, newTestOpts(map[string]any{
+		"microphone.eos.fallback_timeout": 70.0,
+		"microphone.eos.extended_timeout": 1400.0,
+	}))
+	defer eos.Close()
+
+	start := time.Now()
+	err := eos.Analyze(context.Background(), sttInput("no silence timeout", true))
+	require.NoError(t, err)
+
+	select {
+	case firedAt := <-called:
+		elapsed := firedAt.Sub(start)
+		assert.Less(t, elapsed, 400*time.Millisecond)
+	case <-time.After(700 * time.Millisecond):
+		t.Fatal("EOS should have fired via fallback timeout before silence_timeout")
 	}
 }
 

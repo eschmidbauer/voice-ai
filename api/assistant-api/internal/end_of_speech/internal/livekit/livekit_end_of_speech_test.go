@@ -154,3 +154,16 @@ func TestLivekitEOS_HistoryFromPackets(t *testing.T) {
 	assert.Len(t, eos.history, 2)
 	assert.Equal(t, "assistant", eos.history[1].Role)
 }
+
+func TestLivekitEOS_SendAfterClose_DoesNotEnqueueCommand(t *testing.T) {
+	eos := &LivekitEOS{
+		cmdCh:  make(chan command, 1),
+		stopCh: make(chan struct{}),
+		state:  &eosState{segment: SpeechSegment{}},
+	}
+	close(eos.stopCh)
+
+	eos.send(command{fireNow: true})
+
+	assert.Equal(t, 0, len(eos.cmdCh))
+}

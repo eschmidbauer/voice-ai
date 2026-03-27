@@ -6,98 +6,82 @@
 package internal_model
 
 import (
-	"time"
-
 	internal_type "github.com/rapidaai/api/assistant-api/internal/type"
 	"github.com/rapidaai/protos"
 )
 
-type PipelineType interface {
-	IsStop() bool
-}
-
 // Pipeline remains the router contract consumed by Pipeline(...).
-type Pipeline interface {
-	PipelineType
-}
+type PipelineType interface{}
 
-// PipelinePacket carries shared request/response state across model-executor
-// pipeline stages. Stages only transform this packet and forward it.
-type PipelinePacket struct {
-	PipelineType
-	Stop bool
-
-	// request fields
-	Packet      internal_type.UserTextPacket
-	Mode        string
-	UserMessage *protos.Message
-	History     []*protos.Message
-	PromptArgs  map[string]interface{}
-
-	// local-history append
-	Message *protos.Message
-
-	// response fields
-	Response     *protos.ChatResponse
-	ContextID    string
-	Output       *protos.Message
-	Metrics      []*protos.Metric
-	HasToolCalls bool
-	ResponseText string
-	Now          time.Time
-}
-
-func (p PipelinePacket) IsStop() bool {
-	return p.Stop
-}
-
-// InputPipeline is the entry stage for user-turn execution.
-type InputPipeline struct {
-	PipelinePacket
-}
-
-// Process stages
 type PrepareHistoryProcessPipeline struct {
-	PipelinePacket
+	Packet internal_type.NormalizedUserTextPacket
 }
 
+// ArgumentationProcessPipeline carries per-request state across argumentation stages.
 type ArgumentationProcessPipeline struct {
-	PipelinePacket
+	Packet       internal_type.NormalizedUserTextPacket
+	UserMessage  *protos.Message
+	History      []*protos.Message
+	PromptArgs   map[string]interface{}
+	ToolFollowUp bool
 }
 
 type AssistantArgumentationProcessPipeline struct {
-	PipelinePacket
+	Packet       internal_type.NormalizedUserTextPacket
+	UserMessage  *protos.Message
+	History      []*protos.Message
+	PromptArgs   map[string]interface{}
+	ToolFollowUp bool
 }
 
 type ConversationArgumentationProcessPipeline struct {
-	PipelinePacket
+	Packet       internal_type.NormalizedUserTextPacket
+	UserMessage  *protos.Message
+	History      []*protos.Message
+	PromptArgs   map[string]interface{}
+	ToolFollowUp bool
 }
 
 type MessageArgumentationProcessPipeline struct {
-	PipelinePacket
+	Packet       internal_type.NormalizedUserTextPacket
+	UserMessage  *protos.Message
+	History      []*protos.Message
+	PromptArgs   map[string]interface{}
+	ToolFollowUp bool
 }
 
 type SessionArgumentationProcessPipeline struct {
-	PipelinePacket
+	Packet       internal_type.NormalizedUserTextPacket
+	UserMessage  *protos.Message
+	History      []*protos.Message
+	PromptArgs   map[string]interface{}
+	ToolFollowUp bool
 }
 
 // Output stages
 type LLMRequestOutputPipeline struct {
-	PipelinePacket
+	Packet      internal_type.NormalizedUserTextPacket
+	UserMessage *protos.Message
+	History     []*protos.Message
+	PromptArgs  map[string]interface{}
 }
 
 type ToolFollowUpOutputPipeline struct {
-	PipelinePacket
+	ContextID  string
+	PromptArgs map[string]interface{}
 }
 
 // LocalHistoryOutputPipeline appends a message to local in-memory history.
 type LocalHistoryOutputPipeline struct {
-	PipelinePacket
+	Message *protos.Message
 }
 
 // LLMResponsePipeline is the typed response state flowing through stages.
 type LLMResponsePipeline struct {
-	PipelinePacket
+	Response *protos.ChatResponse
+
+	Output  *protos.Message
+	Metrics []*protos.Metric
 }
 
 // Backward-compatible aliases used by existing tests and call sites.

@@ -51,7 +51,7 @@ export const ValidateSpeechToTextIfInvalid = (
 export const GetDefaultMicrophoneConfig = (
   existing: Metadata[] = [],
   defaults?: {
-    'microphone.eos.timeout'?: string;
+    'microphone.eos.fallback_timeout'?: string;
     'microphone.eos.provider'?: string;
     'microphone.denoising.provider'?: string;
     'microphone.vad.provider'?: string;
@@ -60,8 +60,8 @@ export const GetDefaultMicrophoneConfig = (
 ): Metadata[] => {
   const defaultConfig = [
     {
-      key: 'microphone.eos.timeout',
-      value: defaults?.['microphone.eos.timeout'] ?? '700',
+      key: 'microphone.eos.fallback_timeout',
+      value: defaults?.['microphone.eos.fallback_timeout'] ?? '700',
     },
     {
       key: 'microphone.eos.provider',

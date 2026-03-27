@@ -28,9 +28,19 @@ export const ConfigureAudioInputProvider: React.FC<
 > = ({ audioInputConfig, setAudioInputConfig }) => {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
+  const keepAdvancedMicrophoneParams = (parameters: Metadata[]) =>
+    parameters.filter(p => {
+      const key = p.getKey();
+      return (
+        key.startsWith('microphone.eos.') ||
+        key.startsWith('microphone.vad.') ||
+        key.startsWith('microphone.denoising.')
+      );
+    });
+
   const onChangeAudioInputProvider = (providerName: string) => {
-    const microphoneScopedParameters = audioInputConfig.parameters.filter(
-      p => p.getKey().startsWith('microphone.'),
+    const microphoneScopedParameters = keepAdvancedMicrophoneParams(
+      audioInputConfig.parameters,
     );
     setAudioInputConfig({
       provider: providerName,
@@ -123,7 +133,9 @@ export const ConfigureAudioInputProvider: React.FC<
                     onChangeAudioInputParameter(
                       GetDefaultEOSConfig(
                         provider,
-                        audioInputConfig.parameters,
+                        audioInputConfig.parameters.filter(
+                          p => !p.getKey().startsWith('microphone.eos.'),
+                        ),
                       ),
                     )
                   }

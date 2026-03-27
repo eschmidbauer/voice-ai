@@ -200,9 +200,20 @@ func (eos *SilenceBasedEOS) Analyze(ctx context.Context, pkt internal_type.Packe
 // send dispatches a command to the worker
 func (eos *SilenceBasedEOS) send(cmd command) {
 	select {
+	case <-eos.stopCh:
+		return
+	default:
+	}
+
+	select {
 	case eos.cmdCh <- cmd:
 	default:
-		go func() { eos.cmdCh <- cmd }()
+		go func() {
+			select {
+			case eos.cmdCh <- cmd:
+			case <-eos.stopCh:
+			}
+		}()
 	}
 }
 

@@ -72,8 +72,8 @@ export const ConfigureLivekitEOS: React.FC<{
         min={500}
         max={5000}
         step={100}
-        value={get('microphone.eos.silence_timeout', '1500')}
-        onChange={v => set('microphone.eos.silence_timeout', v)}
+        value={get('microphone.eos.extended_timeout', '1500')}
+        onChange={v => set('microphone.eos.extended_timeout', v)}
       />
       <SliderField
         label="Fallback Timeout"
@@ -81,8 +81,8 @@ export const ConfigureLivekitEOS: React.FC<{
         min={300}
         max={2000}
         step={100}
-        value={get('microphone.eos.timeout', '500')}
-        onChange={v => set('microphone.eos.timeout', v)}
+        value={get('microphone.eos.fallback_timeout', '500')}
+        onChange={v => set('microphone.eos.fallback_timeout', v)}
       />
     </>
   );

@@ -5,6 +5,7 @@ import (
 
 	lingua "github.com/pemistahl/lingua-go"
 	"github.com/rapidaai/pkg/commons"
+	"github.com/rapidaai/pkg/types"
 	rapida_types "github.com/rapidaai/pkg/types"
 )
 
@@ -18,25 +19,22 @@ func NewLinguaParser(logger commons.Logger) Parser {
 	return &linguaParser{logger: logger, detector: lingua.NewLanguageDetectorBuilder().FromAllLanguages().Build()}
 }
 
-func (d *linguaParser) Parse(text string) *LanguageIdentificationResult {
+func (d *linguaParser) Parse(text string) (*types.Language, float64) {
 	cleaned := strings.TrimSpace(text)
 	if cleaned == "" {
-		return nil
+		return nil, 0.0
 	}
 
 	confidenceValues := d.detector.ComputeLanguageConfidenceValues(cleaned)
 	if len(confidenceValues) == 0 {
-		return nil
+		return nil, 0.0
 	}
 	top := confidenceValues[0]
 	iso1 := strings.ToLower(top.Language().IsoCode639_1().String())
 	lang := rapida_types.LookupLanguage(iso1)
 	if lang == nil {
 		d.logger.Warnf("language lookup failed for language %s", iso1)
-		return nil
+		return nil, 0.0
 	}
-	return &LanguageIdentificationResult{
-		Language:   *lang,
-		Confidence: top.Value(),
-	}
+	return lang, top.Value()
 }

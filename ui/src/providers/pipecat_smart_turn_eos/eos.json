@@ -1,7 +1,7 @@
 {
   "parameters": [
     {
-      "key": "microphone.eos.timeout",
+      "key": "microphone.eos.fallback_timeout",
       "label": "Fallback Timeout",
       "type": "slider",
       "default": "500",
@@ -28,7 +28,7 @@
       "step": 50
     },
     {
-      "key": "microphone.eos.silence_timeout",
+      "key": "microphone.eos.extended_timeout",
       "label": "Extended Timeout",
       "type": "slider",
       "default": "2000",

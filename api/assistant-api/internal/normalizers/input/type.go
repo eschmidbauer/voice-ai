@@ -64,7 +64,7 @@ type DetectLanguageProcessPipeline struct {
 // OutputPipeline emits normalized packet to downstream OnPacket callback.
 type OutputPipeline struct {
 	PipelinePacket
-	Language types.Language
+	Language *types.Language
 }
 
 // InputNormalizer normalizes input packets and emits them via OnPacket at OutputPipeline.

@@ -56,17 +56,17 @@ const legacyEosDefaults: Record<string, Record<string, string>> = {
     'microphone.eos.timeout': '700',
   },
   livekit_eos: {
-    'microphone.eos.timeout': '500',
+    'microphone.eos.fallback_timeout': '500',
     'microphone.eos.threshold': '0.0289',
     'microphone.eos.quick_timeout': '250',
-    'microphone.eos.silence_timeout': '3000',
+    'microphone.eos.extended_timeout': '3000',
     'microphone.eos.model': 'en',
   },
   pipecat_smart_turn_eos: {
-    'microphone.eos.timeout': '500',
+    'microphone.eos.fallback_timeout': '500',
     'microphone.eos.threshold': '0.5',
     'microphone.eos.quick_timeout': '250',
-    'microphone.eos.silence_timeout': '2000',
+    'microphone.eos.extended_timeout': '2000',
   },
 };
 
@@ -170,10 +170,10 @@ describe('Audio input advanced defaults parity', () => {
         createMetadata('rapida.credential_id', 'cred'),
         createMetadata('listen.model', 'nova-3'),
         createMetadata('microphone.eos.provider', 'silence_based_eos'),
-        createMetadata('microphone.eos.timeout', '950'),
+        createMetadata('microphone.eos.fallback_timeout', '950'),
         createMetadata('microphone.eos.threshold', '0.02'),
         createMetadata('microphone.eos.quick_timeout', '120'),
-        createMetadata('microphone.eos.silence_timeout', '1800'),
+        createMetadata('microphone.eos.extended_timeout', '1800'),
         createMetadata('microphone.eos.model', 'custom-model'),
       ];
 
@@ -198,7 +198,7 @@ describe('Audio input advanced defaults parity', () => {
   it('EOS provider key is always updated to the selected provider', () => {
     const seed = [
       createMetadata('microphone.eos.provider', 'livekit_eos'),
-      createMetadata('microphone.eos.timeout', '1200'),
+      createMetadata('microphone.eos.fallback_timeout', '1200'),
     ];
     const updated = GetDefaultEOSConfig(
       'pipecat_smart_turn_eos',
@@ -207,6 +207,32 @@ describe('Audio input advanced defaults parity', () => {
 
     expect(getMetadataValue(updated, 'microphone.eos.provider')).toBe(
       'pipecat_smart_turn_eos',
+    );
+  });
+
+  it('pipecat EOS applies provider defaults when switching from non-eos-only state', () => {
+    const seed = [
+      createMetadata('listen.model', 'nova-3'),
+      createMetadata('microphone.vad.provider', 'silero_vad'),
+      createMetadata('microphone.eos.provider', 'silence_based_eos'),
+      createMetadata('microphone.eos.fallback_timeout', '700'),
+    ];
+
+    const switched = GetDefaultEOSConfig(
+      'pipecat_smart_turn_eos',
+      cloneMetadata(seed).filter(m => !m.getKey().startsWith('microphone.eos.')),
+    );
+
+    expect(getMetadataValue(switched, 'microphone.eos.provider')).toBe(
+      'pipecat_smart_turn_eos',
+    );
+    expect(getMetadataValue(switched, 'microphone.eos.fallback_timeout')).toBe(
+      '500',
+    );
+    expect(getMetadataValue(switched, 'microphone.eos.threshold')).toBe('0.5');
+    expect(getMetadataValue(switched, 'microphone.eos.quick_timeout')).toBe('250');
+    expect(getMetadataValue(switched, 'microphone.eos.extended_timeout')).toBe(
+      '2000',
     );
   });
 
@@ -236,7 +262,7 @@ describe('Audio input advanced defaults parity', () => {
   it('unknown providers are no-op for config-only defaults', () => {
     const seed = [
       createMetadata('listen.model', 'nova-3'),
-      createMetadata('microphone.eos.timeout', '700'),
+      createMetadata('microphone.eos.fallback_timeout', '700'),
       createMetadata('microphone.vad.threshold', '0.6'),
       createMetadata('microphone.denoising.provider', 'rn_noise'),
     ];

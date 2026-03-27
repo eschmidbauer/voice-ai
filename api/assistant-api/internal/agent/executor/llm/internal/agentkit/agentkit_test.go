@@ -418,7 +418,7 @@ func TestExecute_UserTextPacket(t *testing.T) {
 	e.talker = talker
 	comm, collector := newTestComm()
 
-	err := e.Execute(context.Background(), comm, internal_type.UserTextPacket{
+	err := e.Execute(context.Background(), comm, internal_type.NormalizedUserTextPacket{
 		ContextID: "ctx-1",
 		Text:      "hello world",
 	})
@@ -458,7 +458,7 @@ func TestExecute_UnsupportedPacket(t *testing.T) {
 	e := newTestExecutor()
 	comm, _ := newTestComm()
 
-	err := e.Execute(context.Background(), comm, internal_type.InterruptionPacket{ContextID: "x"})
+	err := e.Execute(context.Background(), comm, internal_type.EndOfSpeechPacket{ContextID: "x"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported packet")
 }
@@ -711,7 +711,7 @@ func TestExecute_UserTextPacket_SendError(t *testing.T) {
 	e.talker = talker
 	comm, _ := newTestComm()
 
-	err := e.Execute(context.Background(), comm, internal_type.UserTextPacket{
+	err := e.Execute(context.Background(), comm, internal_type.NormalizedUserTextPacket{
 		ContextID: "ctx-1",
 		Text:      "hello",
 	})
@@ -862,7 +862,7 @@ func TestExecute_AfterClose(t *testing.T) {
 	_ = e.Close(context.Background())
 
 	comm, _ := newTestComm()
-	err := e.Execute(context.Background(), comm, internal_type.UserTextPacket{
+	err := e.Execute(context.Background(), comm, internal_type.NormalizedUserTextPacket{
 		ContextID: "ctx-1",
 		Text:      "after close",
 	})
@@ -916,6 +916,34 @@ func TestHandleResponse_ErrorMessageFormat(t *testing.T) {
 	errPkts := findPackets[internal_type.LLMErrorPacket](collector.all())
 	require.Len(t, errPkts, 1)
 	assert.Contains(t, errPkts[0].Error.Error(), "agentkit error 403: forbidden")
+}
+
+func TestHandleResponse_StaleContext_Dropped(t *testing.T) {
+	e := newTestExecutor()
+	e.currentID = "ctx-active"
+	comm, collector := newTestComm()
+
+	resp := &protos.TalkOutput{
+		Data: &protos.TalkOutput_Assistant{
+			Assistant: &protos.ConversationAssistantMessage{
+				Id:        "ctx-stale",
+				Completed: true,
+				Message:   &protos.ConversationAssistantMessage_Text{Text: "ignore"},
+			},
+		},
+	}
+	e.handleResponse(context.Background(), resp, comm)
+	assert.Empty(t, collector.all())
+}
+
+func TestExecute_InterruptionPacket_ClearsCurrentContext(t *testing.T) {
+	e := newTestExecutor()
+	e.currentID = "ctx-1"
+	comm, _ := newTestComm()
+
+	err := e.Execute(context.Background(), comm, internal_type.InterruptionPacket{ContextID: "ctx-1"})
+	require.NoError(t, err)
+	assert.Equal(t, "", e.currentID)
 }
 
 // =============================================================================

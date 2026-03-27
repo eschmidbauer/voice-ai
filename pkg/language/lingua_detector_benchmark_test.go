@@ -12,7 +12,7 @@ func BenchmarkDetect_LongEnglishText(b *testing.B) {
 	text := "This is a longer English paragraph intended to benchmark the language detector under realistic sentence input."
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = parser.Parse(text)
+		_, _ = parser.Parse(text)
 	}
 }
 
@@ -22,7 +22,7 @@ func BenchmarkDetect_ShortText(b *testing.B) {
 	text := "hello"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = parser.Parse(text)
+		_, _ = parser.Parse(text)
 	}
 }
 
@@ -32,6 +32,6 @@ func BenchmarkDetect_LowAccuracyMode(b *testing.B) {
 	text := "Bonjour, this mixed sentence is for benchmark checks only."
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = parser.Parse(text)
+		_, _ = parser.Parse(text)
 	}
 }

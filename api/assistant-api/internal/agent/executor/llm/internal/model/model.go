@@ -38,6 +38,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -46,6 +48,8 @@ import (
 	internal_type "github.com/rapidaai/api/assistant-api/internal/type"
 	integration_client_builders "github.com/rapidaai/pkg/clients/integration/builders"
 	"github.com/rapidaai/pkg/commons"
+	"github.com/rapidaai/pkg/parsers"
+	type_enums "github.com/rapidaai/pkg/types/enums"
 	"github.com/rapidaai/pkg/utils"
 	"github.com/rapidaai/protos"
 	"golang.org/x/sync/errgroup"
@@ -73,7 +77,7 @@ type modelAssistantExecutor struct {
 	stream grpc.BidiStreamingClient[protos.ChatRequest, protos.ChatResponse]
 
 	mu            sync.RWMutex
-	currentPacket internal_type.Packet
+	currentPacket *internal_type.NormalizedUserTextPacket
 
 	//
 	ctx       context.Context
@@ -157,21 +161,18 @@ func (e *modelAssistantExecutor) Initialize(ctx context.Context, communication i
 		Data: llmData,
 		Time: time.Now(),
 	})
-	return g.Wait()
+	return nil
 }
 
 func (e *modelAssistantExecutor) chat(
 	_ context.Context,
 	communication internal_type.Communication,
-	currentPacket internal_type.Packet,
+	pkt internal_type.NormalizedUserTextPacket,
 	promptArgs map[string]interface{},
 	in *protos.Message,
 	histories ...*protos.Message,
 ) error {
-	if currentPacket == nil {
-		return fmt.Errorf("current packet is nil")
-	}
-	request := e.buildChatRequest(communication, currentPacket.ContextId(), promptArgs, append(histories, in)...)
+	request := e.buildChatRequest(communication, pkt.ContextId(), promptArgs, append(histories, in)...)
 
 	e.mu.RLock()
 	stream := e.stream
@@ -184,9 +185,7 @@ func (e *modelAssistantExecutor) chat(
 		e.logger.Errorf("error sending chat request: %v", err)
 		return fmt.Errorf("failed to send chat request: %w", err)
 	}
-	e.mu.Lock()
-	e.currentPacket = currentPacket
-	e.mu.Unlock()
+
 	return nil
 }
 
@@ -207,9 +206,6 @@ func (e *modelAssistantExecutor) chatWithHistory(
 
 	if stream == nil {
 		return fmt.Errorf("stream not connected")
-	}
-	if err := e.validateHistorySequence(snapshot); err != nil {
-		return err
 	}
 	request := e.buildChatRequest(communication, contextID, promptArgs, snapshot...)
 	if err := stream.Send(request); err != nil {
@@ -281,7 +277,6 @@ func (e *modelAssistantExecutor) executeToolCalls(ctx context.Context, communica
 ) error {
 	toolExecution := e.toolExecutor.ExecuteAll(ctx, contextID, output.GetAssistant().GetToolCalls(), communication)
 	e.mu.Lock()
-	packet, ok := e.currentPacket.(internal_type.UserTextPacket)
 	if e.currentPacket != nil && e.currentPacket.ContextId() != contextID {
 		e.mu.Unlock()
 		return nil
@@ -289,17 +284,16 @@ func (e *modelAssistantExecutor) executeToolCalls(ctx context.Context, communica
 	history := make([]*protos.Message, len(e.history))
 	copy(history, e.history)
 	e.history = append(e.history, output, toolExecution)
+	activePacket := e.currentPacket
 	e.mu.Unlock()
-	if !ok {
+	if activePacket == nil {
 		return e.chatWithHistory(ctx, communication, contextID, map[string]interface{}{})
 	}
-	return e.Pipeline(ctx, communication, &ArgumentationPipeline{
-		PipelinePacket: PipelinePacket{
-			Packet:     packet,
-			Mode:       "tool_followup",
-			History:    history,
-			PromptArgs: map[string]interface{}{},
-		},
+	return e.Pipeline(ctx, communication, ArgumentationPipeline{
+		Packet:       *activePacket,
+		History:      history,
+		PromptArgs:   map[string]interface{}{},
+		ToolFollowUp: true,
 	})
 }
 
@@ -308,33 +302,23 @@ func (e *modelAssistantExecutor) executeToolCalls(ctx context.Context, communica
 // Emits ConversationEventPacket: {type: "executing"} for UserTextPacket.
 func (e *modelAssistantExecutor) Execute(ctx context.Context, communication internal_type.Communication, pctk internal_type.Packet) error {
 	switch p := pctk.(type) {
-	case internal_type.NormalizedTextPacket:
-		return e.Execute(ctx, communication, internal_type.UserTextPacket{
-			ContextID: p.ContextID,
-			Text:      p.Text,
-			Language:  p.Language.ISO639_1,
-		})
-	case internal_type.UserTextPacket:
+	case internal_type.NormalizedUserTextPacket:
+		if strings.TrimSpace(p.ContextID) == "" {
+			return nil
+		}
 		e.mu.Lock()
-		e.currentPacket = p
+		e.currentPacket = &p
 		e.mu.Unlock()
-		return e.Pipeline(ctx,
-			communication,
-			&InputPipeline{
-				PipelinePacket: PipelinePacket{
-					Packet: p,
-				},
-			},
-		)
+		return e.Pipeline(ctx, communication, PrepareHistoryProcessPipeline{
+			Packet: p,
+		})
 	case internal_type.StaticPacket:
-		return e.Pipeline(ctx, communication, &LocalHistoryPipeline{
-			PipelinePacket: PipelinePacket{
-				Message: &protos.Message{
-					Role: "assistant",
-					Message: &protos.Message_Assistant{Assistant: &protos.AssistantMessage{
-						Contents: []string{p.Text},
-					}},
-				},
+		return e.Pipeline(ctx, communication, LocalHistoryPipeline{
+			Message: &protos.Message{
+				Role: "assistant",
+				Message: &protos.Message_Assistant{Assistant: &protos.AssistantMessage{
+					Contents: []string{p.Text},
+				}},
 			},
 		})
 	case internal_type.InterruptionPacket:
@@ -360,4 +344,473 @@ func (e *modelAssistantExecutor) Close(ctx context.Context) error {
 	e.currentPacket = nil
 	e.history = make([]*protos.Message, 0)
 	return nil
+}
+
+func (e *modelAssistantExecutor) currentContextID() string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if e.currentPacket == nil {
+		return ""
+	}
+	return e.currentPacket.ContextID
+}
+
+func (e *modelAssistantExecutor) isCurrentContext(contextID string) bool {
+	if strings.TrimSpace(contextID) == "" {
+		return false
+	}
+	return e.currentContextID() == contextID
+}
+
+// =============================================================================
+// Pipeline Request Routing
+// =============================================================================
+// Pipeline is the central recursive router. Packets enter and get transformed
+// into pipeline types; pipeline types get their stages executed.
+func (e *modelAssistantExecutor) Pipeline(ctx context.Context, communication internal_type.Communication, v PipelineType) error {
+	switch p := v.(type) {
+	case LocalHistoryOutputPipeline:
+		if p.Message == nil {
+			return nil
+		}
+		e.mu.Lock()
+		e.history = append(e.history, p.Message)
+		e.mu.Unlock()
+		return nil
+	case PrepareHistoryProcessPipeline:
+		if !e.isCurrentContext(p.Packet.ContextID) {
+			return nil
+		}
+		e.mu.RLock()
+		history := make([]*protos.Message, len(e.history))
+		copy(history, e.history)
+		e.mu.RUnlock()
+		return e.Pipeline(ctx, communication, AssistantArgumentationProcessPipeline{
+			Packet: p.Packet,
+			UserMessage: &protos.Message{
+				Role: "user",
+				Message: &protos.Message_User{
+					User: &protos.UserMessage{Content: p.Packet.Text},
+				},
+			},
+			History:    history,
+			PromptArgs: map[string]interface{}{},
+		})
+	case ArgumentationProcessPipeline:
+		if !e.isCurrentContext(p.Packet.ContextID) {
+			return nil
+		}
+		return e.Pipeline(ctx, communication, AssistantArgumentationProcessPipeline{
+			Packet:       p.Packet,
+			UserMessage:  p.UserMessage,
+			History:      p.History,
+			PromptArgs:   p.PromptArgs,
+			ToolFollowUp: p.ToolFollowUp,
+		})
+	case AssistantArgumentationProcessPipeline:
+		if !e.isCurrentContext(p.Packet.ContextID) {
+			return nil
+		}
+		return e.Pipeline(ctx, communication, ConversationArgumentationProcessPipeline{
+			Packet:       p.Packet,
+			UserMessage:  p.UserMessage,
+			History:      p.History,
+			PromptArgs:   utils.MergeMaps(p.PromptArgs, e.buildAssistantArgumentationContext(communication)),
+			ToolFollowUp: p.ToolFollowUp,
+		})
+	case ConversationArgumentationProcessPipeline:
+		if !e.isCurrentContext(p.Packet.ContextID) {
+			return nil
+		}
+		return e.Pipeline(ctx, communication, MessageArgumentationProcessPipeline{
+			Packet:       p.Packet,
+			UserMessage:  p.UserMessage,
+			History:      p.History,
+			PromptArgs:   utils.MergeMaps(p.PromptArgs, e.buildConversationArgumentationContext(communication)),
+			ToolFollowUp: p.ToolFollowUp,
+		})
+	case MessageArgumentationProcessPipeline:
+		if !e.isCurrentContext(p.Packet.ContextID) {
+			return nil
+		}
+		return e.Pipeline(ctx, communication, SessionArgumentationProcessPipeline{
+			Packet:       p.Packet,
+			UserMessage:  p.UserMessage,
+			History:      p.History,
+			PromptArgs:   utils.MergeMaps(p.PromptArgs, e.buildMessageArgumentationContext(p.Packet)),
+			ToolFollowUp: p.ToolFollowUp,
+		})
+	case SessionArgumentationProcessPipeline:
+		if !e.isCurrentContext(p.Packet.ContextID) {
+			return nil
+		}
+		promptArgs := utils.MergeMaps(p.PromptArgs, e.buildSessionArgumentationContext(communication))
+		if p.ToolFollowUp {
+			return e.Pipeline(ctx, communication, ToolFollowUpOutputPipeline{
+				ContextID:  p.Packet.ContextID,
+				PromptArgs: promptArgs,
+			})
+		}
+		return e.Pipeline(ctx, communication, LLMRequestOutputPipeline{
+			Packet:      p.Packet,
+			UserMessage: p.UserMessage,
+			History:     p.History,
+			PromptArgs:  promptArgs,
+		})
+	case LLMRequestOutputPipeline:
+		if !e.isCurrentContext(p.Packet.ContextID) {
+			return nil
+		}
+		communication.OnPacket(ctx, internal_type.ConversationEventPacket{
+			ContextID: p.Packet.ContextID,
+			Name:      "llm",
+			Data: map[string]string{
+				"type":             "executing",
+				"script":           p.Packet.Text,
+				"input_char_count": fmt.Sprintf("%d", len(p.Packet.Text)),
+				"history_count":    fmt.Sprintf("%d", len(p.History)),
+			},
+			Time: time.Now(),
+		})
+		if err := e.chat(ctx, communication, p.Packet, p.PromptArgs, p.UserMessage, p.History...); err != nil {
+			return err
+		}
+		return e.Pipeline(ctx, communication, LocalHistoryOutputPipeline{
+			Message: p.UserMessage,
+		})
+	case ToolFollowUpOutputPipeline:
+		if !e.isCurrentContext(p.ContextID) {
+			return nil
+		}
+		return e.chatWithHistory(ctx, communication, p.ContextID, p.PromptArgs)
+	case LLMResponsePipeline:
+		if p.Response == nil || strings.TrimSpace(p.Response.GetRequestId()) == "" {
+			return nil
+		}
+		pipeline, err := e.stageValidateResponse(ctx, communication, p)
+		if err != nil {
+			return err
+		}
+		if pipeline.Response == nil {
+			return nil
+		}
+		if err := e.stageEmitResponseUpstream(ctx, communication, pipeline); err != nil {
+			return err
+		}
+		if err := e.stageToolFollowUpResponse(ctx, communication, pipeline); err != nil {
+			return err
+		}
+		return nil
+	default:
+		return fmt.Errorf("unsupported pipeline type: %T", v)
+	}
+}
+
+func (e *modelAssistantExecutor) clonePromptArguments(in map[string]interface{}) map[string]interface{} {
+	out := make(map[string]interface{}, len(in))
+	for k, v := range in {
+		if nested, ok := v.(map[string]interface{}); ok {
+			out[k] = e.clonePromptArguments(nested)
+			continue
+		}
+		out[k] = v
+	}
+	return out
+}
+
+func (e *modelAssistantExecutor) buildAssistantArgumentationContext(communication internal_type.Communication) map[string]interface{} {
+	now := time.Now().UTC()
+	system := map[string]interface{}{
+		"current_date":     now.Format("2006-01-02"),
+		"current_time":     now.Format("15:04:05"),
+		"current_datetime": now.Format(time.RFC3339),
+		"day_of_week":      now.Weekday().String(),
+		"date_rfc1123":     now.Format(time.RFC1123),
+		"date_unix":        strconv.FormatInt(now.Unix(), 10),
+		"date_unix_ms":     strconv.FormatInt(now.UnixMilli(), 10),
+	}
+
+	assistant := map[string]interface{}{}
+	if a := communication.Assistant(); a != nil {
+		assistant = map[string]interface{}{
+			"name":        a.Name,
+			"id":          fmt.Sprintf("%d", a.Id),
+			"language":    a.Language,
+			"description": a.Description,
+		}
+	}
+
+	args := communication.GetArgs()
+	return utils.MergeMaps(
+		map[string]interface{}{"system": system},
+		map[string]interface{}{"assistant": assistant},
+		map[string]interface{}{"message": map[string]interface{}{"language": "English"}},
+		map[string]interface{}{"args": args},
+		args,
+	)
+}
+
+func (e *modelAssistantExecutor) buildConversationArgumentationContext(communication internal_type.Communication) map[string]interface{} {
+	conversation := map[string]interface{}{}
+	if conv := communication.Conversation(); conv != nil {
+		conversation["id"] = fmt.Sprintf("%d", conv.Id)
+		conversation["identifier"] = conv.Identifier
+		conversation["source"] = string(conv.Source)
+		conversation["direction"] = conv.Direction.String()
+		if startTime := time.Time(conv.CreatedDate); !startTime.IsZero() {
+			conversation["created_date"] = startTime.UTC().Format(time.RFC3339)
+			conversation["duration"] = time.Since(startTime).Truncate(time.Second).String()
+		}
+		if updated := time.Time(conv.UpdatedDate); !updated.IsZero() {
+			conversation["updated_date"] = updated.UTC().Format(time.RFC3339)
+		}
+	}
+	return map[string]interface{}{"conversation": conversation}
+}
+
+func (e *modelAssistantExecutor) buildMessageArgumentationContext(packet internal_type.NormalizedUserTextPacket) map[string]interface{} {
+	message := map[string]interface{}{
+		"text": "",
+	}
+	if packet.Language != nil {
+		message["language"] = packet.Language.Name
+		message["language_code"] = packet.Language.ISO639_1
+	}
+	message["text"] = packet.Text
+	return map[string]interface{}{"message": message}
+}
+
+type modeCommunication interface {
+	GetMode() type_enums.MessageMode
+}
+
+func (e *modelAssistantExecutor) buildSessionArgumentationContext(communication internal_type.Communication) map[string]interface{} {
+	session := map[string]interface{}{}
+	if modeComm, ok := communication.(modeCommunication); ok {
+		if mode := modeComm.GetMode(); mode != "" {
+			session["mode"] = mode.String()
+		}
+	}
+	return map[string]interface{}{"session": session}
+}
+
+// validateHistorySequence enforces tool-call sequencing invariants:
+//  1. Sandwich rule: assistant(tool_call) must be immediately followed by tool.
+//  2. ID matching: tool message IDs must exactly match preceding tool_call IDs.
+//  3. No orphans: tool without matching preceding assistant(tool_call) is invalid.
+//  4. Strict sequencing: after tool response, next message (if any) must be assistant.
+func (e *modelAssistantExecutor) validateHistorySequence(messages []*protos.Message) error {
+	for i, msg := range messages {
+		assistant := msg.GetAssistant()
+		tool := msg.GetTool()
+
+		if assistant != nil && len(assistant.GetToolCalls()) > 0 {
+			if i+1 >= len(messages) || messages[i+1].GetTool() == nil {
+				return fmt.Errorf("history invalid: assistant tool_call at index %d is not immediately followed by tool response", i)
+			}
+			if err := e.validateToolIDMatch(assistant.GetToolCalls(), messages[i+1].GetTool().GetTools(), i); err != nil {
+				return err
+			}
+		}
+
+		if tool != nil {
+			if i == 0 {
+				return fmt.Errorf("history invalid: orphan tool response at index %d without preceding assistant tool_call", i)
+			}
+			prevAssistant := messages[i-1].GetAssistant()
+			if prevAssistant == nil || len(prevAssistant.GetToolCalls()) == 0 {
+				return fmt.Errorf("history invalid: orphan tool response at index %d without preceding assistant tool_call", i)
+			}
+			if err := e.validateToolIDMatch(prevAssistant.GetToolCalls(), tool.GetTools(), i-1); err != nil {
+				return err
+			}
+			if i+1 < len(messages) && messages[i+1].GetAssistant() == nil {
+				return fmt.Errorf("history invalid: strict sequencing violated at index %d, expected assistant after tool response", i)
+			}
+		}
+	}
+	return nil
+}
+
+func (e *modelAssistantExecutor) validateToolIDMatch(calls []*protos.ToolCall, tools []*protos.ToolMessage_Tool, assistantIdx int) error {
+	expected := map[string]struct{}{}
+	for _, c := range calls {
+		if id := strings.TrimSpace(c.GetId()); id != "" {
+			expected[id] = struct{}{}
+		}
+	}
+	actual := map[string]struct{}{}
+	for _, t := range tools {
+		if id := strings.TrimSpace(t.GetId()); id != "" {
+			actual[id] = struct{}{}
+		}
+	}
+
+	for id := range expected {
+		if _, ok := actual[id]; !ok {
+			return fmt.Errorf("history invalid: missing tool response for tool_call_id %q from assistant index %d", id, assistantIdx)
+		}
+	}
+	for id := range actual {
+		if _, ok := expected[id]; !ok {
+			return fmt.Errorf("history invalid: orphan tool response id %q at assistant index %d", id, assistantIdx)
+		}
+	}
+	return nil
+}
+
+// buildChatRequest constructs the chat request with all necessary parameters.
+// The caller provides the complete conversation messages (system prompt is prepended automatically).
+func (e *modelAssistantExecutor) buildChatRequest(communication internal_type.Communication, contextID string, promptArguments map[string]interface{}, messages ...*protos.Message) *protos.ChatRequest {
+	assistant := communication.Assistant()
+	template := assistant.AssistantProviderModel.Template.GetTextChatCompleteTemplate()
+	defaultArgs := parsers.CanonicalizePromptArguments(e.inputBuilder.PromptArguments(template.Variables))
+	runtimeArgs := parsers.CanonicalizePromptArguments(promptArguments)
+	systemMessages := e.inputBuilder.Message(
+		template.Prompt,
+		utils.MergeMaps(defaultArgs, runtimeArgs),
+	)
+	req := e.inputBuilder.Chat(
+		contextID,
+		&protos.Credential{
+			Id:    e.providerCredential.GetId(),
+			Value: e.providerCredential.GetValue(),
+		},
+		e.inputBuilder.Options(utils.MergeMaps(assistant.AssistantProviderModel.GetOptions(), communication.GetOptions()), nil),
+		e.toolExecutor.GetFunctionDefinitions(),
+		map[string]string{
+			"assistant_id":                fmt.Sprintf("%d", assistant.Id),
+			"message_id":                  contextID,
+			"assistant_provider_model_id": fmt.Sprintf("%d", assistant.AssistantProviderModel.Id),
+		},
+		append(systemMessages, messages...)...,
+	)
+	req.ProviderName = strings.ToLower(assistant.AssistantProviderModel.ModelProviderName)
+	return req
+}
+
+// =============================================================================
+// Pipeline Response Stages
+// =============================================================================
+func (e *modelAssistantExecutor) executeResponse(ctx context.Context, communication internal_type.Communication, resp *protos.ChatResponse) {
+	if e.isStaleResponse(resp.GetRequestId()) {
+		return
+	}
+	if err := e.Pipeline(ctx, communication, LLMResponsePipeline{
+		Response: resp,
+	}); err != nil {
+		e.logger.Errorf("response pipeline failed: %v", err)
+		communication.OnPacket(ctx, internal_type.LLMErrorPacket{
+			ContextID: resp.GetRequestId(),
+			Error:     fmt.Errorf("response pipeline failed: %w", err),
+		})
+	}
+}
+
+func (e *modelAssistantExecutor) stageValidateResponse(ctx context.Context, communication internal_type.Communication, pipeline LLMResponsePipeline) (LLMResponsePipeline, error) {
+	contextID := pipeline.Response.GetRequestId()
+	pipeline.Output = pipeline.Response.GetData()
+	pipeline.Metrics = pipeline.Response.GetMetrics()
+
+	if !pipeline.Response.GetSuccess() && pipeline.Response.GetError() != nil {
+		errMsg := pipeline.Response.GetError().GetErrorMessage()
+		communication.OnPacket(ctx,
+			internal_type.LLMErrorPacket{
+				ContextID: contextID,
+				Error:     errors.New(errMsg),
+			},
+			internal_type.ConversationEventPacket{
+				ContextID: contextID,
+				Name:      "llm",
+				Data:      map[string]string{"type": "error", "error": errMsg},
+				Time:      time.Now(),
+			},
+		)
+		pipeline.Response = nil
+		return pipeline, nil
+	}
+	if pipeline.Output == nil {
+		pipeline.Response = nil
+		return pipeline, nil
+	}
+	return pipeline, nil
+}
+
+func (e *modelAssistantExecutor) stageEmitResponseUpstream(ctx context.Context, communication internal_type.Communication, pipeline LLMResponsePipeline) error {
+	contextID := pipeline.Response.GetRequestId()
+	if len(pipeline.Metrics) > 0 {
+		hasToolCalls := len(pipeline.Output.GetAssistant().GetToolCalls()) > 0
+		if !hasToolCalls {
+			e.mu.Lock()
+			e.history = append(e.history, pipeline.Output)
+			e.mu.Unlock()
+		}
+		responseText := strings.Join(pipeline.Output.GetAssistant().GetContents(), "")
+		now := time.Now()
+		communication.OnPacket(ctx,
+			internal_type.LLMResponseDonePacket{
+				ContextID: contextID,
+				Text:      responseText,
+			},
+			internal_type.ConversationEventPacket{
+				ContextID: contextID,
+				Name:      "llm",
+				Data: map[string]string{
+					"type":                "completed",
+					"text":                responseText,
+					"response_char_count": fmt.Sprintf("%d", len(responseText)),
+					"finish_reason":       pipeline.Response.GetFinishReason(),
+				},
+				Time: now,
+			},
+			internal_type.MessageMetricPacket{
+				ContextID: contextID,
+				Metrics:   pipeline.Metrics,
+			},
+		)
+		return nil
+	}
+	if len(pipeline.Output.GetAssistant().GetContents()) > 0 {
+		text := strings.Join(pipeline.Output.GetAssistant().GetContents(), "")
+		communication.OnPacket(ctx,
+			internal_type.LLMResponseDeltaPacket{
+				ContextID: contextID,
+				Text:      text,
+			},
+			internal_type.ConversationEventPacket{
+				Name: "llm",
+				Data: map[string]string{
+					"type":                "chunk",
+					"text":                text,
+					"response_char_count": fmt.Sprintf("%d", len(text)),
+				},
+				Time: time.Now(),
+			},
+		)
+	}
+	return nil
+}
+
+func (e *modelAssistantExecutor) stageToolFollowUpResponse(ctx context.Context, communication internal_type.Communication, pipeline LLMResponsePipeline) error {
+	if len(pipeline.Metrics) == 0 {
+		return nil
+	}
+	hasToolCalls := len(pipeline.Output.GetAssistant().GetToolCalls()) > 0
+	if !hasToolCalls {
+		return nil
+	}
+	contextID := pipeline.Response.GetRequestId()
+	if err := e.executeToolCalls(ctx, communication, contextID, pipeline.Output); err != nil {
+		communication.OnPacket(ctx, internal_type.LLMErrorPacket{
+			ContextID: contextID,
+			Error:     fmt.Errorf("tool call follow-up failed: %w", err),
+		})
+	}
+	return nil
+}
+
+func (e *modelAssistantExecutor) isStaleResponse(requestID string) bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.currentPacket != nil && requestID != e.currentPacket.ContextId()
 }

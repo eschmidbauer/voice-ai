@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -27,9 +28,11 @@ import (
 var _ internal_agent_executor.AssistantExecutor = (*websocketExecutor)(nil)
 
 type websocketExecutor struct {
-	logger  commons.Logger
-	conn    *websocket.Conn
-	writeMu sync.Mutex
+	logger    commons.Logger
+	conn      *websocket.Conn
+	writeMu   sync.Mutex
+	contextMu sync.RWMutex
+	currentID string
 }
 
 // NewWebsocketAssistantExecutor creates a new WebSocket-based assistant executor.
@@ -125,6 +128,36 @@ func (e *websocketExecutor) sendConfiguration(assistantId uint64, assistantProvi
 	})
 }
 
+func (e *websocketExecutor) setCurrentContextID(id string) {
+	e.contextMu.Lock()
+	e.currentID = id
+	e.contextMu.Unlock()
+}
+
+func (e *websocketExecutor) isCurrentContextID(id string) bool {
+	clean := strings.TrimSpace(id)
+	e.contextMu.RLock()
+	defer e.contextMu.RUnlock()
+	current := strings.TrimSpace(e.currentID)
+	// Preserve historical behavior for id-less packets while still gating stale ids.
+	if clean == "" || current == "" {
+		return true
+	}
+	return clean == current
+}
+
+func (e *websocketExecutor) sendUserMessage(contextID string, text string) error {
+	if strings.TrimSpace(contextID) == "" {
+		return nil
+	}
+	e.setCurrentContextID(contextID)
+	return e.send(Request{
+		Type:      TypeUserMessage,
+		Timestamp: time.Now().UnixMilli(),
+		Data:      UserMessageData{ID: contextID, Content: text},
+	})
+}
+
 // listen reads messages from WebSocket until context is cancelled or connection closes.
 func (e *websocketExecutor) listen(ctx context.Context, onPacket func(ctx context.Context, packet ...internal_type.Packet) error) error {
 	for {
@@ -171,11 +204,17 @@ func (e *websocketExecutor) handleResponse(ctx context.Context, resp *Response, 
 	case TypeStream:
 		var d StreamData
 		json.Unmarshal(resp.Data, &d)
+		if !e.isCurrentContextID(d.ID) {
+			return
+		}
 		onPacket(ctx, internal_type.LLMResponseDeltaPacket{ContextID: d.ID, Text: d.Content})
 
 	case TypeComplete:
 		var d CompleteData
 		json.Unmarshal(resp.Data, &d)
+		if !e.isCurrentContextID(d.ID) {
+			return
+		}
 		if d.Content != "" {
 			onPacket(ctx, internal_type.LLMResponseDonePacket{
 				ContextID: d.ID,
@@ -191,6 +230,9 @@ func (e *websocketExecutor) handleResponse(ctx context.Context, resp *Response, 
 	case TypeInterruption:
 		var d InterruptionData
 		json.Unmarshal(resp.Data, &d)
+		if !e.isCurrentContextID(d.ID) {
+			return
+		}
 		source := internal_type.InterruptionSourceWord
 		if d.Source == "vad" {
 			source = internal_type.InterruptionSourceVad
@@ -220,19 +262,14 @@ func (e *websocketExecutor) handleResponse(ctx context.Context, resp *Response, 
 // Execute sends a packet to the WebSocket server.
 func (e *websocketExecutor) Execute(ctx context.Context, comm internal_type.Communication, packet internal_type.Packet) error {
 	switch p := packet.(type) {
-	case internal_type.NormalizedTextPacket:
-		return e.send(Request{
-			Type:      TypeUserMessage,
-			Timestamp: time.Now().UnixMilli(),
-			Data:      UserMessageData{ID: packet.ContextId(), Content: p.Text},
-		})
+	case internal_type.NormalizedUserTextPacket:
+		return e.sendUserMessage(p.ContextID, p.Text)
 	case internal_type.UserTextPacket:
-		return e.send(Request{
-			Type:      TypeUserMessage,
-			Timestamp: time.Now().UnixMilli(),
-			Data:      UserMessageData{ID: packet.ContextId(), Content: p.Text},
-		})
+		return e.sendUserMessage(p.ContextID, p.Text)
 	case internal_type.StaticPacket:
+		return nil
+	case internal_type.InterruptionPacket:
+		e.setCurrentContextID("")
 		return nil
 	default:
 		return fmt.Errorf("unsupported packet: %T", packet)
@@ -248,5 +285,8 @@ func (e *websocketExecutor) Close(ctx context.Context) error {
 		e.conn.Close()
 		e.conn = nil
 	}
+	e.contextMu.Lock()
+	e.currentID = ""
+	e.contextMu.Unlock()
 	return nil
 }

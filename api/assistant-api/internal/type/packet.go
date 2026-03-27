@@ -466,7 +466,7 @@ type ExecuteLLMPacket struct {
 
 	// Normalized carries the canonical normalized packet for this turn when
 	// produced by the input normalizer pipeline.
-	Normalized *NormalizedTextPacket
+	Normalized *NormalizedUserTextPacket
 }
 
 func (f ExecuteLLMPacket) ContextId() string { return f.ContextID }
@@ -592,7 +592,7 @@ type ConversationEventPacket struct {
 
 func (f ConversationEventPacket) ContextId() string { return f.ContextID }
 
-type NormalizedTextPacket struct {
+type NormalizedUserTextPacket struct {
 	// ContextID identifies the interaction turn. May be empty when emitted by
 	ContextID string
 
@@ -600,7 +600,7 @@ type NormalizedTextPacket struct {
 	Text string
 
 	// language
-	Language types.Language
+	Language *types.Language
 }
 
-func (f NormalizedTextPacket) ContextId() string { return f.ContextID }
+func (f NormalizedUserTextPacket) ContextId() string { return f.ContextID }

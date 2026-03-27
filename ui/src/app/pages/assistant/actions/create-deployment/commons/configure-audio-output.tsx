@@ -32,14 +32,18 @@ export const ConfigureAudioOutputProvider: React.FC<
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const onChangeAudioOutputProvider = (providerName: string) => {
-    const parametersWithoutCredential = audioOutputConfig.parameters.filter(
-      p => p.getKey() !== 'rapida.credential_id',
+    const parametersToKeep = audioOutputConfig.parameters.filter(p =>
+      [
+        'speaker.conjunction.boundaries',
+        'speaker.conjunction.break',
+        'speaker.pronunciation.dictionaries',
+      ].includes(p.getKey()),
     );
     setAudioOutputConfig({
       provider: providerName,
       parameters: GetDefaultTextToSpeechIfInvalid(
         providerName,
-        GetDefaultSpeakerConfig(parametersWithoutCredential),
+        GetDefaultSpeakerConfig(parametersToKeep),
       ),
     });
   };

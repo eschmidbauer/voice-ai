@@ -22,6 +22,7 @@ import (
 	"github.com/rapidaai/pkg/commons"
 	gorm_models "github.com/rapidaai/pkg/models/gorm"
 	gorm_types "github.com/rapidaai/pkg/models/gorm/types"
+	rapida_types "github.com/rapidaai/pkg/types"
 	type_enums "github.com/rapidaai/pkg/types/enums"
 	"github.com/rapidaai/pkg/utils"
 	"github.com/rapidaai/protos"
@@ -268,6 +269,13 @@ func newTestExecutor() *modelAssistantExecutor {
 	}
 }
 
+func mustLanguage(t *testing.T, iso6391 string) *rapida_types.Language {
+	t.Helper()
+	lang := rapida_types.LookupLanguage(iso6391)
+	require.NotNil(t, lang, "language %q must exist", iso6391)
+	return lang
+}
+
 func historySnapshot(e *modelAssistantExecutor) []*protos.Message {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
@@ -408,10 +416,10 @@ func TestRequestPipeline_ExecutesAllStages(t *testing.T) {
 	e.stream = stream
 	comm, collector := newTestComm()
 
-	err := e.Execute(context.Background(), comm, internal_type.UserTextPacket{
+	err := e.Execute(context.Background(), comm, internal_type.NormalizedUserTextPacket{
 		ContextID: "ctx-pipeline",
 		Text:      "test",
-		Language:  "en",
+		Language:  mustLanguage(t, "en"),
 	})
 	require.NoError(t, err)
 
@@ -448,10 +456,8 @@ func TestPipeline_LocalHistoryPipeline_AppendsHistory(t *testing.T) {
 	e := newTestExecutor()
 	comm, _ := newTestComm()
 
-	err := e.Pipeline(context.Background(), comm, &LocalHistoryPipeline{
-		PipelinePacket: PipelinePacket{
-			Message: &protos.Message{Role: "assistant"},
-		},
+	err := e.Pipeline(context.Background(), comm, LocalHistoryPipeline{
+		Message: &protos.Message{Role: "assistant"},
 	})
 	require.NoError(t, err)
 
@@ -464,31 +470,9 @@ func TestPipeline_LocalHistoryPipeline_NilMessageNoOp(t *testing.T) {
 	e := newTestExecutor()
 	comm, _ := newTestComm()
 
-	err := e.Pipeline(context.Background(), comm, &LocalHistoryPipeline{})
+	err := e.Pipeline(context.Background(), comm, LocalHistoryPipeline{})
 	require.NoError(t, err)
 	assert.Empty(t, historySnapshot(e))
-}
-
-func TestPipeline_InputPipeline_Stop_NoOp(t *testing.T) {
-	e := newTestExecutor()
-	stream := newMockStream()
-	e.stream = stream
-	comm, _ := newTestComm()
-
-	err := e.Pipeline(context.Background(), comm, &InputPipeline{
-		PipelinePacket: PipelinePacket{
-			Stop: true,
-			Packet: internal_type.UserTextPacket{
-				ContextID: "ctx-stop",
-				Text:      "ignored",
-			},
-		},
-	})
-	require.NoError(t, err)
-
-	stream.mu.Lock()
-	defer stream.mu.Unlock()
-	require.Len(t, stream.sendCalls, 0)
 }
 
 func TestPipeline_RejectsUnsupportedPipelineType(t *testing.T) {
@@ -510,15 +494,14 @@ func TestPipeline_PrepareHistoryPipeline_ChainsToSendAndAppend(t *testing.T) {
 	e.history = []*protos.Message{
 		{Role: "user", Message: &protos.Message_User{User: &protos.UserMessage{Content: "existing"}}},
 	}
+	e.currentPacket = &internal_type.NormalizedUserTextPacket{ContextID: "ctx-prepare"}
 	e.mu.Unlock()
 
-	pipeline := &PrepareHistoryPipeline{
-		PipelinePacket: PipelinePacket{
-			Packet: internal_type.UserTextPacket{
-				ContextID: "ctx-prepare",
-				Text:      "new input",
-				Language:  "en",
-			},
+	pipeline := PrepareHistoryPipeline{
+		Packet: internal_type.NormalizedUserTextPacket{
+			ContextID: "ctx-prepare",
+			Text:      "new input",
+			Language:  mustLanguage(t, "en"),
 		},
 	}
 	err := e.Pipeline(context.Background(), comm, pipeline)
@@ -539,6 +522,7 @@ func TestPipeline_ArgumentationPipeline_PreparesPromptArgs(t *testing.T) {
 	stream := newMockStream()
 	e.stream = stream
 	comm, _ := newTestComm()
+	en := mustLanguage(t, "en")
 	comm.args = map[string]interface{}{"name": "lex"}
 	comm.assistant.AssistantProviderModel.Template = gorm_types.PromptMap{
 		"prompt": []map[string]string{
@@ -546,17 +530,17 @@ func TestPipeline_ArgumentationPipeline_PreparesPromptArgs(t *testing.T) {
 		},
 	}
 
-	err := e.Execute(context.Background(), comm, internal_type.UserTextPacket{
+	err := e.Execute(context.Background(), comm, internal_type.NormalizedUserTextPacket{
 		ContextID: "ctx-arg",
 		Text:      "hello",
-		Language:  "en-IN",
+		Language:  en,
 	})
 	require.NoError(t, err)
 
 	stream.mu.Lock()
 	require.Len(t, stream.sendCalls, 1)
 	require.NotNil(t, stream.sendCalls[0].GetConversations()[0].GetSystem())
-	assert.Equal(t, "name=lex msg=hello lang=en-IN", stream.sendCalls[0].GetConversations()[0].GetSystem().GetContent())
+	assert.Equal(t, "name=lex msg=hello lang="+en.Name, stream.sendCalls[0].GetConversations()[0].GetSystem().GetContent())
 	stream.mu.Unlock()
 }
 
@@ -565,6 +549,7 @@ func TestPipeline_ArgumentationPipeline_PriorityOverride_AssistantConversationMe
 	stream := newMockStream()
 	e.stream = stream
 	comm, _ := newTestComm()
+	en := mustLanguage(t, "en")
 	comm.mode = type_enums.AudioMode
 	comm.args = map[string]interface{}{
 		"assistant": map[string]interface{}{
@@ -591,17 +576,17 @@ func TestPipeline_ArgumentationPipeline_PriorityOverride_AssistantConversationMe
 		},
 	}
 
-	err := e.Execute(context.Background(), comm, internal_type.UserTextPacket{
+	err := e.Execute(context.Background(), comm, internal_type.NormalizedUserTextPacket{
 		ContextID: "ctx-arg-override",
 		Text:      "hello",
-		Language:  "en-US",
+		Language:  en,
 	})
 	require.NoError(t, err)
 
 	stream.mu.Lock()
 	require.Len(t, stream.sendCalls, 1)
 	require.NotNil(t, stream.sendCalls[0].GetConversations()[0].GetSystem())
-	assert.Equal(t, "a=from-args-assistant c=99 m=hello l=en-US s=audio", stream.sendCalls[0].GetConversations()[0].GetSystem().GetContent())
+	assert.Equal(t, "a=from-args-assistant c=99 m=hello l="+en.Name+" s=audio", stream.sendCalls[0].GetConversations()[0].GetSystem().GetContent())
 	stream.mu.Unlock()
 }
 
@@ -616,10 +601,10 @@ func TestExecute_MessageLanguage_DefaultEnglishFallback(t *testing.T) {
 		},
 	}
 
-	err := e.Execute(context.Background(), comm, internal_type.UserTextPacket{
+	err := e.Execute(context.Background(), comm, internal_type.NormalizedUserTextPacket{
 		ContextID: "ctx-default-language",
 		Text:      "hello",
-		Language:  "",
+		Language:  nil,
 	})
 	require.NoError(t, err)
 
@@ -635,23 +620,24 @@ func TestExecute_MessageLanguage_UsesUserTextPacketLanguage(t *testing.T) {
 	stream := newMockStream()
 	e.stream = stream
 	comm, _ := newTestComm()
+	hi := mustLanguage(t, "hi")
 	comm.assistant.AssistantProviderModel.Template = gorm_types.PromptMap{
 		"prompt": []map[string]string{
 			{"role": "system", "content": "lang={{ message.language }} text={{ message.text }}"},
 		},
 	}
 
-	err := e.Execute(context.Background(), comm, internal_type.UserTextPacket{
+	err := e.Execute(context.Background(), comm, internal_type.NormalizedUserTextPacket{
 		ContextID: "ctx-explicit-language",
 		Text:      "namaste",
-		Language:  "Hindi",
+		Language:  hi,
 	})
 	require.NoError(t, err)
 
 	stream.mu.Lock()
 	require.Len(t, stream.sendCalls, 1)
 	require.NotNil(t, stream.sendCalls[0].GetConversations()[0].GetSystem())
-	assert.Equal(t, "lang=Hindi text=namaste", stream.sendCalls[0].GetConversations()[0].GetSystem().GetContent())
+	assert.Equal(t, "lang="+hi.Name+" text=namaste", stream.sendCalls[0].GetConversations()[0].GetSystem().GetContent())
 	stream.mu.Unlock()
 }
 
@@ -660,6 +646,7 @@ func TestExecute_MessageLanguage_DottedPromptVariable_DoesNotBreakTemplateParsin
 	stream := newMockStream()
 	e.stream = stream
 	comm, _ := newTestComm()
+	fr := mustLanguage(t, "fr")
 	comm.assistant.AssistantProviderModel.Template = gorm_types.PromptMap{
 		"prompt": []map[string]string{
 			{"role": "system", "content": "lang={{ message.language }} text={{ message.text }}"},
@@ -669,17 +656,17 @@ func TestExecute_MessageLanguage_DottedPromptVariable_DoesNotBreakTemplateParsin
 		},
 	}
 
-	err := e.Execute(context.Background(), comm, internal_type.UserTextPacket{
+	err := e.Execute(context.Background(), comm, internal_type.NormalizedUserTextPacket{
 		ContextID: "ctx-dotted-variable",
 		Text:      "bonjour",
-		Language:  "fr",
+		Language:  fr,
 	})
 	require.NoError(t, err)
 
 	stream.mu.Lock()
 	require.Len(t, stream.sendCalls, 1)
 	require.NotNil(t, stream.sendCalls[0].GetConversations()[0].GetSystem())
-	assert.Equal(t, "lang=fr text=bonjour", stream.sendCalls[0].GetConversations()[0].GetSystem().GetContent())
+	assert.Equal(t, "lang="+fr.Name+" text=bonjour", stream.sendCalls[0].GetConversations()[0].GetSystem().GetContent())
 	stream.mu.Unlock()
 }
 
@@ -728,7 +715,7 @@ func TestHandleResponse_NilOutput(t *testing.T) {
 func TestHandleResponse_StaleResponse_Dropped(t *testing.T) {
 	e := newTestExecutor()
 	comm, collector := newTestComm()
-	e.currentPacket = internal_type.UserTextPacket{ContextID: "ctx-active"}
+	e.currentPacket = &internal_type.NormalizedUserTextPacket{ContextID: "ctx-active"}
 	e.mu.Lock()
 	e.history = append(e.history, &protos.Message{Role: "user", Message: &protos.Message_User{User: &protos.UserMessage{Content: "q"}}})
 	e.mu.Unlock()
@@ -891,10 +878,10 @@ func TestExecuteUserTurn_InvalidHistoryIsNotRejectedByPipeline(t *testing.T) {
 	}
 	e.mu.Unlock()
 
-	err := e.Execute(context.Background(), comm, internal_type.UserTextPacket{
+	err := e.Execute(context.Background(), comm, internal_type.NormalizedUserTextPacket{
 		ContextID: "ctx-invalid-history",
 		Text:      "new",
-		Language:  "en",
+		Language:  mustLanguage(t, "en"),
 	})
 	require.NoError(t, err)
 	stream.mu.Lock()
@@ -950,7 +937,7 @@ func TestHandleResponse_FinalWithToolCalls(t *testing.T) {
 	e := newTestExecutor()
 	// Set stream to nil so chatWithHistory (inside executeToolCalls) fails
 	e.stream = nil
-	e.currentPacket = internal_type.UserTextPacket{ContextID: "req-4"} // match the response requestId so it's not dropped as stale
+	e.currentPacket = &internal_type.NormalizedUserTextPacket{ContextID: "req-4"} // match the response requestId so it's not dropped as stale
 	toolMsg := &protos.Message{Role: "tool"}
 	e.toolExecutor = &mockToolExecutor{
 		executeFn: func(_ context.Context, _ string, _ []*protos.ToolCall, _ internal_type.Communication) *protos.Message {
@@ -997,6 +984,7 @@ func TestHandleResponse_ToolFollowUpRetainsUserMessageContext(t *testing.T) {
 	e := newTestExecutor()
 	stream := newMockStream()
 	e.stream = stream
+	fr := mustLanguage(t, "fr")
 	e.toolExecutor = &mockToolExecutor{
 		executeFn: func(_ context.Context, _ string, _ []*protos.ToolCall, _ internal_type.Communication) *protos.Message {
 			return &protos.Message{
@@ -1019,10 +1007,10 @@ func TestHandleResponse_ToolFollowUpRetainsUserMessageContext(t *testing.T) {
 		"promptVariables": []map[string]string{},
 	}
 
-	err := e.Execute(context.Background(), comm, internal_type.UserTextPacket{
+	err := e.Execute(context.Background(), comm, internal_type.NormalizedUserTextPacket{
 		ContextID: "req-tool",
 		Text:      "bonjour",
-		Language:  "fr",
+		Language:  fr,
 	})
 	require.NoError(t, err)
 
@@ -1047,8 +1035,8 @@ func TestHandleResponse_ToolFollowUpRetainsUserMessageContext(t *testing.T) {
 	require.Len(t, stream.sendCalls, 2, "initial send + tool follow-up send")
 	require.NotNil(t, stream.sendCalls[0].GetConversations()[0].GetSystem())
 	require.NotNil(t, stream.sendCalls[1].GetConversations()[0].GetSystem())
-	assert.Equal(t, "lang=fr text=bonjour", stream.sendCalls[0].GetConversations()[0].GetSystem().GetContent())
-	assert.Equal(t, "lang=fr text=bonjour", stream.sendCalls[1].GetConversations()[0].GetSystem().GetContent(), "tool follow-up must preserve original user packet context")
+	assert.Equal(t, "lang="+fr.Name+" text=bonjour", stream.sendCalls[0].GetConversations()[0].GetSystem().GetContent())
+	assert.Equal(t, "lang="+fr.Name+" text=bonjour", stream.sendCalls[1].GetConversations()[0].GetSystem().GetContent(), "tool follow-up must preserve original user packet context")
 
 	errPkts := findPackets[internal_type.LLMErrorPacket](collector.all())
 	assert.Empty(t, errPkts)
@@ -1203,7 +1191,7 @@ func TestExecute_UserTextPacket_SendsAndRecordsHistory(t *testing.T) {
 	e.stream = stream
 	comm, collector := newTestComm()
 
-	err := e.Execute(context.Background(), comm, internal_type.UserTextPacket{
+	err := e.Execute(context.Background(), comm, internal_type.NormalizedUserTextPacket{
 		ContextID: "ctx-1",
 		Text:      "say hello",
 	})
@@ -1223,18 +1211,18 @@ func TestExecute_UserTextPacket_SendsAndRecordsHistory(t *testing.T) {
 	snapshot := historySnapshot(e)
 	require.Len(t, snapshot, 1)
 	assert.Equal(t, "user", snapshot[0].Role)
-	currentPacket, ok := e.currentPacket.(internal_type.UserTextPacket)
-	require.True(t, ok)
+	require.NotNil(t, e.currentPacket)
+	currentPacket := *e.currentPacket
 	assert.Equal(t, "say hello", currentPacket.Text)
-	assert.Equal(t, "", currentPacket.Language)
+	assert.Nil(t, currentPacket.Language)
 }
 
 func TestExecute_InterruptionPacket(t *testing.T) {
 	e := newTestExecutor()
-	e.currentPacket = internal_type.UserTextPacket{
+	e.currentPacket = &internal_type.NormalizedUserTextPacket{
 		ContextID: "ctx-old",
 		Text:      "old text",
-		Language:  "fr",
+		Language:  mustLanguage(t, "fr"),
 	}
 	comm, _ := newTestComm()
 
@@ -1261,7 +1249,7 @@ func TestSend_NilStream(t *testing.T) {
 	e.stream = nil
 	comm, _ := newTestComm()
 
-	err := e.chat(context.Background(), comm, internal_type.UserTextPacket{ContextID: "ctx-1"}, map[string]interface{}{}, &protos.Message{Role: "user"})
+	err := e.chat(context.Background(), comm, internal_type.NormalizedUserTextPacket{ContextID: "ctx-1"}, map[string]interface{}{}, &protos.Message{Role: "user"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "stream not connected")
 }
@@ -1272,7 +1260,7 @@ func TestSend_Success(t *testing.T) {
 	e.stream = stream
 	comm, _ := newTestComm()
 
-	err := e.chat(context.Background(), comm, internal_type.UserTextPacket{ContextID: "ctx-1"}, map[string]interface{}{}, &protos.Message{Role: "user"})
+	err := e.chat(context.Background(), comm, internal_type.NormalizedUserTextPacket{ContextID: "ctx-1"}, map[string]interface{}{}, &protos.Message{Role: "user"})
 	require.NoError(t, err)
 
 	stream.mu.Lock()
@@ -1291,10 +1279,10 @@ func TestClose_ClearsHistoryAndStream(t *testing.T) {
 	e.stream = stream
 	e.mu.Lock()
 	e.history = append(e.history, &protos.Message{Role: "user"})
-	e.currentPacket = internal_type.UserTextPacket{
+	e.currentPacket = &internal_type.NormalizedUserTextPacket{
 		ContextID: "ctx-1",
 		Text:      "hello",
-		Language:  "en",
+		Language:  mustLanguage(t, "en"),
 	}
 	e.mu.Unlock()
 
@@ -1505,7 +1493,7 @@ func TestExecute_UserTextPacket_HistoryCount(t *testing.T) {
 
 	comm, collector := newTestComm()
 
-	err := e.Execute(context.Background(), comm, internal_type.UserTextPacket{
+	err := e.Execute(context.Background(), comm, internal_type.NormalizedUserTextPacket{
 		ContextID: "ctx-2",
 		Text:      "follow up",
 	})
@@ -1527,7 +1515,7 @@ func TestExecute_SendError(t *testing.T) {
 	e.stream = stream
 	comm, _ := newTestComm()
 
-	err := e.Execute(context.Background(), comm, internal_type.UserTextPacket{
+	err := e.Execute(context.Background(), comm, internal_type.NormalizedUserTextPacket{
 		ContextID: "ctx-1",
 		Text:      "test",
 	})
@@ -1546,7 +1534,7 @@ func TestExecute_SendError_HistoryNotModified(t *testing.T) {
 	e.stream = stream
 	comm, _ := newTestComm()
 
-	err := e.Execute(context.Background(), comm, internal_type.UserTextPacket{
+	err := e.Execute(context.Background(), comm, internal_type.NormalizedUserTextPacket{
 		ContextID: "ctx-1",
 		Text:      "test",
 	})

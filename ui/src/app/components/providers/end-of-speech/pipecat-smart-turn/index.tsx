@@ -41,8 +41,8 @@ export const ConfigurePipecatSmartTurnEOS: React.FC<{
         min={500}
         max={5000}
         step={100}
-        value={get('microphone.eos.silence_timeout', '2000')}
-        onChange={v => set('microphone.eos.silence_timeout', v)}
+        value={get('microphone.eos.extended_timeout', '2000')}
+        onChange={v => set('microphone.eos.extended_timeout', v)}
       />
       <SliderField
         label="Fallback Timeout"
@@ -50,8 +50,8 @@ export const ConfigurePipecatSmartTurnEOS: React.FC<{
         min={500}
         max={4000}
         step={100}
-        value={get('microphone.eos.timeout', '500')}
-        onChange={v => set('microphone.eos.timeout', v)}
+        value={get('microphone.eos.fallback_timeout', '500')}
+        onChange={v => set('microphone.eos.fallback_timeout', v)}
       />
     </>
   );

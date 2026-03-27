@@ -20,10 +20,15 @@ import (
 const (
 	eosName = "livekitEndOfSpeech"
 
-	optKeyThreshold      = "microphone.eos.threshold"
-	optKeyQuickTimeout   = "microphone.eos.quick_timeout"
-	optKeySilenceTimeout = "microphone.eos.silence_timeout"
-	optKeyMaxHistory     = "microphone.eos.max_history_turns"
+	optKeyThreshold       = "microphone.eos.threshold"
+	optKeyQuickTimeout    = "microphone.eos.quick_timeout"
+	optKeyExtendedTimeout = "microphone.eos.extended_timeout"
+	optKeyFallbackTimeout = "microphone.eos.fallback_timeout"
+	optKeyMaxHistory      = "microphone.eos.max_history_turns"
+
+	// Backward-compatible aliases.
+	optKeyLegacySilenceTimeout = "microphone.eos.silence_timeout"
+	optKeyLegacyTimeout        = "microphone.eos.timeout"
 
 	// defaultThreshold is the English "unlikely_threshold" from LiveKit's
 	// languages.json. Probabilities below this → user still speaking.
@@ -153,7 +158,9 @@ func NewLivekitEndOfSpeech(
 	if v, err := opts.GetFloat64(optKeyThreshold); err == nil {
 		eos.threshold = v
 	}
-	if v, err := opts.GetFloat64(optKeySilenceTimeout); err == nil {
+	if v, err := opts.GetFloat64(optKeyExtendedTimeout); err == nil {
+		eos.silenceTimeout = time.Duration(v) * time.Millisecond
+	} else if v, err := opts.GetFloat64(optKeyLegacySilenceTimeout); err == nil {
 		eos.silenceTimeout = time.Duration(v) * time.Millisecond
 	}
 	if v, err := opts.GetFloat64(optKeyQuickTimeout); err == nil {
@@ -162,7 +169,9 @@ func NewLivekitEndOfSpeech(
 	if v, err := opts.GetFloat64(optKeyMaxHistory); err == nil {
 		eos.maxHistory = int(v)
 	}
-	if v, err := opts.GetFloat64("microphone.eos.timeout"); err == nil {
+	if v, err := opts.GetFloat64(optKeyFallbackTimeout); err == nil {
+		eos.fallbackMs = time.Duration(v) * time.Millisecond
+	} else if v, err := opts.GetFloat64(optKeyLegacyTimeout); err == nil {
 		eos.fallbackMs = time.Duration(v) * time.Millisecond
 	}
 
@@ -315,9 +324,20 @@ func (eos *LivekitEOS) predictEOU(currentText string) float64 {
 // send dispatches a command to the worker.
 func (eos *LivekitEOS) send(cmd command) {
 	select {
+	case <-eos.stopCh:
+		return
+	default:
+	}
+
+	select {
 	case eos.cmdCh <- cmd:
 	default:
-		go func() { eos.cmdCh <- cmd }()
+		go func() {
+			select {
+			case eos.cmdCh <- cmd:
+			case <-eos.stopCh:
+			}
+		}()
 	}
 }
 

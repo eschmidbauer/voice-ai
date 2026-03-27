@@ -96,7 +96,7 @@ func (r *genericRequestor) OnPacket(ctx context.Context, pkts ...internal_type.P
 			internal_type.SpeechToTextPacket,
 			internal_type.EndOfSpeechPacket,
 			internal_type.InterimEndOfSpeechPacket,
-			internal_type.NormalizedTextPacket:
+			internal_type.NormalizedUserTextPacket:
 			r.inputCh <- e
 
 		// Output — LLM generation, TTS, outbound pipeline
@@ -273,7 +273,7 @@ func (r *genericRequestor) dispatch(ctx context.Context, p internal_type.Packet)
 		r.handleInterimEndOfSpeech(ctx, vl)
 	case internal_type.EndOfSpeechPacket:
 		r.handleEndOfSpeech(ctx, vl)
-	case internal_type.NormalizedTextPacket:
+	case internal_type.NormalizedUserTextPacket:
 		r.handleNormalizedText(ctx, vl)
 	// Interruption
 	case internal_type.InterruptionPacket:
@@ -446,13 +446,13 @@ func (talking *genericRequestor) handleEndOfSpeech(ctx context.Context, vl inter
 		}
 		return
 	}
-	talking.OnPacket(ctx, internal_type.NormalizedTextPacket{
+	talking.OnPacket(ctx, internal_type.NormalizedUserTextPacket{
 		ContextID: vl.ContextID,
 		Text:      vl.Speech,
 	})
 }
 
-func (talking *genericRequestor) handleNormalizedText(ctx context.Context, vl internal_type.NormalizedTextPacket) {
+func (talking *genericRequestor) handleNormalizedText(ctx context.Context, vl internal_type.NormalizedUserTextPacket) {
 	talking.stopIdleTimeoutTimer()
 	if err := talking.Transition(LLMGenerating); err != nil {
 		talking.logger.Errorf("messaging transition error: %v", err)

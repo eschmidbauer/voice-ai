@@ -107,11 +107,11 @@ describe('ConfigureAudioInputProvider design integration', () => {
   it('uses microphone-only params when switching STT provider', () => {
     const inputParameters = [
       createMetadata('listen.model', 'nova-3'),
-      createMetadata('microphone.eos.timeout', '900'),
+      createMetadata('microphone.eos.fallback_timeout', '900'),
       createMetadata('microphone.vad.threshold', '0.7'),
     ];
     const microphoneDefaults = [
-      createMetadata('microphone.eos.timeout', '700'),
+      createMetadata('microphone.eos.fallback_timeout', '700'),
       createMetadata('microphone.vad.threshold', '0.6'),
     ];
     const sttDefaults = [createMetadata('listen.model', 'whisper-large-v3-turbo')];
@@ -132,7 +132,7 @@ describe('ConfigureAudioInputProvider design integration', () => {
     expect(mockGetDefaultMicrophoneConfig).toHaveBeenCalledTimes(1);
     const microphoneOnly = mockGetDefaultMicrophoneConfig.mock.calls[0][0] as Metadata[];
     expect(microphoneOnly.map(m => m.getKey()).sort()).toEqual(
-      ['microphone.eos.timeout', 'microphone.vad.threshold'].sort(),
+      ['microphone.eos.fallback_timeout', 'microphone.vad.threshold'].sort(),
     );
 
     expect(mockGetDefaultSpeechToTextIfInvalid).toHaveBeenCalledWith(
@@ -185,7 +185,11 @@ describe('ConfigureAudioInputProvider design integration', () => {
     );
     expect(mockGetDefaultEOSConfig).toHaveBeenCalledWith(
       'livekit_eos',
-      inputParameters,
+      [
+        createMetadata('listen.model', 'nova-3'),
+        createMetadata('microphone.vad.provider', 'silero_vad'),
+        createMetadata('microphone.denoising.provider', 'legacy_noise'),
+      ],
     );
 
     expect(setAudioInputConfig).toHaveBeenCalledWith({
@@ -202,4 +206,3 @@ describe('ConfigureAudioInputProvider design integration', () => {
     });
   });
 });
-
