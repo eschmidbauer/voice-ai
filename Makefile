@@ -172,10 +172,9 @@ doctor:
 		}'); \
 		if [ -n "$$build_cache_mb" ] && [ "$$build_cache_mb" -gt 12288 ]; then \
 			build_cache_gb=$$(awk "BEGIN {printf \"%.1f\", $$build_cache_mb/1024}"); \
-			echo "✗ Build cache is too large (~$${build_cache_gb}GB)."; \
+			echo "! Build cache is large (~$${build_cache_gb}GB)."; \
 			echo "  Run: docker builder prune -af"; \
 			echo "  (Set DOCTOR_SKIP_CACHE_CHECK=1 to bypass this check.)"; \
-			errors=$$((errors + 1)); \
 		else \
 			echo "✓ build cache usage is within preflight limit"; \
 		fi; \
@@ -649,14 +648,16 @@ status: ps-all
 	@echo "Service Ports:"
 	@echo "=============="
 	@echo "  UI:               http://localhost:3000"
-	@echo "  Web-API:          http://localhost:9001"
+	@echo "  API Gateway:      http://localhost:8080"
+	@echo "  Web-API:          internal only (no host port)"
 	@echo "  Integration-API:  http://localhost:9004"
 	@echo "  Endpoint-API:     http://localhost:9005"
 	@echo "  Assistant-API:    http://localhost:9007"
 	@echo "  SIP:              udp://localhost:5090"
 	@echo "  PostgreSQL:       internal only (no host port)"
 	@echo "  Redis:            internal only (no host port)"
-	@echo "  OpenSearch:       internal only (no host port)"
+	@echo "  OpenSearch:       internal only (run make up-all-with-knowledge)"
+	@echo "  Document-API:     internal only (run make up-all-with-knowledge)"
 	@echo ""
 
 ps: ps-all

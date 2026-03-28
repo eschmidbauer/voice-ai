@@ -85,13 +85,23 @@ make up-all
 docker compose ps
 ```
 
-**Services Ready:**
+**Services Ready (`make up-all`):**
 
 - UI: http://localhost:3000
-- Web API: http://localhost:9001
+- API Gateway (nginx): http://localhost:8080
+- Web API: internal-only by default (container network)
 - Assistant API: http://localhost:9007
 - Endpoint API: http://localhost:9005
 - Integration API: http://localhost:9004
+
+To include knowledge services (OpenSearch + Document API), run:
+
+```bash
+make up-all-with-knowledge
+```
+
+Then:
+
 - Document API: http://localhost:9010
 
 **Stop services:**
