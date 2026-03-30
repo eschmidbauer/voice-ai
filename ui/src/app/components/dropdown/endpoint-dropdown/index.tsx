@@ -4,7 +4,7 @@ import { useCredential } from '@/hooks/use-credential';
 import { Renew, Launch } from '@carbon/icons-react';
 import { FC, useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast/headless';
-import { ComboBox, Button } from '@carbon/react';
+import { Dropdown, Button } from '@carbon/react';
 
 interface EndpointDropdownProps {
   className?: string;
@@ -52,43 +52,44 @@ export const EndpointDropdown: FC<EndpointDropdownProps> = props => {
   ) || null;
 
   return (
-    <div className="flex items-end gap-1">
-      <div className="flex-1">
-        <ComboBox
-          id="endpoint-dropdown"
-          titleText="Endpoint"
-          placeholder="Search and select endpoint"
-          items={endpointActions.endpoints}
-          selectedItem={selectedItem}
-          itemToString={(item: Endpoint | null) => item?.getName() || ''}
-          onChange={({ selectedItem }: any) => {
-            if (selectedItem) props.onChangeEndpoint(selectedItem);
-          }}
-          onInputChange={(inputValue: string) => {
-            if (inputValue && inputValue.trim() !== '') {
-              endpointActions.addCriteria('name', inputValue, 'like');
-            } else {
-              endpointActions.removeCriteria('name');
+    <div>
+      <p className="text-xs font-medium mb-1">Endpoint</p>
+      <div className="flex">
+        <div className="flex-1 [&_.cds--dropdown]:!rounded-none [&_.cds--list-box]:!rounded-none">
+          <Dropdown
+            id="endpoint-dropdown"
+            titleText=""
+            hideLabel
+            label="Select endpoint"
+            items={endpointActions.endpoints}
+            selectedItem={selectedItem}
+            itemToString={(item: Endpoint | null) =>
+              item ? `${item.getName()} [${item.getId()}]` : ''
             }
-          }}
+            onChange={({ selectedItem }: any) => {
+              if (selectedItem) props.onChangeEndpoint(selectedItem);
+            }}
+          />
+        </div>
+        <Button
+          hasIconOnly
+          renderIcon={Renew}
+          iconDescription="Refresh"
+          kind="ghost"
+          size="md"
+          onClick={() => getEndpoints(projectId, token, userId)}
+          className="!rounded-none !border !border-l-0 !border-gray-200 dark:!border-gray-700"
+        />
+        <Button
+          hasIconOnly
+          renderIcon={Launch}
+          iconDescription="Create endpoint"
+          kind="ghost"
+          size="md"
+          onClick={() => window.open('/deployment/endpoint/create-endpoint', '_blank')}
+          className="!rounded-none !border !border-l-0 !border-gray-200 dark:!border-gray-700"
         />
       </div>
-      <Button
-        hasIconOnly
-        renderIcon={Renew}
-        iconDescription="Refresh"
-        kind="ghost"
-        size="md"
-        onClick={() => getEndpoints(projectId, token, userId)}
-      />
-      <Button
-        hasIconOnly
-        renderIcon={Launch}
-        iconDescription="Create endpoint"
-        kind="ghost"
-        size="md"
-        onClick={() => window.open('/deployment/endpoint/create-endpoint', '_blank')}
-      />
     </div>
   );
 };

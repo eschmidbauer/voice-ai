@@ -4,7 +4,7 @@ import { useKnowledgePageStore } from '@/hooks/use-knowledge-page-store';
 import { Renew, Launch } from '@carbon/icons-react';
 import { FC, useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast/headless';
-import { ComboBox, Button } from '@carbon/react';
+import { Dropdown, Button } from '@carbon/react';
 
 interface KnowledgeDropdownProps {
   className?: string;
@@ -52,45 +52,46 @@ export const KnowledgeDropdown: FC<KnowledgeDropdownProps> = props => {
   ) || null;
 
   return (
-    <div className="flex items-end gap-1">
-      <div className="flex-1">
-        <ComboBox
-          id="knowledge-dropdown"
-          titleText="Knowledge"
-          placeholder="Search and select knowledge"
-          items={knowledgeActions.knowledgeBases}
-          selectedItem={selectedItem}
-          itemToString={(item: Knowledge | null) => item?.getName() || ''}
-          onChange={({ selectedItem }: any) => {
-            if (selectedItem && props.onChangeKnowledge) {
-              props.onChangeKnowledge(selectedItem);
+    <div>
+      <p className="text-xs font-medium mb-1">Knowledge</p>
+      <div className="flex">
+        <div className="flex-1 [&_.cds--dropdown]:!rounded-none [&_.cds--list-box]:!rounded-none">
+          <Dropdown
+            id="knowledge-dropdown"
+            titleText=""
+            hideLabel
+            label="Select knowledge"
+            items={knowledgeActions.knowledgeBases}
+            selectedItem={selectedItem}
+            itemToString={(item: Knowledge | null) =>
+              item ? `${item.getName()} [${item.getId()}]` : ''
             }
-          }}
-          onInputChange={(inputValue: string) => {
-            if (inputValue && inputValue.trim() !== '') {
-              knowledgeActions.addCriteria('name', inputValue, 'like');
-            } else {
-              knowledgeActions.removeCriteria('name');
-            }
-          }}
+            onChange={({ selectedItem }: any) => {
+              if (selectedItem && props.onChangeKnowledge) {
+                props.onChangeKnowledge(selectedItem);
+              }
+            }}
+          />
+        </div>
+        <Button
+          hasIconOnly
+          renderIcon={Renew}
+          iconDescription="Refresh"
+          kind="ghost"
+          size="md"
+          onClick={() => getKnowledges(projectId, token, userId)}
+          className="!rounded-none !border !border-l-0 !border-gray-200 dark:!border-gray-700"
+        />
+        <Button
+          hasIconOnly
+          renderIcon={Launch}
+          iconDescription="Create knowledge"
+          kind="ghost"
+          size="md"
+          onClick={() => window.open('/knowledge/create-knowledge', '_blank')}
+          className="!rounded-none !border !border-l-0 !border-gray-200 dark:!border-gray-700"
         />
       </div>
-      <Button
-        hasIconOnly
-        renderIcon={Renew}
-        iconDescription="Refresh"
-        kind="ghost"
-        size="md"
-        onClick={() => getKnowledges(projectId, token, userId)}
-      />
-      <Button
-        hasIconOnly
-        renderIcon={Launch}
-        iconDescription="Create knowledge"
-        kind="ghost"
-        size="md"
-        onClick={() => window.open('/knowledge/create-knowledge', '_blank')}
-      />
     </div>
   );
 };
