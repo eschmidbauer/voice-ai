@@ -2,21 +2,20 @@ import React, { useMemo, useState } from 'react';
 import { Metadata } from '@rapidaai/react';
 import { Dropdown } from '@/app/components/dropdown';
 import { CustomValueDropdown } from '@/app/components/dropdown/custom-value-dropdown';
-import { FormLabel } from '@/app/components/form-label';
-import { FieldSet } from '@/app/components/form/fieldset';
-import { Input } from '@/app/components/form/input';
-import { Slider } from '@/app/components/form/slider';
-import { Select } from '@/app/components/form/select';
-import { Textarea } from '@/app/components/form/textarea';
-import { InputHelper } from '@/app/components/input-helper';
 import { Popover } from '@/app/components/popover';
-import {
-  IButton,
-  IBlueBorderButton,
-  IRedBorderButton,
-} from '@/app/components/form/button';
-import { Bolt, Plus, Trash2, X } from 'lucide-react';
+import { Slider } from '@/app/components/form/slider';
+import { IButton } from '@/app/components/form/button';
+import { Bolt, X } from 'lucide-react';
 import { cn } from '@/utils';
+import { TextInput, TextArea } from '@/app/components/carbon/form';
+import { TertiaryButton } from '@/app/components/carbon/button';
+import {
+  Select as CarbonSelect,
+  SelectItem,
+  NumberInput,
+  Button,
+} from '@carbon/react';
+import { Add, TrashCan } from '@carbon/icons-react';
 import {
   CategoryConfig,
   ParameterConfig,
@@ -169,128 +168,110 @@ export const ConfigRenderer: React.FC<{
           ? (param.min ?? 0)
           : sliderParsedValue;
         return (
-          <FieldSet className={cn(colSpanClass, 'h-fit')} key={param.key}>
-            <FormLabel>{param.label}</FormLabel>
-            <div className="flex space-x-2 justify-center items-center">
+          <div className={cn(colSpanClass)} key={param.key}>
+            <p className="text-xs font-medium mb-1">{param.label}</p>
+            <div className="flex space-x-2 items-center">
               <Slider
                 min={param.min ?? 0}
                 max={param.max ?? 1}
                 step={param.step ?? 0.1}
                 value={sliderValue}
-                onSlide={c => {
-                  updateParameter(param.key, c.toString());
-                }}
+                onSlide={c => updateParameter(param.key, c.toString())}
               />
-              <Input
-                type="number"
+              <NumberInput
+                id={`slider-num-${param.key}`}
+                hideLabel
+                label=""
                 min={param.min}
                 max={param.max}
                 step={param.step}
-                value={getParamValue(param.key)}
-                onChange={e => {
-                  updateParameter(param.key, e.target.value);
-                }}
-                className="bg-light-background w-16"
+                value={Number(getParamValue(param.key)) || 0}
+                onChange={(e: any, { value }: any) => updateParameter(param.key, String(value))}
+                className="!w-20"
               />
             </div>
-            {param.helpText && (
-              <InputHelper className="text-xs">{param.helpText}</InputHelper>
-            )}
-          </FieldSet>
+            {param.helpText && <p className="text-xs text-gray-500 mt-1">{param.helpText}</p>}
+          </div>
         );
 
       case 'number':
         return (
-          <FieldSet className={cn(colSpanClass, 'h-fit')} key={param.key}>
-            <FormLabel>{param.label}</FormLabel>
-            <Input
+          <div className={cn(colSpanClass)} key={param.key}>
+            <TextInput
+              id={`num-${param.key}`}
+              labelText={param.label}
               type="number"
               min={param.min}
               max={param.max}
               step={param.step}
               value={getParamValue(param.key)}
               placeholder={param.placeholder}
-              onChange={e => {
-                updateParameter(param.key, e.target.value);
-              }}
+              helperText={param.helpText}
+              onChange={e => updateParameter(param.key, e.target.value)}
             />
-            {param.helpText && (
-              <InputHelper className="text-xs">{param.helpText}</InputHelper>
-            )}
-          </FieldSet>
+          </div>
         );
 
       case 'input':
         return (
-          <FieldSet className={cn(colSpanClass, 'h-fit')} key={param.key}>
-            <FormLabel>{param.label}</FormLabel>
-            <Input
-              type="text"
+          <div className={cn(colSpanClass)} key={param.key}>
+            <TextInput
+              id={`input-${param.key}`}
+              labelText={param.label}
               value={getParamValue(param.key)}
               placeholder={param.placeholder}
-              onChange={e => {
-                updateParameter(param.key, e.target.value);
-              }}
+              helperText={param.helpText}
+              onChange={e => updateParameter(param.key, e.target.value)}
             />
-            {param.helpText && (
-              <InputHelper className="text-xs">{param.helpText}</InputHelper>
-            )}
-          </FieldSet>
+          </div>
         );
 
       case 'textarea':
         return (
-          <FieldSet className={cn(colSpanClass)} key={param.key}>
-            <FormLabel>{param.label}</FormLabel>
-            <Textarea
+          <div className={cn(colSpanClass)} key={param.key}>
+            <TextArea
+              id={`textarea-${param.key}`}
+              labelText={param.label}
               required={param.required !== false}
               value={getParamValue(param.key)}
-              onChange={e => {
-                updateParameter(param.key, e.target.value);
-              }}
               rows={param.rows ?? 2}
-              className="bg-light-background"
               placeholder={param.placeholder}
+              helperText={param.helpText}
+              onChange={e => updateParameter(param.key, e.target.value)}
             />
-            {param.helpText && <InputHelper>{param.helpText}</InputHelper>}
-          </FieldSet>
+          </div>
         );
 
       case 'select':
         return (
-          <FieldSet className={cn(colSpanClass, 'h-fit')} key={param.key}>
-            <FormLabel>{param.label}</FormLabel>
-            <Select
-              onChange={e => updateParameter(param.key, e.target.value)}
-              placeholder={`Select ${param.label.toLowerCase()}`}
-              className="text-sm! h-9 pl-3"
+          <div className={cn(colSpanClass)} key={param.key}>
+            <CarbonSelect
+              id={`select-${param.key}`}
+              labelText={param.label}
               value={getParamValue(param.key)}
-              options={(param.choices ?? []).map(c => ({
-                name: c.label,
-                value: c.value,
-              }))}
-            />
-            {param.helpText && (
-              <InputHelper className="text-xs">{param.helpText}</InputHelper>
-            )}
-          </FieldSet>
+              helperText={param.helpText}
+              onChange={e => updateParameter(param.key, e.target.value)}
+            >
+              <SelectItem value="" text={`Select ${param.label.toLowerCase()}`} />
+              {(param.choices ?? []).map(c => (
+                <SelectItem key={c.value} value={c.value} text={c.label} />
+              ))}
+            </CarbonSelect>
+          </div>
         );
 
       case 'json':
         return (
-          <FieldSet className={cn(colSpanClass)} key={param.key}>
-            <FormLabel>{param.label}</FormLabel>
-            <Textarea
+          <div className={cn(colSpanClass)} key={param.key}>
+            <TextArea
+              id={`json-${param.key}`}
+              labelText={param.label}
               placeholder="Enter as JSON"
               value={getParamValue(param.key) || '{}'}
-              onChange={e => {
-                updateParameter(param.key, e.target.value);
-              }}
+              helperText={param.helpText}
+              onChange={e => updateParameter(param.key, e.target.value)}
             />
-            {param.helpText && (
-              <InputHelper className="text-xs">{param.helpText}</InputHelper>
-            )}
-          </FieldSet>
+          </div>
         );
 
       case 'key_value':
@@ -367,8 +348,8 @@ const DropdownField: React.FC<{
       : undefined;
 
   return (
-    <FieldSet className={cn(colSpanClass, 'h-fit')} key={param.key}>
-      <FormLabel>{param.label}</FormLabel>
+    <div className={cn(colSpanClass)} key={param.key}>
+      <p className="text-xs font-medium mb-1">{param.label}</p>
       {param.customValue ? (
         <CustomValueDropdown
           customValue
@@ -398,8 +379,8 @@ const DropdownField: React.FC<{
           label={renderOption}
         />
       )}
-      {param.helpText && <InputHelper>{param.helpText}</InputHelper>}
-    </FieldSet>
+      {param.helpText && <p className="text-xs text-gray-500 mt-1">{param.helpText}</p>}
+    </div>
   );
 };
 
@@ -441,52 +422,55 @@ const KeyValueField: React.FC<{
   };
 
   return (
-    <FieldSet className={cn(colSpanClass)} key={param.key}>
-      <FormLabel>{param.label} ({entries.length})</FormLabel>
-      <div className="text-sm grid w-full">
+    <div className={cn(colSpanClass)} key={param.key}>
+      <p className="text-xs font-medium mb-2">{param.label} ({entries.length})</p>
+      <div className="border border-gray-200 dark:border-gray-700 divide-y divide-gray-200 dark:divide-gray-700">
         {entries.map((entry, index) => (
-          <div
-            key={index}
-            className="grid grid-cols-2 border-b border-gray-200 dark:border-gray-700"
-          >
-            <div className="flex col-span-1 items-center border-r border-gray-200 dark:border-gray-700">
-              <Input
-                value={entry.key}
-                onChange={e => updateEntry(index, 'key', e.target.value)}
-                placeholder="Key"
-                className="w-full border-none"
-              />
-            </div>
-            <div className="col-span-1 flex">
-              <Input
-                value={entry.value}
-                onChange={e => updateEntry(index, 'value', e.target.value)}
-                placeholder="Value"
-                className="w-full border-none"
-              />
-              <IRedBorderButton
-                className="border-none outline-hidden dark:bg-gray-950 h-10"
-                onClick={() => removeEntry(index)}
-                type="button"
-              >
-                <Trash2 className="w-4 h-4" strokeWidth={1.5} />
-              </IRedBorderButton>
-            </div>
+          <div key={index} className="flex items-center gap-2 px-2 py-1.5">
+            <TextInput
+              id={`kv-key-${param.key}-${index}`}
+              labelText=""
+              hideLabel
+              value={entry.key}
+              onChange={e => updateEntry(index, 'key', e.target.value)}
+              placeholder="Key"
+              size="md"
+              className="flex-1"
+            />
+            <span className="text-xs text-gray-400 shrink-0">=</span>
+            <TextInput
+              id={`kv-val-${param.key}-${index}`}
+              labelText=""
+              hideLabel
+              value={entry.value}
+              onChange={e => updateEntry(index, 'value', e.target.value)}
+              placeholder="Value"
+              size="md"
+              className="flex-1"
+            />
+            <Button
+              hasIconOnly
+              renderIcon={TrashCan}
+              iconDescription="Remove"
+              kind="danger--ghost"
+              size="md"
+              onClick={() => removeEntry(index)}
+            />
           </div>
         ))}
       </div>
-      <IBlueBorderButton
-        onClick={addEntry}
-        className="justify-between space-x-8"
-        type="button"
-      >
-        <span>Add {param.label.toLowerCase()}</span>
-        <Plus className="h-4 w-4 ml-1.5" />
-      </IBlueBorderButton>
-      {param.helpText && (
-        <InputHelper className="text-xs">{param.helpText}</InputHelper>
-      )}
-    </FieldSet>
+      <div className="pt-4">
+        <TertiaryButton
+          size="md"
+          renderIcon={Add}
+          onClick={addEntry}
+          className="!w-full !max-w-none"
+        >
+          Add {param.label.toLowerCase()}
+        </TertiaryButton>
+      </div>
+      {param.helpText && <p className="text-xs text-gray-500 mt-1">{param.helpText}</p>}
+    </div>
   );
 };
 

@@ -9,13 +9,12 @@ import {
   PrimaryButton,
   SecondaryButton,
 } from '@/app/components/carbon/button';
-import { ButtonSet } from '@carbon/react';
-import { FieldSet } from '@/app/components/form/fieldset';
+import { Stack } from '@/app/components/carbon/form';
+import { Notification } from '@/app/components/carbon/notification';
+import { ButtonSet, Breadcrumb, BreadcrumbItem } from '@carbon/react';
 import { InputCheckbox } from '@/app/components/form/checkbox';
-import { InputHelper } from '@/app/components/input-helper';
 import { useConfirmDialog } from '@/app/pages/assistant/actions/hooks/use-confirmation';
 import { TelemetryProvider } from '@/app/components/providers/telemetry';
-import { PageActionButtonBlock } from '@/app/components/blocks/page-action-button-block';
 import {
   GetDefaultTelemetryIfInvalid,
   ValidateTelemetry,
@@ -46,13 +45,8 @@ export const CreateAssistantTelemetry: FC<{ assistantId: string }> = ({
     setParameters(GetDefaultTelemetryIfInvalid(providerCode, credentialOnly));
   };
 
-  const onChangeParameter = (params: Metadata[]) => {
-    setParameters(params);
-  };
-
   const onSubmit = () => {
     setErrorMessage('');
-
     const validationError = ValidateTelemetry(provider, parameters);
     if (validationError) {
       setErrorMessage(validationError);
@@ -69,22 +63,17 @@ export const CreateAssistantTelemetry: FC<{ assistantId: string }> = ({
       (err, response) => {
         hideLoader();
         if (err) {
-          setErrorMessage(
-            'Unable to create assistant telemetry provider, please try again.',
-          );
+          setErrorMessage('Unable to create telemetry provider. Please try again.');
           return;
         }
-
         if (response?.getSuccess()) {
-          toast.success('Assistant telemetry provider created successfully');
+          toast.success('Telemetry provider created successfully');
           navigator.goToAssistantTelemetry(assistantId);
           return;
         }
-
-        const message = response?.getError()?.getHumanmessage();
         setErrorMessage(
-          message ||
-            'Unable to create assistant telemetry provider, please try again.',
+          response?.getError()?.getHumanmessage() ||
+            'Unable to create telemetry provider. Please try again.',
         );
       },
       {
@@ -98,57 +87,49 @@ export const CreateAssistantTelemetry: FC<{ assistantId: string }> = ({
   return (
     <>
       <ConfirmDialogComponent />
-      <div className="flex flex-col flex-1 min-h-0 bg-white dark:bg-gray-900">
-        <header className="px-8 pt-8 pb-6 border-b border-gray-200 dark:border-gray-800 shrink-0">
-          <p className="text-[10px] font-semibold tracking-[0.12em] uppercase text-gray-500 dark:text-gray-400 mb-1.5">
-            Telemetry
-          </p>
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100 leading-tight">
-            Create Telemetry Provider
-          </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-500 mt-1.5 leading-relaxed">
-            Configure a telemetry destination for this assistant.
-          </p>
-        </header>
+      <div className="flex flex-col flex-1 min-h-0">
+        {/* Header */}
+        <div className="px-8 pt-6 pb-4 border-b border-gray-200 dark:border-gray-800 shrink-0">
+          <Breadcrumb noTrailingSlash className="mb-2">
+            <BreadcrumbItem href={`/deployment/assistant/${assistantId}/configure-telemetry`}>
+              Telemetry
+            </BreadcrumbItem>
+          </Breadcrumb>
+          <h1 className="text-xl font-light tracking-tight">Create Telemetry Provider</h1>
+        </div>
 
+        {/* Form */}
         <div className="flex-1 min-h-0 overflow-y-auto">
-          <div className="px-8 pt-6 pb-8 max-w-4xl flex flex-col gap-8">
-            <TelemetryProvider
-              provider={provider}
-              onChangeProvider={onChangeProvider}
-              parameters={parameters}
-              onChangeParameter={onChangeParameter}
-            />
-
-            <FieldSet>
+          <div className="px-8 pt-6 pb-8 max-w-4xl">
+            <Stack gap={6}>
+              <TelemetryProvider
+                provider={provider}
+                onChangeProvider={onChangeProvider}
+                parameters={parameters}
+                onChangeParameter={setParameters}
+              />
               <InputCheckbox
                 checked={enabled}
                 onChange={e => setEnabled(e.target.checked)}
               >
                 Enable this telemetry provider
               </InputCheckbox>
-              <InputHelper>
-                Disabled providers are saved but not used by the assistant.
-              </InputHelper>
-            </FieldSet>
+              {errorMessage && (
+                <Notification kind="error" title="Error" subtitle={errorMessage} />
+              )}
+            </Stack>
           </div>
         </div>
 
-        <PageActionButtonBlock errorMessage={errorMessage}>
-          <ButtonSet className="!w-full [&>button]:!flex-1 [&>button]:!max-w-none">
-            <SecondaryButton size="lg"
-              onClick={() => showDialog(navigator.goBack)}
-            >
-              Cancel
-            </SecondaryButton>
-            <PrimaryButton size="lg"
-              isLoading={loading}
-              onClick={onSubmit}
-            >
-              Save telemetry
-            </PrimaryButton>
-          </ButtonSet>
-        </PageActionButtonBlock>
+        {/* Footer */}
+        <ButtonSet className="!w-full [&>button]:!flex-1 [&>button]:!max-w-none">
+          <SecondaryButton size="lg" onClick={() => showDialog(navigator.goBack)}>
+            Cancel
+          </SecondaryButton>
+          <PrimaryButton size="lg" isLoading={loading} onClick={onSubmit}>
+            Save telemetry
+          </PrimaryButton>
+        </ButtonSet>
       </div>
     </>
   );
