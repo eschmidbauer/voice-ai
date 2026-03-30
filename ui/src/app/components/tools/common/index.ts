@@ -30,6 +30,5 @@ export {
   DocumentationNotice,
   ToolDefinitionForm,
   TypeKeySelector,
-  ParameterRow,
   ParameterEditor,
 } from './components';

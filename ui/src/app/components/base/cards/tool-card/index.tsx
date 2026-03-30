@@ -1,13 +1,19 @@
 import { FC, HTMLAttributes } from 'react';
 import { BaseCard, CardDescription, CardTitle } from '@/app/components/base/cards';
 import { cn } from '@/utils';
-import { CardOptionMenu } from '@/app/components/menu';
 import { AssistantTool } from '@rapidaai/react';
 import { BUILDIN_TOOLS } from '@/llm-tools';
+import { Tag, ButtonSet } from '@carbon/react';
+import {
+  PrimaryButton,
+  DangerGhostButton,
+} from '@/app/components/carbon/button';
+import { Edit, TrashCan } from '@carbon/icons-react';
 
 interface ToolCardProps extends HTMLAttributes<HTMLDivElement> {
   tool: AssistantTool;
-  options?: { option: any; onActionClick: () => void }[];
+  onEdit?: () => void;
+  onDelete?: () => void;
   iconClass?: string;
   titleClass?: string;
   isConnected?: boolean;
@@ -15,7 +21,8 @@ interface ToolCardProps extends HTMLAttributes<HTMLDivElement> {
 
 export const SelectToolCard: FC<ToolCardProps> = ({
   tool,
-  options,
+  onEdit,
+  onDelete,
   className,
 }) => {
   const hasProtobufMethods = typeof tool.getExecutionmethod === 'function';
@@ -33,7 +40,7 @@ export const SelectToolCard: FC<ToolCardProps> = ({
     <BaseCard className={cn('flex flex-col', className)}>
       {/* Body */}
       <div className="p-4 flex-1 flex flex-col gap-3">
-        {/* Header row: icon container + options menu */}
+        {/* Header row: icon + tags */}
         <header className="flex items-start justify-between">
           <div className="w-9 h-9 flex items-center justify-center bg-gray-100 dark:bg-gray-800/60 shrink-0">
             {toolMeta?.icon ? (
@@ -48,9 +55,19 @@ export const SelectToolCard: FC<ToolCardProps> = ({
               </span>
             )}
           </div>
-          {options && (
-            <CardOptionMenu options={options} classNames="h-8 w-8 p-1" />
-          )}
+          <div className="flex items-center gap-1">
+            {toolMeta && (
+              <Tag type="gray" size="sm">{toolMeta.name}</Tag>
+            )}
+            {isMCP && (
+              <Tag type="purple" size="sm">MCP</Tag>
+            )}
+            {!toolMeta && !isMCP && (
+              <Tag type="gray" size="sm" className="capitalize">
+                {executionMethod.replace(/_/g, ' ')}
+              </Tag>
+            )}
+          </div>
         </header>
 
         {/* Name + description */}
@@ -64,24 +81,19 @@ export const SelectToolCard: FC<ToolCardProps> = ({
         </div>
       </div>
 
-      {/* Footer: execution type tag */}
-      <div className="flex items-center gap-1.5 px-4 py-2.5 border-t border-gray-100 dark:border-gray-800">
-        {toolMeta && (
-          <span className="inline-flex items-center h-5 px-2 text-[11px] font-medium tracking-wide bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
-            {toolMeta.name}
-          </span>
+      {/* Footer: action buttons */}
+      <ButtonSet className="border-t border-gray-200 dark:border-gray-800 [&>button]:!flex-1 [&>button]:!max-w-none">
+        {onDelete && (
+          <DangerGhostButton size="md" renderIcon={TrashCan} onClick={onDelete}>
+            Delete
+          </DangerGhostButton>
         )}
-        {isMCP && (
-          <span className="inline-flex items-center h-5 px-2 text-[11px] font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
-            MCP
-          </span>
+        {onEdit && (
+          <PrimaryButton size="md" renderIcon={Edit} onClick={onEdit}>
+            Edit
+          </PrimaryButton>
         )}
-        {!toolMeta && !isMCP && (
-          <span className="inline-flex items-center h-5 px-2 text-[11px] font-medium bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-500 capitalize">
-            {executionMethod.replace(/_/g, ' ')}
-          </span>
-        )}
-      </div>
+      </ButtonSet>
     </BaseCard>
   );
 };

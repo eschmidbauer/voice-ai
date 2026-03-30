@@ -14,7 +14,7 @@ const REQUIRED_KEYS = ['tool.endpoint_id', 'tool.parameters'];
 export const GetEndpointDefaultOptions = (current: Metadata[]): Metadata[] =>
   buildDefaultMetadata(
     current,
-    [{ key: 'tool.endpoint_id' }, { key: 'tool.parameters' }],
+    [{ key: 'tool.endpoint_id' }, { key: 'tool.parameters', defaultValue: '{"tool.argument":"argument"}' }],
     REQUIRED_KEYS,
   );
 

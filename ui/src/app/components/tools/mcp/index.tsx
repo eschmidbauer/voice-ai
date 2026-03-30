@@ -35,7 +35,7 @@ export const ConfigureMCP: FC<ConfigureToolProps> = ({
 
   return (
     <>
-      <div className="space-y-4">
+      <div className="px-6 pb-6">
         <div className="flex flex-col gap-6 max-w-6xl">
           <TextInput
             id="mcp-tool-name"

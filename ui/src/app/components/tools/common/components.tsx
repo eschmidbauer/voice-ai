@@ -3,7 +3,7 @@ import { cn } from '@/utils';
 import { CodeEditor } from '@/app/components/form/editor/code-editor';
 import { DocNoticeBlock } from '@/app/components/container/message/notice-block/doc-notice-block';
 import { Add, TrashCan, ArrowRight } from '@carbon/icons-react';
-import { TertiaryButton, DangerTertiaryButton } from '@/app/components/carbon/button';
+import { TertiaryButton } from '@/app/components/carbon/button';
 import { Stack, TextInput, TextArea } from '@/app/components/carbon/form';
 import { Select, SelectItem, Button } from '@carbon/react';
 import {
@@ -52,48 +52,41 @@ export const ToolDefinitionForm: FC<ToolDefinitionFormProps> = ({
   documentationUrl = 'https://doc.rapida.ai/assistants/overview',
   documentationTitle,
 }) => {
-  const handleChange = <K extends keyof ToolDefinition>(
-    field: K,
-    value: ToolDefinition[K],
-  ) => {
-    onChangeToolDefinition({ ...toolDefinition, [field]: value });
-  };
-
   return (
     <div>
       <DocumentationNotice
         title={documentationTitle}
         documentationUrl={documentationUrl}
       />
-      <div className="mt-4 max-w-6xl">
+      <div className="px-6 pb-6 mt-4 max-w-6xl">
         <Stack gap={6}>
           <TextInput
-            id="tool-name"
+            id="tool-def-name"
             labelText="Name"
             value={toolDefinition.name}
-            onChange={e => handleChange('name', e.target.value)}
+            onChange={e =>
+              onChangeToolDefinition({ ...toolDefinition, name: e.target.value })
+            }
             placeholder="Enter tool name"
           />
           <TextArea
-            id="tool-description"
+            id="tool-def-description"
             labelText="Description"
             value={toolDefinition.description}
-            onChange={e => handleChange('description', e.target.value)}
+            onChange={e =>
+              onChangeToolDefinition({ ...toolDefinition, description: e.target.value })
+            }
             placeholder="A tool description or definition of when this tool will get triggered."
             rows={2}
           />
-          <div>
-            <p className="text-xs font-medium mb-2">Parameters</p>
-            <CodeEditor
-              placeholder="Provide a tool parameters that will be passed to llm"
-              value={toolDefinition.parameters}
-              onChange={value => handleChange('parameters', value)}
-              className={cn(
-                'min-h-40 max-h-dvh bg-light-background dark:bg-gray-950',
-                inputClass,
-              )}
-            />
-          </div>
+          <CodeEditor
+            labelText="Parameters"
+            placeholder="Provide tool parameters as JSON that will be passed to LLM"
+            value={toolDefinition.parameters}
+            onChange={value =>
+              onChangeToolDefinition({ ...toolDefinition, parameters: value })
+            }
+          />
         </Stack>
       </div>
     </div>
@@ -157,80 +150,6 @@ export const TypeKeySelector: FC<TypeKeySelectorProps> = ({
 };
 
 // ============================================================================
-// Parameter Row
-// ============================================================================
-
-interface ParameterRowProps {
-  type: ParameterType;
-  paramKey: string;
-  value: string;
-  inputClass?: string;
-  typeOptions: Array<{ name: string; value: string }>;
-  onTypeChange: (type: string) => void;
-  onKeyChange: (key: string) => void;
-  onValueChange: (value: string) => void;
-  onRemove: () => void;
-}
-
-export const ParameterRow: FC<ParameterRowProps> = ({
-  type,
-  paramKey,
-  value,
-  inputClass,
-  typeOptions,
-  onTypeChange,
-  onKeyChange,
-  onValueChange,
-  onRemove,
-}) => (
-  <div className="grid grid-cols-2 border-b border-gray-200 dark:border-gray-700">
-    <div className="flex col-span-1 items-center">
-      <Select
-        id={`type-${paramKey}`}
-        labelText=""
-        hideLabel
-        value={type}
-        onChange={e => onTypeChange(e.target.value)}
-        className={cn('flex-shrink-0', inputClass)}
-      >
-        {typeOptions.map(opt => (
-          <SelectItem key={opt.value} value={opt.value} text={opt.name} />
-        ))}
-      </Select>
-      <TypeKeySelector
-        type={type}
-        inputClass={inputClass}
-        value={paramKey}
-        onChange={onKeyChange}
-      />
-      <div className="h-10 flex items-center justify-center px-2">
-        <ArrowRight size={16} />
-      </div>
-    </div>
-    <div className="col-span-1 flex items-center">
-      <TextInput
-        id={`value-${paramKey}`}
-        labelText=""
-        hideLabel
-        value={value}
-        onChange={e => onValueChange(e.target.value)}
-        placeholder="Value"
-        size="md"
-        className="flex-1"
-      />
-      <Button
-        hasIconOnly
-        renderIcon={TrashCan}
-        iconDescription="Remove"
-        kind="danger--ghost"
-        size="md"
-        onClick={onRemove}
-      />
-    </div>
-  </div>
-);
-
-// ============================================================================
 // Parameter Editor
 // ============================================================================
 
@@ -247,7 +166,6 @@ export const ParameterEditor: FC<ParameterEditorProps> = ({
   onChange,
   typeOptions = [...PARAMETER_TYPE_OPTIONS],
   defaultNewType = 'assistant',
-  inputClass,
 }) => {
   const [params, setParams] = useState<KeyValueParameter[]>(() =>
     parseJsonParameters(value),
@@ -302,34 +220,56 @@ export const ParameterEditor: FC<ParameterEditorProps> = ({
 
   return (
     <div>
-      <p className="text-xs font-medium mb-2">Parameters ({params.length})</p>
-      <div className="text-sm grid w-full">
-        {params.map(({ key, value: val }, index) => {
-          const [type, pk] = key.split('.');
-          return (
-            <ParameterRow
-              key={index}
-              type={type as ParameterType}
-              paramKey={pk}
-              value={val}
-              inputClass={inputClass}
-              typeOptions={typeOptions}
-              onTypeChange={newType => handleTypeChange(index, newType)}
-              onKeyChange={newKey => handleKeyChange(index, newKey)}
-              onValueChange={newValue => handleValueChange(index, newValue)}
-              onRemove={() => handleRemove(index)}
-            />
-          );
-        })}
+      <p className="text-xs font-medium mb-2">Mapping ({params.length})</p>
+      <table className="w-full border-collapse border border-gray-200 dark:border-gray-700 text-sm [&_input]:!border-none [&_.cds--text-input]:!border-none [&_.cds--text-input]:!outline-none [&_.cds--select-input]:!border-none [&_.cds--form-item]:!m-0">
+        <thead>
+          <tr className="bg-gray-50 dark:bg-gray-900">
+            <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-400 px-3 py-2 border-b border-r border-gray-200 dark:border-gray-700 w-1/4">Type</th>
+            <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-400 px-3 py-2 border-b border-r border-gray-200 dark:border-gray-700 w-1/4">Key</th>
+            <th className="border-b border-r border-gray-200 dark:border-gray-700 w-8" />
+            <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-400 px-3 py-2 border-b border-r border-gray-200 dark:border-gray-700 w-1/4">Value</th>
+            <th className="border-b border-gray-200 dark:border-gray-700 w-10" />
+          </tr>
+        </thead>
+        <tbody>
+          {params.map(({ key, value: val }, index) => {
+            const [type, pk] = key.split('.');
+            return (
+              <tr key={index} className="border-b border-gray-200 dark:border-gray-700 last:border-b-0">
+                <td className="border-r border-gray-200 dark:border-gray-700 p-0">
+                  <Select id={`param-type-${index}`} labelText="" hideLabel value={type} onChange={e => handleTypeChange(index, e.target.value)} size="md">
+                    {typeOptions.map(opt => (
+                      <SelectItem key={opt.value} value={opt.value} text={opt.name} />
+                    ))}
+                  </Select>
+                </td>
+                <td className="border-r border-gray-200 dark:border-gray-700 p-0">
+                  <TypeKeySelector type={type as ParameterType} value={pk} onChange={newKey => handleKeyChange(index, newKey)} />
+                </td>
+                <td className="border-r border-gray-200 dark:border-gray-700 p-0 text-center text-gray-400">
+                  <ArrowRight size={16} className="mx-auto" />
+                </td>
+                <td className="border-r border-gray-200 dark:border-gray-700 p-0">
+                  <TextInput id={`param-val-${index}`} labelText="" hideLabel value={val} onChange={e => handleValueChange(index, e.target.value)} placeholder="Value" size="md" />
+                </td>
+                <td className="p-0 text-center">
+                  <Button hasIconOnly renderIcon={TrashCan} iconDescription="Remove" kind="danger--ghost" size="sm" onClick={() => handleRemove(index)} />
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <div className="pt-4">
+        <TertiaryButton
+          size="md"
+          renderIcon={Add}
+          onClick={handleAdd}
+          className="!w-full !max-w-none"
+        >
+          Add parameter
+        </TertiaryButton>
       </div>
-      <TertiaryButton
-        size="md"
-        renderIcon={Add}
-        onClick={handleAdd}
-        className="mt-2"
-      >
-        Add parameter
-      </TertiaryButton>
     </div>
   );
 };

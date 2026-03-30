@@ -1,33 +1,36 @@
 import { FC } from 'react';
-import { ActionableNotification } from '@carbon/react';
-import { cn } from '@/utils';
+import { Information } from '@carbon/icons-react';
+import { Link } from '@carbon/react';
 
 export const DocNoticeBlock: FC<{
   children: React.ReactNode;
   docUrl: string;
   linkText?: string;
-  tone?: 'yellow' | 'blue';
 }> = ({
   children,
   docUrl,
   linkText = 'Read documentation',
-  tone = 'yellow',
 }) => {
   return (
-    <ActionableNotification
-      kind={tone === 'blue' ? 'info' : 'warning'}
-      title=""
-      subtitle={typeof children === 'string' ? children : ''}
-      actionButtonLabel={linkText}
-      onActionButtonClick={() => window.open(docUrl, '_blank')}
-      lowContrast
-      hideCloseButton
-      inline
-      className={cn('!max-w-full notice-link-style')}
+    <div
+      className="flex items-center gap-3 w-full px-4 py-3"
+      style={{
+        backgroundColor: 'var(--cds-notification-info-background-color, #edf5ff)',
+        borderLeft: '3px solid var(--cds-support-info, #0043ce)',
+      }}
     >
-      {typeof children !== 'string' && (
-        <span className="text-sm">{children}</span>
-      )}
-    </ActionableNotification>
+      <Information size={20} className="shrink-0" style={{ color: 'var(--cds-support-info, #0043ce)' }} />
+      <span className="text-sm flex-1" style={{ color: 'var(--cds-text-primary)' }}>
+        {children}
+      </span>
+      <Link
+        href={docUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="!font-semibold shrink-0"
+      >
+        {linkText}
+      </Link>
+    </div>
   );
 };

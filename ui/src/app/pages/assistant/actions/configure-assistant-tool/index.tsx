@@ -13,7 +13,6 @@ import { useCurrentCredential } from '@/hooks/use-credential';
 import { UpdateTool } from '@/app/pages/assistant/actions/configure-assistant-tool/update-assistant-tool';
 import { useConfirmDialog } from '@/app/pages/assistant/actions/hooks/use-confirmation';
 import { DocNoticeBlock } from '@/app/components/container/message/notice-block/doc-notice-block';
-import { LinkNotification } from '@/app/components/carbon/notification';
 import { PrimaryButton } from '@/app/components/carbon/button';
 import { Breadcrumb, BreadcrumbItem, Button } from '@carbon/react';
 
@@ -135,13 +134,9 @@ const ConfigureAssistantTool: FC<{ assistantId: string }> = ({
         </div>
       </div>
 
-      <LinkNotification
-        kind="info"
-        title=""
-        subtitle="Rapida Assistant enables you to call various tools and MCPs to enhance your assistant's capabilities."
-        linkText="Read documentation"
-        onLinkClick={() => window.open('https://doc.rapida.ai/assistants/tools/', '_blank')}
-      />
+      <DocNoticeBlock docUrl="https://doc.rapida.ai/assistants/tools/">
+        Rapida Assistant enables you to call various tools and MCPs to enhance your assistant's capabilities.
+      </DocNoticeBlock>
 
       <div className="overflow-auto flex flex-col flex-1">
         {axtion.tools.length > 0 ? (
@@ -151,25 +146,17 @@ const ConfigureAssistantTool: FC<{ assistantId: string }> = ({
                 className="col-span-1"
                 tool={itm}
                 key={`tool-card-${idx}`}
-                options={[
-                  {
-                    option: 'Edit tool',
-                    onActionClick: () => {
-                      navigation.goToEditAssistantTool(
-                        assistantId,
-                        itm.getId(),
-                      );
-                    },
-                  },
-                  {
-                    option: <span className="text-rose-600">Delete Tool</span>,
-                    onActionClick: () => {
-                      showDialog(() => {
-                        deleteAssistantTool(assistantId, itm.getId());
-                      });
-                    },
-                  },
-                ]}
+                onEdit={() => {
+                  navigation.goToEditAssistantTool(
+                    assistantId,
+                    itm.getId(),
+                  );
+                }}
+                onDelete={() => {
+                  showDialog(() => {
+                    deleteAssistantTool(assistantId, itm.getId());
+                  });
+                }}
               />
             ))}
           </section>

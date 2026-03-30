@@ -60,8 +60,12 @@ export const parseJsonParameters = (
  * Converts key-value parameters array to JSON string
  */
 export const stringifyParameters = (params: KeyValueParameter[]): string => {
+  const validParams = params.filter(({ key, value }) => {
+    const [type, pk] = key.split('.');
+    return type && pk && value;
+  });
   return JSON.stringify(
-    Object.fromEntries(params.map(({ key, value }) => [key, value])),
+    Object.fromEntries(validParams.map(({ key, value }) => [key, value])),
   );
 };
 

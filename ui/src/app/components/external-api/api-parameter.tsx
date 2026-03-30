@@ -1,8 +1,8 @@
-import { IBlueBorderButton, ICancelButton } from '@/app/components/form/button';
-import { Input } from '@/app/components/form/input';
-import { cn } from '@/utils';
-import { Plus, Trash2 } from 'lucide-react';
 import { FC } from 'react';
+import { TextInput } from '@/app/components/carbon/form';
+import { TertiaryButton } from '@/app/components/carbon/button';
+import { Add, TrashCan } from '@carbon/icons-react';
+import { Button } from '@carbon/react';
 
 interface Parameter {
   key: string;
@@ -11,14 +11,13 @@ interface Parameter {
 
 export const APiParameter: FC<{
   inputClass?: string;
-  initialValues: Parameter[]; // Initial values to display (optional)
-  setParameterValue: (params: Parameter[]) => void; // Callback for updated parameters
-  actionButtonLabel?: string; // Label for add button
+  initialValues: Parameter[];
+  setParameterValue: (params: Parameter[]) => void;
+  actionButtonLabel?: string;
 }> = ({
   initialValues,
   setParameterValue,
-  inputClass,
-  actionButtonLabel = 'Add New Pair',
+  actionButtonLabel = 'Add new pair',
 }) => {
   const updateParameter = (
     index: number,
@@ -30,58 +29,42 @@ export const APiParameter: FC<{
     setParameterValue(updatedParameters);
   };
 
-  const removeParameter = (index: number) => {
-    const updatedParameters = initialValues.filter((_, i) => i !== index);
-    setParameterValue(updatedParameters);
-  };
-
-  const addParameter = () => {
-    setParameterValue([...initialValues, { key: '', value: '' }]);
-  };
-
   return (
     <>
-      <div className="text-sm grid w-full">
-        {initialValues.map((parameter, index) => (
-          <div
-            key={`param-${index}`}
-            className="grid grid-cols-2 border-b border-gray-300 dark:border-gray-700"
-          >
-            <div className="flex col-span-1 items-center border-r">
-              <Input
-                value={parameter.key}
-                onChange={e => updateParameter(index, 'key', e.target.value)}
-                placeholder="Key"
-                className={cn('w-full border-none', inputClass)}
-              />
-            </div>
-            <div className="col-span-1 flex">
-              <Input
-                value={parameter.value}
-                onChange={e => updateParameter(index, 'value', e.target.value)}
-                placeholder="Value"
-                className={cn('w-full border-none', inputClass)}
-              />
-              <ICancelButton
-                className={cn(
-                  '!border-transparent hover:!border-red-600 outline-hidden cursor-pointer hover:!text-red-600 h-10',
-                  inputClass,
-                )}
-                onClick={() => removeParameter(index)}
-                type="button"
-              >
-                <Trash2 className="w-4 h-4" strokeWidth={1.5} />
-              </ICancelButton>
-            </div>
-          </div>
-        ))}
+      <table className="w-full border-collapse border border-gray-200 dark:border-gray-700 text-sm [&_input]:!border-none [&_.cds--text-input]:!border-none [&_.cds--text-input]:!outline-none [&_.cds--form-item]:!m-0">
+        <thead>
+          <tr className="bg-gray-50 dark:bg-gray-900">
+            <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-400 px-3 py-2 border-b border-r border-gray-200 dark:border-gray-700 w-1/2">Key</th>
+            <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-400 px-3 py-2 border-b border-r border-gray-200 dark:border-gray-700 w-1/2">Value</th>
+            <th className="border-b border-gray-200 dark:border-gray-700 w-10" />
+          </tr>
+        </thead>
+        <tbody>
+          {initialValues.map((parameter, index) => (
+            <tr key={index} className="border-b border-gray-200 dark:border-gray-700 last:border-b-0">
+              <td className="border-r border-gray-200 dark:border-gray-700 p-0">
+                <TextInput id={`api-param-key-${index}`} labelText="" hideLabel value={parameter.key} onChange={e => updateParameter(index, 'key', e.target.value)} placeholder="Key" size="md" />
+              </td>
+              <td className="border-r border-gray-200 dark:border-gray-700 p-0">
+                <TextInput id={`api-param-val-${index}`} labelText="" hideLabel value={parameter.value} onChange={e => updateParameter(index, 'value', e.target.value)} placeholder="Value" size="md" />
+              </td>
+              <td className="p-0 text-center">
+                <Button hasIconOnly renderIcon={TrashCan} iconDescription="Remove" kind="danger--ghost" size="sm" onClick={() => setParameterValue(initialValues.filter((_, i) => i !== index))} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="pt-4">
+        <TertiaryButton
+          size="md"
+          renderIcon={Add}
+          onClick={() => setParameterValue([...initialValues, { key: '', value: '' }])}
+          className="!w-full !max-w-none"
+        >
+          {actionButtonLabel}
+        </TertiaryButton>
       </div>
-      <IBlueBorderButton
-        onClick={addParameter}
-        className="justify-between space-x-8"
-      >
-        <span>{actionButtonLabel}</span> <Plus className="h-4 w-4 ml-1.5" />
-      </IBlueBorderButton>
     </>
   );
 };

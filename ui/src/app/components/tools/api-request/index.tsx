@@ -28,8 +28,8 @@ export const ConfigureAPIRequest: FC<ConfigureToolProps> = ({
 
   return (
     <>
-      <div className="space-y-4">
-        <div className="flex flex-col gap-8 max-w-6xl">
+      <div className="px-6 pb-6">
+        <div className="flex flex-col gap-6 max-w-6xl">
           <div className="flex space-x-2">
             <div className="relative w-40">
               <Select

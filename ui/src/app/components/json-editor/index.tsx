@@ -60,6 +60,7 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
 
   return (
     <Editor
+      width="100%"
       height={height}
       language="json"
       className={className}

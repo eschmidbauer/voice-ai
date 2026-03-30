@@ -39,7 +39,7 @@ export const ConfigureEndpoint: FC<ConfigureToolProps> = ({
   return (
     <>
       <InputGroup title="Action Definition">
-        <div className="flex flex-col gap-8 max-w-6xl">
+        <div className="flex flex-col gap-6 max-w-6xl">
           <EndpointDropdown
             className={cn('bg-light-background', inputClass)}
             currentEndpoint={getParamValue('tool.endpoint_id')}

@@ -1,6 +1,6 @@
 import { cn } from '@/utils';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown } from '@carbon/icons-react';
 import { FC, HTMLAttributes, useState } from 'react';
 
 interface InputGroupProps extends HTMLAttributes<HTMLDivElement> {
@@ -33,13 +33,13 @@ export const InputGroup: FC<InputGroupProps> = ({
           {props.title}
         </div>
         <ChevronDown
-          strokeWidth={1.5}
-          className={cn('w-4 h-4 text-gray-500 transition-transform duration-200', isExpanded && 'rotate-180')}
+          size={16}
+          className={cn('text-gray-500 transition-transform duration-200', isExpanded && 'rotate-180')}
         />
       </div>
       <AnimatePresence>
         <motion.div
-          className={cn('px-4 py-6', childClass)}
+          className={cn('px-6 py-6', childClass)}
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: 'auto' }}
           exit={{ opacity: 0, height: 0 }}

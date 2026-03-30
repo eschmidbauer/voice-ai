@@ -21,8 +21,8 @@ export const GetAPIRequestDefaultOptions = (
     [
       { key: 'tool.method', defaultValue: 'POST' },
       { key: 'tool.endpoint' },
-      { key: 'tool.headers' },
-      { key: 'tool.parameters' },
+      { key: 'tool.headers', defaultValue: '{}' },
+      { key: 'tool.parameters', defaultValue: '{"tool.argument":"argument"}' },
     ],
     ALL_KEYS,
   );

@@ -1,4 +1,4 @@
-import type { FC } from 'react';
+import type { FC, ReactNode } from 'react';
 import { useRef } from 'react';
 import { useBoolean } from 'ahooks';
 import { cn } from '@/utils';
@@ -12,6 +12,8 @@ type CodeEditorProps = {
   value: string;
   onChange: (value: string) => void;
   className?: string;
+  labelText?: ReactNode;
+  helperText?: ReactNode;
 };
 
 export const CodeEditor: FC<CodeEditorProps> = ({
@@ -19,6 +21,8 @@ export const CodeEditor: FC<CodeEditorProps> = ({
   value,
   onChange,
   className,
+  labelText,
+  helperText,
 }) => {
   const ref = useRef<HTMLDivElement>(null);
   const { isExpand, setIsExpand } = useToggleExpend(ref);
@@ -41,46 +45,60 @@ export const CodeEditor: FC<CodeEditorProps> = ({
     <div
       ref={ref}
       className={cn(
-        'group relative',
-        'border border-gray-200 dark:border-gray-700',
-        'transition-all duration-200 ease-in-out',
-        isFocus && 'border-blue-600! ring-1 ring-blue-600',
-        isExpand && 'fixed top-0 bottom-0 right-0 left-0 h-full z-50 m-0! p-0!',
+        'cds--form-item w-full',
+        isExpand && 'fixed inset-0 z-50 bg-[var(--cds-background)] flex flex-col',
       )}
     >
-      <div className="flex items-center absolute right-1 top-1 z-20 invisible group-hover:visible">
-        <Button
-          hasIconOnly
-          renderIcon={isChecked ? Checkmark : Copy}
-          iconDescription="Copy"
-          kind="ghost"
-          size="sm"
-          onClick={() => copyItem(value)}
-          tabIndex={-1}
-        />
-        <Button
-          hasIconOnly
-          renderIcon={isExpand ? Minimize : Maximize}
-          iconDescription={isExpand ? 'Minimize' : 'Maximize'}
-          kind="ghost"
-          size="sm"
-          onClick={() => setIsExpand(!isExpand)}
-          tabIndex={-1}
+      {labelText && !isExpand && (
+        <label className="cds--label">{labelText}</label>
+      )}
+      <div
+        className={cn(
+          'relative group w-full',
+          'bg-[var(--cds-field)] border-b-2',
+          isFocus
+            ? 'border-b-[var(--cds-focus)]'
+            : 'border-b-[var(--cds-border-strong)]',
+          isExpand ? 'flex-1 min-h-0' : 'min-h-[200px]',
+        )}
+      >
+        <div className="flex items-center absolute right-0 top-0 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
+          <Button
+            hasIconOnly
+            renderIcon={isChecked ? Checkmark : Copy}
+            iconDescription="Copy"
+            kind="ghost"
+            size="sm"
+            onClick={() => copyItem(value)}
+            tabIndex={-1}
+          />
+          <Button
+            hasIconOnly
+            renderIcon={isExpand ? Minimize : Maximize}
+            iconDescription={isExpand ? 'Minimize' : 'Maximize'}
+            kind="ghost"
+            size="sm"
+            onClick={() => setIsExpand(!isExpand)}
+            tabIndex={-1}
+          />
+        </div>
+
+        <JsonEditor
+          className={cn(
+            'w-full h-full',
+            className,
+          )}
+          height="100%"
+          placeholder={placeholder}
+          value={value}
+          onFocus={setFocus}
+          onChange={handlePromptChange}
+          onBlur={setBlur}
         />
       </div>
-
-      <JsonEditor
-        className={cn(
-          'min-h-52 overflow-auto p-2',
-          className,
-          isExpand && 'h-screen p-4',
-        )}
-        placeholder={placeholder}
-        value={value}
-        onFocus={setFocus}
-        onChange={handlePromptChange}
-        onBlur={setBlur}
-      />
+      {helperText && (
+        <div className="cds--form__helper-text">{helperText}</div>
+      )}
     </div>
   );
 };

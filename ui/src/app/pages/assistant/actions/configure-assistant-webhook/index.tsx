@@ -2,27 +2,36 @@ import React, { FC, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useGlobalNavigation } from '@/hooks/use-global-navigator';
 import { toHumanReadableDateTime } from '@/utils/date';
-import { Plus, RotateCw } from 'lucide-react';
 import { useCurrentCredential } from '@/hooks/use-credential';
 import { useRapidaStore } from '@/hooks';
 import { SectionLoader } from '@/app/components/loader/section-loader';
-import { BluredWrapper } from '@/app/components/wrapper/blured-wrapper';
-import { SearchIconInput } from '@/app/components/form/input/IconInput';
-import { TablePagination } from '@/app/components/base/tables/table-pagination';
-import { TableSection } from '@/app/components/sections/table-section';
-import { ScrollableResizableTable } from '@/app/components/data-table';
-import { TableRow } from '@/app/components/base/tables/table-row';
-import { TableCell } from '@/app/components/base/tables/table-cell';
-import { StatusIndicator } from '@/app/components/indicators/status';
 import { CreateAssistantWebhook } from './create-assistant-webhook';
-import { IButton } from '@/app/components/form/button';
 import toast from 'react-hot-toast/headless';
-import { CardOptionMenu } from '@/app/components/menu';
 import { ActionableEmptyMessage } from '@/app/components/container/message/actionable-empty-message';
 import { UpdateAssistantWebhook } from '@/app/pages/assistant/actions/configure-assistant-webhook/update-assistant-webhook';
 import { useAssistantWebhookPageStore } from '@/app/pages/assistant/actions/store/use-webhook-page-store';
-import { PaginationButtonBlock } from '@/app/components/blocks/pagination-button-block';
-import { cn } from '@/utils';
+import { CarbonStatusIndicator } from '@/app/components/carbon/status-indicator';
+import {
+  OverflowMenu,
+  OverflowMenuItem,
+} from '@/app/components/carbon/overflow-menu';
+import { PrimaryButton } from '@/app/components/carbon/button';
+import { Pagination } from '@/app/components/carbon/pagination';
+import { Add, Renew } from '@carbon/icons-react';
+import { Tag } from '@carbon/react';
+import {
+  Table,
+  TableHead,
+  TableRow,
+  TableHeader,
+  TableBody,
+  TableCell,
+  TableToolbar,
+  TableToolbarContent,
+  TableToolbarSearch,
+  Button,
+} from '@carbon/react';
+import { TableSection } from '@/app/components/sections/table-section';
 
 export function ConfigureAssistantWebhookPage() {
   const { assistantId } = useParams();
@@ -46,6 +55,17 @@ export function UpdateAssistantWebhookPage() {
     <>{assistantId && <UpdateAssistantWebhook assistantId={assistantId} />}</>
   );
 }
+
+const headers = [
+  { key: 'httpUrl', header: 'Endpoint' },
+  { key: 'events', header: 'Events' },
+  { key: 'maxRetryCount', header: 'Retries' },
+  { key: 'timeoutSeconds', header: 'Timeout (s)' },
+  { key: 'executionPriority', header: 'Priority' },
+  { key: 'status', header: 'Status' },
+  { key: 'created_date', header: 'Created' },
+  { key: 'actions', header: '' },
+];
 
 const ConfigureAssistantWebhook: FC<{ assistantId: string }> = ({
   assistantId,
@@ -75,6 +95,7 @@ const ConfigureAssistantWebhook: FC<{ assistantId: string }> = ({
       },
     );
   };
+
   const deleteAssistantWebhook = (assistantId: string, webhookId: string) => {
     showLoader('block');
     axtion.deleteAssistantWebhook(
@@ -100,122 +121,103 @@ const ConfigureAssistantWebhook: FC<{ assistantId: string }> = ({
       </div>
     );
   }
+
   return (
-    <div className="h-full flex flex-col flex-1  bg-white dark:bg-gray-900">
-      <BluredWrapper className="border-t-0 p-0">
-        <div className="flex space-x-2">
-          <SearchIconInput className="bg-light-background" />
-        </div>
-        <PaginationButtonBlock>
-          <TablePagination
-            className="py-0"
-            columns={axtion.columns}
-            currentPage={axtion.page}
-            onChangeCurrentPage={axtion.setPage}
-            totalItem={axtion.totalCount}
-            pageSize={axtion.pageSize}
-            onChangePageSize={axtion.setPageSize}
-            onChangeColumns={axtion.setColumns}
+    <div className="h-full flex flex-col flex-1">
+      <TableToolbar>
+        <TableToolbarContent>
+          <TableToolbarSearch placeholder="Search webhooks..." />
+          <Button
+            hasIconOnly
+            renderIcon={Renew}
+            iconDescription="Refresh"
+            kind="ghost"
+            onClick={get}
+            tooltipPosition="bottom"
           />
-          <IButton onClick={get}>
-            <RotateCw className="w-4 h-4" strokeWidth={1.5} />
-          </IButton>
-          <button
-            type="button"
+          <PrimaryButton
+            size="md"
+            renderIcon={Add}
             onClick={() => navigation.goToCreateAssistantWebhook(assistantId)}
-            className="flex items-center gap-2 px-4 text-sm text-white bg-primary hover:bg-primary/90 transition-colors whitespace-nowrap"
           >
             Create new webhook
-            <Plus className="w-4 h-4" strokeWidth={1.5} />
-          </button>
-        </PaginationButtonBlock>
-      </BluredWrapper>
+          </PrimaryButton>
+        </TableToolbarContent>
+      </TableToolbar>
       <TableSection>
         {axtion.webhooks.length > 0 ? (
-          <ScrollableResizableTable
-            isActionable={false}
-            isOptionable={true}
-            clms={axtion.columns.filter(x => x.visible)}
-          >
-            {axtion.webhooks.map((row, idx) => (
-              <TableRow key={idx} data-id={row.getId()}>
-                {axtion.visibleColumn('id') && (
-                  <TableCell className="">{row.getId()}</TableCell>
-                )}
-
-                {axtion.visibleColumn('httpUrl') && (
-                  <TableCell className="truncate">
-                    {row.getHttpmethod()}:{row.getHttpurl()}
-                  </TableCell>
-                )}
-                {axtion.visibleColumn('events') && (
-                  <TableCell className="gap">
-                    <div className="flex flex-wrap gap-2">
-                      {row.getAssistanteventsList().map((event, index) => (
-                        <span
-                          key={index}
-                          className="px-2 py-1 text-sm font-mono bg-blue-600/10 text-blue-600"
-                        >
-                          {event}
-                        </span>
-                      ))}
-                    </div>
-                  </TableCell>
-                )}
-                {axtion.visibleColumn('maxRetryCount') && (
-                  <TableCell className="">{row.getRetrycount()}</TableCell>
-                )}
-
-                {axtion.visibleColumn('timeoutSeconds') && (
-                  <TableCell className="">{row.getTimeoutsecond()}</TableCell>
-                )}
-                {axtion.visibleColumn('executionPriority') && (
-                  <TableCell>{row.getExecutionpriority()}</TableCell>
-                )}
-                {axtion.visibleColumn('status') && (
-                  <TableCell className="">
-                    <StatusIndicator state={row.getStatus()} />
-                  </TableCell>
-                )}
-                {axtion.visibleColumn('created_date') && (
-                  <TableCell>
-                    {row.getCreateddate() &&
-                      toHumanReadableDateTime(row.getCreateddate()!)}
-                  </TableCell>
-                )}
-                <TableCell>
-                  <CardOptionMenu
-                    classNames={cn('w-9 h-9')}
-                    options={[
-                      {
-                        option: (
-                          <div className="flex items-center text-sm">
-                            <span>Update webhook</span>
-                          </div>
-                        ),
-                        onActionClick: () => {
-                          navigation.goToEditAssistantWebhook(
-                            assistantId,
-                            row.getId(),
-                          );
-                        },
-                      },
-                      {
-                        option: (
-                          <div className="flex items-center text-sm justify-between">
-                            <span>Delete webhook</span>
-                          </div>
-                        ),
-                        onActionClick: () => {
-                          deleteAssistantWebhook(assistantId, row.getId());
-                        },
-                      },
-                    ]}
-                  />
-                </TableCell>
-              </TableRow>
-            ))}
-          </ScrollableResizableTable>
+          <>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  {headers.map(h => (
+                    <TableHeader key={h.key}>{h.header}</TableHeader>
+                  ))}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {axtion.webhooks.map(row => (
+                  <TableRow key={row.getId()}>
+                    <TableCell>
+                      <span className="font-mono text-xs">
+                        {row.getHttpmethod()}
+                      </span>{' '}
+                      <span className="truncate">{row.getHttpurl()}</span>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {row.getAssistanteventsList().map((event, index) => (
+                          <Tag key={index} type="blue" size="sm">
+                            {event}
+                          </Tag>
+                        ))}
+                      </div>
+                    </TableCell>
+                    <TableCell>{row.getRetrycount()}</TableCell>
+                    <TableCell>{row.getTimeoutsecond()}</TableCell>
+                    <TableCell>{row.getExecutionpriority()}</TableCell>
+                    <TableCell>
+                      <CarbonStatusIndicator state={row.getStatus()} />
+                    </TableCell>
+                    <TableCell>
+                      {row.getCreateddate() &&
+                        toHumanReadableDateTime(row.getCreateddate()!)}
+                    </TableCell>
+                    <TableCell>
+                      <OverflowMenu size="sm" flipped>
+                        <OverflowMenuItem
+                          itemText="Update webhook"
+                          onClick={() =>
+                            navigation.goToEditAssistantWebhook(
+                              assistantId,
+                              row.getId(),
+                            )
+                          }
+                        />
+                        <OverflowMenuItem
+                          itemText="Delete webhook"
+                          isDelete
+                          onClick={() =>
+                            deleteAssistantWebhook(assistantId, row.getId())
+                          }
+                        />
+                      </OverflowMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <Pagination
+              totalItems={axtion.totalCount}
+              page={axtion.page}
+              pageSize={axtion.pageSize}
+              pageSizes={[10, 20, 50]}
+              onChange={({ page: newPage, pageSize: newSize }) => {
+                axtion.setPage(newPage);
+                if (newSize !== axtion.pageSize) axtion.setPageSize(newSize);
+              }}
+            />
+          </>
         ) : (
           <ActionableEmptyMessage
             centered
