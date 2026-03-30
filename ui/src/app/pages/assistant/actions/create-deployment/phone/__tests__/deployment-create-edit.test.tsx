@@ -13,6 +13,10 @@ let mockParams: Record<string, string | undefined> = {
   assistantId: 'assistant-1',
 };
 
+const mockValidateTelephonyOptions = jest.fn();
+const mockValidateSpeechToTextIfInvalid = jest.fn();
+const mockValidateTextToSpeechIfInvalid = jest.fn();
+
 jest.mock('@rapidaai/react', () => {
   class ConnectionConfig {
     static WithDebugger(config: unknown) {
@@ -176,18 +180,21 @@ jest.mock('@/app/pages/assistant/actions/create-deployment/commons/configure-aud
 
 jest.mock('@/app/components/providers/telephony', () => ({
   TelephonyProvider: () => <div>telephony</div>,
-  ValidateTelephonyOptions: () => true,
+  ValidateTelephonyOptions: (...args: any[]) =>
+    mockValidateTelephonyOptions(...args),
 }));
 
 jest.mock('@/app/components/providers/speech-to-text/provider', () => ({
   GetDefaultMicrophoneConfig: () => [],
   GetDefaultSpeechToTextIfInvalid: () => [],
-  ValidateSpeechToTextIfInvalid: () => undefined,
+  ValidateSpeechToTextIfInvalid: (...args: any[]) =>
+    mockValidateSpeechToTextIfInvalid(...args),
 }));
 jest.mock('@/app/components/providers/text-to-speech/provider', () => ({
   GetDefaultSpeakerConfig: () => [],
   GetDefaultTextToSpeechIfInvalid: () => [],
-  ValidateTextToSpeechIfInvalid: () => undefined,
+  ValidateTextToSpeechIfInvalid: (...args: any[]) =>
+    mockValidateTextToSpeechIfInvalid(...args),
 }));
 jest.mock('@/app/components/providers/text-to-speech/cartesia', () => ({
   GetCartesiaDefaultOptions: () => [],
@@ -201,6 +208,9 @@ jest.mock('@/app/components/form/button', () => ({
 describe('Phone deployment create and edit flows', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockValidateTelephonyOptions.mockReturnValue(true);
+    mockValidateSpeechToTextIfInvalid.mockReturnValue(undefined);
+    mockValidateTextToSpeechIfInvalid.mockReturnValue(undefined);
 
     (CreateAssistantPhoneDeployment as jest.Mock).mockResolvedValue({
       getData: () => ({ id: 'dep-1' }),
@@ -269,5 +279,63 @@ describe('Phone deployment create and edit flows', () => {
     expect(deployment.getPhoneprovidername()).toBe('twilio');
     expect(deployment.getInputaudio()).toBeDefined();
     expect(deployment.getOutputaudio()).toBeDefined();
+  });
+
+  it('blocks moving forward when telephony configuration is invalid', async () => {
+    mockValidateTelephonyOptions.mockReturnValue(false);
+    (GetAssistantPhoneDeployment as jest.Mock).mockResolvedValue({
+      getData: () => null,
+    });
+
+    render(<ConfigureAssistantCallDeploymentPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+    expect(
+      screen.getByText('Please provide a valid telephony configuration.'),
+    ).toBeInTheDocument();
+    expect(mockValidateTelephonyOptions).toHaveBeenCalledTimes(1);
+  });
+
+  it('blocks voice-input step when STT provider options are invalid', async () => {
+    mockValidateSpeechToTextIfInvalid.mockReturnValue(
+      'Please configure STT provider credentials.',
+    );
+    (GetAssistantPhoneDeployment as jest.Mock).mockResolvedValue({
+      getData: () => null,
+    });
+
+    render(<ConfigureAssistantCallDeploymentPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+    expect(
+      screen.getByText('Please configure STT provider credentials.'),
+    ).toBeInTheDocument();
+    expect(mockValidateSpeechToTextIfInvalid).toHaveBeenCalled();
+  });
+
+  it('blocks deploy when TTS configuration is invalid', async () => {
+    mockValidateTextToSpeechIfInvalid.mockReturnValue(
+      'Please configure TTS provider credentials.',
+    );
+    (GetAssistantPhoneDeployment as jest.Mock).mockResolvedValue({
+      getData: () => null,
+    });
+
+    render(<ConfigureAssistantCallDeploymentPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Deploy Phone' }));
+
+    expect(
+      screen.getByText('Please configure TTS provider credentials.'),
+    ).toBeInTheDocument();
+    expect(CreateAssistantPhoneDeployment).not.toHaveBeenCalled();
+    expect(mockValidateTextToSpeechIfInvalid).toHaveBeenCalled();
   });
 });

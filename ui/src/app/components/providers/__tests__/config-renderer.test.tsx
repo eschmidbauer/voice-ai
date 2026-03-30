@@ -129,6 +129,152 @@ jest.mock('@/app/components/dropdown/custom-value-dropdown', () => {
   };
 });
 
+jest.mock('@/app/components/carbon/form', () => {
+  const React = require('react');
+  return {
+    TextInput: ({
+      id,
+      labelText,
+      value,
+      onChange,
+      placeholder,
+      type = 'text',
+      helperText,
+    }: any) =>
+      React.createElement(
+        'div',
+        null,
+        labelText ? React.createElement('label', { htmlFor: id }, labelText) : null,
+        React.createElement('input', {
+          id,
+          value: value ?? '',
+          onChange,
+          placeholder,
+          type,
+        }),
+        helperText ? React.createElement('p', null, helperText) : null,
+      ),
+    TextArea: ({ id, labelText, value, onChange, placeholder, helperText }: any) =>
+      React.createElement(
+        'div',
+        null,
+        labelText ? React.createElement('label', { htmlFor: id }, labelText) : null,
+        React.createElement('textarea', {
+          id,
+          value: value ?? '',
+          onChange,
+          placeholder,
+        }),
+        helperText ? React.createElement('p', null, helperText) : null,
+      ),
+  };
+});
+
+jest.mock('@carbon/icons-react', () => ({
+  Settings: () => null,
+  Close: () => null,
+  Add: () => null,
+  TrashCan: () => null,
+}));
+
+jest.mock('@carbon/react', () => {
+  const React = require('react');
+  const getValue = (item: any) =>
+    item?.id ?? item?.code ?? item?.value ?? item?.name ?? '';
+
+  return {
+    Dropdown: ({ id, titleText, label, items = [], selectedItem, onChange }: any) =>
+      React.createElement(
+        'div',
+        null,
+        titleText ? React.createElement('span', null, titleText) : null,
+        React.createElement(
+          'select',
+          {
+            id,
+            role: 'combobox',
+            value: getValue(selectedItem),
+            onChange: (e: any) => {
+              const item = items.find((i: any) => String(getValue(i)) === e.target.value);
+              onChange?.({ selectedItem: item || null });
+            },
+          },
+          React.createElement('option', { value: '' }, label || 'Select'),
+          ...items.map((item: any) =>
+            React.createElement(
+              'option',
+              { key: String(getValue(item)), value: String(getValue(item)) },
+              item?.name || String(getValue(item)),
+            ),
+          ),
+        ),
+      ),
+    ComboBox: ({ id, titleText, items = [], selectedItem, onChange }: any) =>
+      React.createElement(
+        'div',
+        null,
+        titleText ? React.createElement('span', null, titleText) : null,
+        React.createElement(
+          'select',
+          {
+            id,
+            role: 'combobox',
+            value: getValue(selectedItem),
+            onChange: (e: any) => {
+              const item = items.find((i: any) => String(getValue(i)) === e.target.value);
+              onChange?.({ selectedItem: item || null });
+            },
+          },
+          React.createElement('option', { value: '' }, 'Select'),
+          ...items.map((item: any) =>
+            React.createElement(
+              'option',
+              { key: String(getValue(item)), value: String(getValue(item)) },
+              item?.name || String(getValue(item)),
+            ),
+          ),
+        ),
+      ),
+    Slider: ({ id, value, onChange, labelText }: any) =>
+      React.createElement(
+        'div',
+        null,
+        labelText ? React.createElement('label', { htmlFor: id }, labelText) : null,
+        React.createElement('input', {
+          id,
+          type: 'range',
+          role: 'slider',
+          value: value ?? 0,
+          onChange: (e: any) => onChange?.({ value: Number(e.target.value) }),
+        }),
+      ),
+    Select: ({ id, labelText, value, onChange, children }: any) =>
+      React.createElement(
+        'div',
+        null,
+        labelText ? React.createElement('label', { htmlFor: id }, labelText) : null,
+        React.createElement('select', { id, value, onChange }, children),
+      ),
+    SelectItem: ({ value, text }: any) =>
+      React.createElement('option', { value }, text),
+    NumberInput: ({ id, value, onChange }: any) =>
+      React.createElement('input', {
+        id,
+        type: 'number',
+        value,
+        onChange: (e: any) => onChange?.(e, { value: e.target.value }),
+      }),
+    Modal: ({ children, open }: any) =>
+      open ? React.createElement('div', null, children) : null,
+    ComposedModal: ({ children, open }: any) =>
+      open ? React.createElement('div', null, children) : null,
+    ModalHeader: ({ title }: any) => React.createElement('div', null, title),
+    ModalBody: ({ children }: any) => React.createElement('div', null, children),
+    ModalFooter: ({ children }: any) => React.createElement('div', null, children),
+    Button: ({ children, ...props }: any) => React.createElement('button', props, children),
+  };
+});
+
 // Mock the loadProviderData to return controlled test data
 jest.mock('@/providers/config-loader', () => {
   const actual = jest.requireActual('@/providers/config-loader');
@@ -312,7 +458,7 @@ describe('ConfigRenderer', () => {
       expect(screen.getByText('Set the confidence threshold.')).toBeInTheDocument();
     });
 
-    it('renders number input alongside slider with current value', () => {
+    it('renders slider control with current value', () => {
       const params = [createMetadata('listen.threshold', '0.5')];
       render(
         <ConfigRenderer
@@ -324,12 +470,13 @@ describe('ConfigRenderer', () => {
         />,
       );
 
-      const numberInput = screen.getByRole('spinbutton');
-      expect(numberInput).toBeInTheDocument();
-      expect(numberInput).toHaveAttribute('type', 'number');
+      const slider = screen.getByRole('slider') as HTMLInputElement;
+      expect(slider).toBeInTheDocument();
+      expect(slider).toHaveAttribute('type', 'range');
+      expect(slider.value).toBe('0.5');
     });
 
-    it('calls onParameterChange when number input changes', () => {
+    it('calls onParameterChange when slider value changes', () => {
       const params = [createMetadata('listen.threshold', '0.5')];
       render(
         <ConfigRenderer
@@ -341,8 +488,8 @@ describe('ConfigRenderer', () => {
         />,
       );
 
-      const numberInput = screen.getByRole('spinbutton');
-      fireEvent.change(numberInput, { target: { value: '0.7' } });
+      const slider = screen.getByRole('slider');
+      fireEvent.change(slider, { target: { value: '0.7' } });
       expect(mockOnChange).toHaveBeenCalledTimes(1);
 
       const updatedParams = mockOnChange.mock.calls[0][0] as Metadata[];

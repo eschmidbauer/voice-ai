@@ -49,6 +49,7 @@ jest.mock('@/hooks/use-credential', () => ({
 }));
 
 jest.mock('@/utils', () => ({
+  cn: (...inputs: any[]) => inputs.filter(Boolean).join(' '),
   randomMeaningfullName: () => 'analysis-default',
 }));
 
@@ -94,12 +95,60 @@ jest.mock('@/app/components/form/button', () => ({
 }));
 
 jest.mock('@/app/components/carbon/button', () => ({
-  PrimaryButton: ({ children, ...props }: any) => <button {...props}>{children}</button>,
-  SecondaryButton: ({ children, ...props }: any) => <button {...props}>{children}</button>,
+  PrimaryButton: ({ children, renderIcon: _renderIcon, ...props }: any) => (
+    <button {...props}>{children}</button>
+  ),
+  SecondaryButton: ({ children, renderIcon: _renderIcon, ...props }: any) => (
+    <button {...props}>{children}</button>
+  ),
+  TertiaryButton: ({ children, renderIcon: _renderIcon, ...props }: any) => (
+    <button {...props}>{children}</button>
+  ),
+}));
+
+jest.mock('@/app/components/carbon/form', () => ({
+  Stack: ({ children }: any) => <div>{children}</div>,
+  TextInput: ({ id, labelText, value, onChange, type = 'text', ...rest }: any) => (
+    <div>
+      {labelText ? <label htmlFor={id}>{labelText}</label> : null}
+      <input id={id} value={value ?? ''} onChange={onChange} type={type} {...rest} />
+    </div>
+  ),
+  TextArea: ({ id, labelText, value, onChange, ...rest }: any) => (
+    <div>
+      {labelText ? <label htmlFor={id}>{labelText}</label> : null}
+      <textarea id={id} value={value ?? ''} onChange={onChange} {...rest} />
+    </div>
+  ),
 }));
 
 jest.mock('@carbon/react', () => ({
   ButtonSet: ({ children }: any) => <div>{children}</div>,
+  Select: ({ id, value, onChange, children, labelText, hideLabel }: any) => (
+    <div>
+      {!hideLabel && labelText ? <label htmlFor={id}>{labelText}</label> : null}
+      <select id={id} value={value} onChange={onChange}>
+        {children}
+      </select>
+    </div>
+  ),
+  SelectItem: ({ value, text }: any) => <option value={value}>{text}</option>,
+  Button: ({ children, iconDescription, ...props }: any) => (
+    <button aria-label={iconDescription} {...props}>
+      {children}
+    </button>
+  ),
+  NumberInput: ({ id, value, onChange, label, hideLabel }: any) => (
+    <div>
+      {!hideLabel && label ? <label htmlFor={id}>{label}</label> : null}
+      <input
+        id={id}
+        type="number"
+        value={value ?? ''}
+        onChange={e => onChange?.(e, { value: e.target.value })}
+      />
+    </div>
+  ),
 }));
 
 jest.mock('@/app/components/form/fieldset', () => ({
@@ -181,11 +230,11 @@ describe('UpdateAssistantAnalysis', () => {
       expect(GetAssistantAnalysis).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'trash' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
 
     expect(
-      screen.getByText('Please provide one or more parameters which can be passed as data to your server.'),
+      screen.getByText('Please provide one or more parameters.'),
     ).toBeInTheDocument();
   });
 

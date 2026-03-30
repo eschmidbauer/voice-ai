@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 
 import { ForgotPasswordPage } from '@/app/pages/authentication/forgot-password';
@@ -7,13 +7,16 @@ import { CreateEndpointPage } from '@/app/pages/endpoint/actions/create-endpoint
 import { CreateNewVersionEndpointPage } from '@/app/pages/endpoint/actions/create-endpoint-version';
 import { CreateAssistantPage } from '@/app/pages/assistant/actions/create-assistant';
 import { CreateVersionAssistantPage } from '@/app/pages/assistant/actions/create-assistant-version';
-import { ForgotPassword } from '@rapidaai/react';
+import { ForgotPassword, GetAssistant } from '@rapidaai/react';
 
 let mockParams: Record<string, string | undefined> = {};
 const mockNavigate = jest.fn();
 const mockShowLoader = jest.fn();
 const mockHideLoader = jest.fn();
 const mockConfigPrompt = jest.fn();
+const mockTextProvider = jest.fn();
+const mockValidateTextProviderDefaultOptions = jest.fn();
+const mockGetDefaultTextProviderConfigIfInvalid = jest.fn();
 
 jest.mock('@rapidaai/react', () => {
   class ConnectionConfig {
@@ -152,9 +155,14 @@ jest.mock('@/app/components/form/tab-form', () => ({
 }));
 
 jest.mock('@/app/components/providers/text', () => ({
-  GetDefaultTextProviderConfigIfInvalid: () => [],
-  ValidateTextProviderDefaultOptions: () => undefined,
-  TextProvider: () => null,
+  GetDefaultTextProviderConfigIfInvalid: (...args: unknown[]) =>
+    mockGetDefaultTextProviderConfigIfInvalid(...args),
+  ValidateTextProviderDefaultOptions: (...args: unknown[]) =>
+    mockValidateTextProviderDefaultOptions(...args),
+  TextProvider: (props: any) => {
+    mockTextProvider(props);
+    return null;
+  },
 }));
 
 jest.mock('@/app/components/configuration/config-prompt', () => ({
@@ -217,6 +225,9 @@ jest.mock('@/app/components/container/message/notice-block', () => ({
 jest.mock('@/app/components/container/message/notice-block/doc-notice-block', () => ({
   DocNoticeBlock: ({ children }: any) => <div>{children}</div>,
 }));
+jest.mock('@/app/components/container/message/actionable-empty-message', () => ({
+  ActionableEmptyMessage: () => null,
+}));
 
 jest.mock('@/app/components/blocks/section-divider', () => ({
   SectionDivider: () => null,
@@ -240,11 +251,35 @@ jest.mock('@/app/components/heading/action-heading/form-action-heading', () => (
   FormActionHeading: ({ heading }: any) => <h2>{heading}</h2>,
 }));
 
+const getLatestConfigPromptProps = () =>
+  mockConfigPrompt.mock.calls[mockConfigPrompt.mock.calls.length - 1]?.[0];
+
+const getLatestTextProviderProps = () =>
+  mockTextProvider.mock.calls[mockTextProvider.mock.calls.length - 1]?.[0];
+
 describe('Requested create/update flow pages', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockParams = {};
     mockConfigPrompt.mockClear();
+    mockTextProvider.mockClear();
+    mockValidateTextProviderDefaultOptions.mockReset();
+    mockGetDefaultTextProviderConfigIfInvalid.mockReset();
+    mockValidateTextProviderDefaultOptions.mockReturnValue(undefined);
+    mockGetDefaultTextProviderConfigIfInvalid.mockImplementation(
+      (_provider: string, current: unknown[] = []) => current,
+    );
+
+    (GetAssistant as jest.Mock).mockResolvedValue({
+      getSuccess: () => true,
+      getData: () => ({
+        getAssistantprovidermodel: () => ({
+          getTemplate: () => ({}),
+          getModelprovidername: () => 'azure-foundry',
+          getAssistantmodeloptionsList: () => [],
+        }),
+      }),
+    });
   });
 
   it('forgot password shows success message on success callback', async () => {
@@ -271,15 +306,92 @@ describe('Requested create/update flow pages', () => {
     ).toBeInTheDocument();
   });
 
+  it('create endpoint moves to define step after prompt variable edit', () => {
+    render(<CreateEndpointPage />);
+
+    const endpointPromptProps = getLatestConfigPromptProps();
+    act(() => {
+      endpointPromptProps.onChange({
+        prompt: [{ role: 'system', content: 'Hi {{name}}' }],
+        variables: [{ name: 'name', type: 'string', defaultvalue: '' }],
+      });
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Configure instruction' }));
+
+    expect(screen.queryByText('Please define at least one variable.')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create endpoint' })).toBeInTheDocument();
+  });
+
+  it('create endpoint validates using changed provider', () => {
+    render(<CreateEndpointPage />);
+
+    const endpointTextProviderProps = getLatestTextProviderProps();
+    act(() => {
+      endpointTextProviderProps.onChangeProvider('openai');
+    });
+
+    const endpointPromptProps = getLatestConfigPromptProps();
+    act(() => {
+      endpointPromptProps.onChange({
+        prompt: [{ role: 'system', content: 'Hello {{question}}' }],
+        variables: [{ name: 'question', type: 'string', defaultvalue: '' }],
+      });
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Configure instruction' }));
+
+    expect(mockValidateTextProviderDefaultOptions).toHaveBeenCalled();
+    expect(mockValidateTextProviderDefaultOptions.mock.calls.at(-1)?.[0]).toBe('openai');
+  });
+
   it('create endpoint version blocks continue when variables are missing', () => {
     render(<CreateNewVersionEndpointPage />);
     fireEvent.click(screen.getByRole('button', { name: 'Configure instruction' }));
     expect(screen.getByText('Please define at least one variable.')).toBeInTheDocument();
   });
 
+  it('create endpoint version moves to commit step after prompt variable edit', () => {
+    render(<CreateNewVersionEndpointPage />);
+
+    const endpointVersionPromptProps = getLatestConfigPromptProps();
+    act(() => {
+      endpointVersionPromptProps.onChange({
+        prompt: [{ role: 'system', content: 'Hi {{name}}' }],
+        variables: [{ name: 'name', type: 'string', defaultvalue: '' }],
+      });
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Configure instruction' }));
+
+    expect(screen.getByText('Version note')).toBeInTheDocument();
+  });
+
+  it('create endpoint version validates using changed provider', () => {
+    render(<CreateNewVersionEndpointPage />);
+
+    const endpointVersionTextProviderProps = getLatestTextProviderProps();
+    act(() => {
+      endpointVersionTextProviderProps.onChangeProvider('anthropic');
+    });
+
+    const endpointVersionPromptProps = getLatestConfigPromptProps();
+    act(() => {
+      endpointVersionPromptProps.onChange({
+        prompt: [{ role: 'system', content: 'Hello {{topic}}' }],
+        variables: [{ name: 'topic', type: 'string', defaultvalue: '' }],
+      });
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Configure instruction' }));
+
+    expect(mockValidateTextProviderDefaultOptions).toHaveBeenCalled();
+    expect(mockValidateTextProviderDefaultOptions.mock.calls.at(-1)?.[0]).toBe('anthropic');
+  });
+
   it('create assistant blocks continue when prompt content is empty', () => {
     render(<CreateAssistantPage />);
-    const assistantConfigPrompt = mockConfigPrompt.mock.calls[0]?.[0];
+    const assistantConfigPrompt = getLatestConfigPromptProps();
     expect(assistantConfigPrompt.showRuntimeReplacementHint).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     expect(
@@ -287,17 +399,94 @@ describe('Requested create/update flow pages', () => {
     ).toBeInTheDocument();
   });
 
-  it('create endpoint does not attach assistant runtime argument hints', () => {
-    render(<CreateEndpointPage />);
-    const endpointConfigPrompt = mockConfigPrompt.mock.calls[0]?.[0];
-    expect(endpointConfigPrompt.showRuntimeReplacementHint).toBeUndefined();
+  it('create assistant moves forward after prompt content edit', () => {
+    render(<CreateAssistantPage />);
+
+    const assistantConfigPrompt = getLatestConfigPromptProps();
+    act(() => {
+      assistantConfigPrompt.onChange({
+        prompt: [{ role: 'system', content: 'You are helper {{name}}' }],
+        variables: [{ name: 'name', type: 'string', defaultvalue: '' }],
+      });
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+
+    expect(screen.getByRole('button', { name: 'Skip for now' })).toBeInTheDocument();
   });
 
+  it('create assistant validates using changed provider', () => {
+    render(<CreateAssistantPage />);
+
+    const assistantTextProviderProps = getLatestTextProviderProps();
+    act(() => {
+      assistantTextProviderProps.onChangeProvider('openai');
+    });
+
+    const assistantConfigPrompt = getLatestConfigPromptProps();
+    act(() => {
+      assistantConfigPrompt.onChange({
+        prompt: [{ role: 'system', content: 'Ready {{name}}' }],
+        variables: [{ name: 'name', type: 'string', defaultvalue: '' }],
+      });
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+
+    expect(mockValidateTextProviderDefaultOptions).toHaveBeenCalled();
+    expect(mockValidateTextProviderDefaultOptions.mock.calls.at(-1)?.[0]).toBe('openai');
+  });
+
+  it('create endpoint does not attach assistant runtime argument hints', () => {
+    render(<CreateEndpointPage />);
+    const endpointConfigPrompt = getLatestConfigPromptProps();
+    expect(endpointConfigPrompt.showRuntimeReplacementHint).toBeUndefined();
+  });
 
   it('create assistant version shows unavailable state when assistantId is missing', () => {
     mockParams = {};
     render(<CreateVersionAssistantPage />);
     expect(screen.getByText('403')).toBeInTheDocument();
     expect(screen.getByText('Assistant not available')).toBeInTheDocument();
+  });
+
+  it('create assistant version moves to commit step after prompt edit', () => {
+    mockParams = { assistantId: 'a-1' };
+    render(<CreateVersionAssistantPage />);
+
+    const assistantVersionConfigPrompt = getLatestConfigPromptProps();
+    act(() => {
+      assistantVersionConfigPrompt.onChange({
+        prompt: [{ role: 'system', content: 'Edited {{context}}' }],
+        variables: [{ name: 'context', type: 'string', defaultvalue: '' }],
+      });
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+
+    expect(screen.getByText('Version note')).toBeInTheDocument();
+  });
+
+  it('create assistant version validates using changed provider', () => {
+    mockParams = { assistantId: 'a-1' };
+    render(<CreateVersionAssistantPage />);
+
+    const assistantVersionTextProviderProps = getLatestTextProviderProps();
+    act(() => {
+      assistantVersionTextProviderProps.onChangeProvider('meta');
+    });
+
+    const assistantVersionConfigPrompt = getLatestConfigPromptProps();
+    act(() => {
+      assistantVersionConfigPrompt.onChange({
+        prompt: [{ role: 'system', content: 'Edited {{context}}' }],
+        variables: [{ name: 'context', type: 'string', defaultvalue: '' }],
+      });
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+
+    expect(mockValidateTextProviderDefaultOptions).toHaveBeenCalled();
+    expect(mockValidateTextProviderDefaultOptions.mock.calls.at(-1)?.[0]).toBe('meta');
   });
 });

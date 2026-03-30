@@ -30,6 +30,52 @@ jest.mock('@/app/components/providers/text-to-speech', () => ({
   ),
 }));
 
+jest.mock('@/providers', () => ({
+  PRONUNCIATION_DICTIONARIES: ['medical', 'retail'],
+  CONJUNCTION_BOUNDARIES: ['and', 'or'],
+}));
+
+jest.mock('@/app/components/carbon/form', () => {
+  const React = require('react');
+  return {
+    TextInput: ({ id, labelText, value, onChange }: any) =>
+      React.createElement(
+        'div',
+        null,
+        labelText ? React.createElement('label', { htmlFor: id }, labelText) : null,
+        React.createElement('input', {
+          id,
+          value: value ?? '',
+          onChange,
+          'data-testid': id,
+        }),
+      ),
+  };
+});
+
+jest.mock('@carbon/react', () => {
+  const React = require('react');
+  return {
+    MultiSelect: ({ id, titleText, selectedItems = [], onChange }: any) =>
+      React.createElement(
+        'div',
+        null,
+        titleText ? React.createElement('div', null, titleText) : null,
+        React.createElement('input', {
+          'data-testid': id,
+          value: selectedItems.map((i: any) => i.id).join('<|||>'),
+          onChange: (e: any) =>
+            onChange({
+              selectedItems: e.target.value
+                .split('<|||>')
+                .filter(Boolean)
+                .map((id: string) => ({ id, label: id })),
+            }),
+        }),
+      ),
+  };
+});
+
 jest.mock('@/app/components/providers/text-to-speech/provider', () => ({
   GetDefaultSpeakerConfig: (...args: any[]) => mockGetDefaultSpeakerConfig(...args),
   GetDefaultTextToSpeechIfInvalid: (...args: any[]) =>
@@ -92,5 +138,57 @@ describe('ConfigureAudioOutputProvider design integration', () => {
       provider: 'openai',
       parameters: ttsDefaults,
     });
+  });
+
+  it('updates pronunciation, conjunction boundaries and pause from advanced settings', () => {
+    const setAudioOutputConfig = jest.fn();
+    render(
+      <ConfigureAudioOutputProvider
+        audioOutputConfig={{
+          provider: 'cartesia',
+          parameters: [createMetadata('speaker.model', 'sonic-2')],
+        }}
+        setAudioOutputConfig={setAudioOutputConfig}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /show advanced settings/i }),
+    );
+
+    fireEvent.change(screen.getByTestId('pronunciation-dictionaries'), {
+      target: { value: 'medical<|||>retail' },
+    });
+    fireEvent.change(screen.getByTestId('conjunction-boundaries'), {
+      target: { value: 'and<|||>or' },
+    });
+    fireEvent.change(screen.getByTestId('conjunction-break'), {
+      target: { value: '280' },
+    });
+
+    const allMaps = setAudioOutputConfig.mock.calls.map(call =>
+      Object.fromEntries(
+        ((call[0]?.parameters || []) as Metadata[]).map(p => [
+          p.getKey(),
+          p.getValue(),
+        ]),
+      ),
+    );
+
+    expect(
+      allMaps.some(
+        values =>
+          values['speaker.pronunciation.dictionaries'] ===
+          'medical<|||>retail',
+      ),
+    ).toBe(true);
+    expect(
+      allMaps.some(
+        values => values['speaker.conjunction.boundaries'] === 'and<|||>or',
+      ),
+    ).toBe(true);
+    expect(
+      allMaps.some(values => values['speaker.conjunction.break'] === '280'),
+    ).toBe(true);
   });
 });

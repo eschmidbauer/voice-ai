@@ -266,6 +266,28 @@ describe('Deployment and tool flows', () => {
     expect(mockGlobalNavigation.goToConfigureWeb).toHaveBeenCalledWith('assistant-1');
   });
 
+  it('create deployment routes to API, phone and debugger channels from add deployment menu', async () => {
+    render(<ConfigureAssistantDeploymentPage />);
+
+    fireEvent.click(screen.getAllByRole('button', { name: /Add deployment/i })[0]);
+    fireEvent.click(screen.getByRole('menuitem', { name: /SDK \/ API/i }));
+    expect(mockGlobalNavigation.goToConfigureApi).toHaveBeenCalledWith(
+      'assistant-1',
+    );
+
+    fireEvent.click(screen.getAllByRole('button', { name: /Add deployment/i })[0]);
+    fireEvent.click(screen.getByRole('menuitem', { name: /Phone Call/i }));
+    expect(mockGlobalNavigation.goToConfigureCall).toHaveBeenCalledWith(
+      'assistant-1',
+    );
+
+    fireEvent.click(screen.getAllByRole('button', { name: /Add deployment/i })[0]);
+    fireEvent.click(screen.getByRole('menuitem', { name: /Debugger/i }));
+    expect(mockGlobalNavigation.goToConfigureDebugger).toHaveBeenCalledWith(
+      'assistant-1',
+    );
+  });
+
   it('create deployment shows edit action for existing API deployment', async () => {
     render(<ConfigureAssistantDeploymentPage />);
 
