@@ -35,6 +35,15 @@ jest.mock('@carbon/react', () => {
       ),
     SelectItem: ({ value, text }: any) =>
       React.createElement('option', { value }, text),
+    Slider: ({ id, value, onChange }: any) =>
+      React.createElement('input', {
+        id,
+        type: 'range',
+        value: value ?? 0,
+        'data-testid': id,
+        onChange: (e: any) => onChange?.({ value: Number(e.target.value) }),
+      }),
+    Tooltip: ({ children }: any) => React.createElement('span', null, children),
   };
 });
 
@@ -372,8 +381,8 @@ describe('ConfigureKnowledgeRetrieval — Carbon migration', () => {
 
   it('renders Carbon TextInput for slider numeric fields (hidden label)', () => {
     render(<ConfigureKnowledgeRetrieval {...defaultProps} />);
-    expect(screen.getByTestId('top_k')).toBeInTheDocument();
-    expect(screen.getByTestId('score_threshold')).toBeInTheDocument();
+    expect(screen.getByTestId('top-k')).toBeInTheDocument();
+    expect(screen.getByTestId('score-threshold')).toBeInTheDocument();
   });
 
   it('renders retrieval setting label as plain text instead of FormLabel', () => {
@@ -390,7 +399,7 @@ describe('ConfigureKnowledgeRetrieval — Carbon migration', () => {
 
   it('calls onParameterChange when top_k numeric input changes', () => {
     render(<ConfigureKnowledgeRetrieval {...defaultProps} />);
-    const topKInput = screen.getByTestId('top_k');
+    const topKInput = screen.getByTestId('top-k');
     fireEvent.change(topKInput, { target: { value: '8' } });
     expect(mockOnParameterChange).toHaveBeenCalled();
     const updatedParams = mockOnParameterChange.mock.calls[0][0] as Metadata[];

@@ -6,3 +6,18 @@ import '@testing-library/jest-dom/extend-expect';
 import 'react-app-polyfill/ie11';
 import 'react-app-polyfill/stable';
 import 'jest-styled-components';
+
+class ResizeObserverMock {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+const resizeObserver =
+  (globalThis as any).ResizeObserver || ResizeObserverMock;
+
+// Carbon components may resolve ResizeObserver from either global or window.
+(globalThis as any).ResizeObserver = resizeObserver;
+if (typeof window !== 'undefined') {
+  (window as any).ResizeObserver = resizeObserver;
+}

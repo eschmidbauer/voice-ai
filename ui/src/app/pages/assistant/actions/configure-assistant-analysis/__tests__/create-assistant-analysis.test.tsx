@@ -1,0 +1,182 @@
+import React from 'react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import '@testing-library/jest-dom';
+
+import { CreateAssistantAnalysis } from '@/app/pages/assistant/actions/configure-assistant-analysis/create-assistant-analysis';
+import { CreateAnalysis } from '@rapidaai/react';
+import toast from 'react-hot-toast/headless';
+
+const mockGoBack = jest.fn();
+const mockGoToConfigureAssistantAnalysis = jest.fn();
+
+let mockEndpointIdToPick = 'endpoint-1';
+
+jest.mock('@rapidaai/react', () => ({
+  ConnectionConfig: class ConnectionConfig {
+    constructor(_: unknown) {}
+  },
+  CreateAnalysis: jest.fn(),
+}));
+
+jest.mock('react-hot-toast/headless', () => ({
+  __esModule: true,
+  default: {
+    success: jest.fn(),
+  },
+}));
+
+jest.mock('@/hooks/use-global-navigator', () => ({
+  useGlobalNavigation: () => ({
+    goBack: mockGoBack,
+    goToConfigureAssistantAnalysis: mockGoToConfigureAssistantAnalysis,
+  }),
+}));
+
+jest.mock('@/hooks/use-credential', () => ({
+  useCurrentCredential: () => ({
+    authId: 'auth-1',
+    token: 'token-1',
+    projectId: 'project-1',
+  }),
+}));
+
+jest.mock('@/utils', () => ({
+  randomMeaningfullName: () => 'analysis-default',
+}));
+
+jest.mock('@/app/pages/assistant/actions/hooks/use-confirmation', () => ({
+  useConfirmDialog: () => ({
+    showDialog: (cb: () => void) => cb(),
+    ConfirmDialogComponent: () => null,
+  }),
+}));
+
+jest.mock('@/app/components/dropdown/endpoint-dropdown', () => ({
+  EndpointDropdown: ({ onChangeEndpoint }: any) => (
+    <button
+      type="button"
+      onClick={() =>
+        onChangeEndpoint({
+          getId: () => mockEndpointIdToPick,
+        })
+      }
+    >
+      Pick endpoint
+    </button>
+  ),
+}));
+
+jest.mock('@/app/components/form/tab-form', () => ({
+  TabForm: ({ form, activeTab, errorMessage, formHeading }: any) => {
+    const active = form.find((f: any) => f.code === activeTab) || form[0];
+    return (
+      <div>
+        <h1>{formHeading}</h1>
+        {errorMessage ? <div>{errorMessage}</div> : null}
+        <div>{active.body}</div>
+        <div>{active.actions}</div>
+      </div>
+    );
+  },
+}));
+
+jest.mock('@/app/components/carbon/form', () => ({
+  Stack: ({ children }: any) => <div>{children}</div>,
+  TextInput: ({ labelText, helperText, ...props }: any) => <input {...props} />,
+  TextArea: ({ labelText, helperText, ...props }: any) => <textarea {...props} />,
+}));
+
+jest.mock('@/app/components/carbon/button', () => ({
+  PrimaryButton: ({ children, ...props }: any) => <button {...props}>{children}</button>,
+  SecondaryButton: ({ children, ...props }: any) => <button {...props}>{children}</button>,
+  TertiaryButton: ({ children, ...props }: any) => <button {...props}>{children}</button>,
+}));
+
+jest.mock('@carbon/react', () => ({
+  ButtonSet: ({ children }: any) => <div>{children}</div>,
+  Button: ({ children, ...props }: any) => <button {...props}>{children}</button>,
+  Select: ({ children, ...props }: any) => <select {...props}>{children}</select>,
+  SelectItem: ({ value, text }: any) => <option value={value}>{text}</option>,
+  NumberInput: ({ label, helperText, onChange, value }: any) => (
+    <input
+      aria-label={label}
+      value={value}
+      onChange={e => onChange(e, { value: Number(e.target.value) })}
+    />
+  ),
+}));
+
+describe('CreateAssistantAnalysis', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockEndpointIdToPick = 'endpoint-1';
+  });
+
+  it('shows endpoint validation error when continuing without endpoint', () => {
+    render(<CreateAssistantAnalysis assistantId="assistant-1" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+
+    expect(
+      screen.getByText('Please select a valid endpoint to be executed for analysis.'),
+    ).toBeInTheDocument();
+    expect(CreateAnalysis).not.toHaveBeenCalled();
+  });
+
+  it('creates analysis successfully and navigates back to analysis listing', async () => {
+    (CreateAnalysis as jest.Mock).mockImplementation(
+      (
+        _cfg,
+        _assistantId,
+        _name,
+        _endpointId,
+        _version,
+        _priority,
+        _params,
+        callback,
+      ) => {
+        callback(null, { getSuccess: () => true });
+      },
+    );
+
+    render(<CreateAssistantAnalysis assistantId="assistant-1" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pick endpoint' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Configure analysis' }));
+
+    await waitFor(() => {
+      expect(CreateAnalysis).toHaveBeenCalled();
+    });
+    expect(toast.success).toHaveBeenCalledWith('Analysis added to assistant successfully');
+    expect(mockGoToConfigureAssistantAnalysis).toHaveBeenCalledWith('assistant-1');
+  });
+
+  it('shows human error message when create API returns unsuccessful response', async () => {
+    (CreateAnalysis as jest.Mock).mockImplementation(
+      (
+        _cfg,
+        _assistantId,
+        _name,
+        _endpointId,
+        _version,
+        _priority,
+        _params,
+        callback,
+      ) => {
+        callback(null, {
+          getSuccess: () => false,
+          getError: () => ({ getHumanmessage: () => 'Name already used' }),
+        });
+      },
+    );
+
+    render(<CreateAssistantAnalysis assistantId="assistant-1" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pick endpoint' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Configure analysis' }));
+
+    expect(await screen.findByText('Name already used')).toBeInTheDocument();
+  });
+});

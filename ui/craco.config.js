@@ -8,6 +8,10 @@ module.exports = {
         ...jestConfig.moduleNameMapper,
         '^@/(.*)$': '<rootDir>/src/$1',
       };
+      jestConfig.setupFilesAfterEnv = [
+        ...(jestConfig.setupFilesAfterEnv || []),
+        '<rootDir>/src/setup-tests.ts',
+      ];
       return jestConfig;
     },
   },

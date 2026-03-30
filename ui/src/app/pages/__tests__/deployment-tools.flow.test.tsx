@@ -5,7 +5,12 @@ import '@testing-library/jest-dom';
 import { ConfigureAssistantDeploymentPage } from '@/app/pages/assistant/actions/create-deployment';
 import { CreateTool } from '@/app/pages/assistant/actions/configure-assistant-tool/create-assistant-tool';
 import { UpdateTool } from '@/app/pages/assistant/actions/configure-assistant-tool/update-assistant-tool';
-import { GetAssistant, GetAssistantTool } from '@rapidaai/react';
+import {
+  CreateAssistantTool,
+  GetAssistant,
+  GetAssistantTool,
+  UpdateAssistantTool,
+} from '@rapidaai/react';
 
 let mockParams: Record<string, string | undefined> = {
   assistantId: 'assistant-1',
@@ -84,6 +89,7 @@ jest.mock('@/app/components/form/tab-form', () => ({
       <div>
         <h1>{formHeading}</h1>
         {errorMessage ? <div>{errorMessage}</div> : null}
+        <div>{active.body}</div>
         <div>{active.actions}</div>
       </div>
     );
@@ -91,15 +97,61 @@ jest.mock('@/app/components/form/tab-form', () => ({
 }));
 
 jest.mock('@/app/components/tools', () => ({
-  BuildinTool: () => null,
+  BuildinTool: ({ onChangeBuildinTool }: any) => (
+    <div>
+      <button onClick={() => onChangeBuildinTool('knowledge_retrieval')}>
+        Use Knowledge Tool
+      </button>
+      <button onClick={() => onChangeBuildinTool('mcp')}>Use MCP Tool</button>
+    </div>
+  ),
   BuildinToolConfig: {},
   GetDefaultToolConfigIfInvalid: () => [],
-  GetDefaultToolDefintion: (_code: string, defaults: any) => defaults,
+  GetDefaultToolDefintion: (code: string, defaults: any) => {
+    if (code === 'mcp') {
+      return {
+        name: 'mcp_tool',
+        description: 'MCP tool',
+        parameters: '{}',
+      };
+    }
+    return defaults;
+  },
   ValidateToolDefaultOptions: () => undefined,
 }));
 
 jest.mock('@/app/components/tools/common', () => ({
-  ToolDefinitionForm: () => null,
+  ToolDefinitionForm: ({ toolDefinition, onChangeToolDefinition }: any) => (
+    <div>
+      <input
+        aria-label="Tool Name"
+        value={toolDefinition.name}
+        onChange={e =>
+          onChangeToolDefinition({ ...toolDefinition, name: e.target.value })
+        }
+      />
+      <textarea
+        aria-label="Tool Description"
+        value={toolDefinition.description}
+        onChange={e =>
+          onChangeToolDefinition({
+            ...toolDefinition,
+            description: e.target.value,
+          })
+        }
+      />
+      <textarea
+        aria-label="Tool Parameters"
+        value={toolDefinition.parameters}
+        onChange={e =>
+          onChangeToolDefinition({
+            ...toolDefinition,
+            parameters: e.target.value,
+          })
+        }
+      />
+    </div>
+  ),
 }));
 
 jest.mock('@/app/components/helmet', () => ({ Helmet: () => null }));
@@ -188,6 +240,21 @@ describe('Deployment and tool flows', () => {
     (GetAssistantTool as jest.Mock).mockImplementation(
       (_cfg, _assistantId, _toolId, cb) => cb(null, { getData: () => null }),
     );
+
+    (CreateAssistantTool as jest.Mock).mockImplementation(
+      (_cfg, _assistantId, _name, _desc, _fields, _method, _opts, cb) =>
+        cb(null, {
+          getSuccess: () => true,
+          getData: () => ({ getName: () => _name }),
+        }),
+    );
+
+    (UpdateAssistantTool as jest.Mock).mockImplementation(
+      (_cfg, _assistantId, _toolId, _name, _desc, _fields, _method, _opts, cb) =>
+        cb(null, {
+          getSuccess: () => true,
+        }),
+    );
   });
 
   it('create deployment allows channel selection and routes to web deployment', async () => {
@@ -226,5 +293,58 @@ describe('Deployment and tool flows', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Update Tool' }));
 
     expect(screen.getByText('Please provide a valid name for tool.')).toBeInTheDocument();
+  });
+
+  it('create tool validates invalid JSON parameters on definition step', () => {
+    render(<CreateTool assistantId="assistant-1" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    fireEvent.change(screen.getByLabelText('Tool Name'), {
+      target: { value: 'valid_tool' },
+    });
+    fireEvent.change(screen.getByLabelText('Tool Parameters'), {
+      target: { value: '{not-json' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Configure Tool' }));
+
+    expect(
+      screen.getByText('Please provide valid parameters, must be a valid JSON.'),
+    ).toBeInTheDocument();
+  });
+
+  it('update tool validates missing description on definition step', () => {
+    (GetAssistantTool as jest.Mock).mockImplementation(
+      (_cfg, _assistantId, _toolId, cb) =>
+        cb(null, {
+          getData: () => ({
+            getName: () => 'existing_tool',
+            getDescription: () => 'existing description',
+            getFields: () => ({ toJavaScript: () => ({ context: 'ok' }) }),
+            getExecutionmethod: () => 'knowledge_retrieval',
+            getExecutionoptionsList: () => [],
+          }),
+        }),
+    );
+
+    render(<UpdateTool assistantId="assistant-1" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    fireEvent.change(screen.getByLabelText('Tool Description'), {
+      target: { value: '' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Update Tool' }));
+
+    expect(
+      screen.getByText('Please provide a description for the tool.'),
+    ).toBeInTheDocument();
+  });
+
+  it('create tool submits directly for MCP from action step', () => {
+    render(<CreateTool assistantId="assistant-1" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Use MCP Tool' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Configure Tool' }));
+
+    expect(CreateAssistantTool).toHaveBeenCalledTimes(1);
   });
 });
