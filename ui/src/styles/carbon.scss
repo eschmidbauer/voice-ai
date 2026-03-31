@@ -285,6 +285,16 @@
   border-bottom: none !important;
 }
 
+// ─── SideNav background ─────────────────────────────────────────────────────
+.cds--side-nav {
+  background-color: #ffffff;
+}
+
+:is(.dark *) .cds--side-nav,
+:root:is(.dark) .cds--side-nav {
+  background-color: #1a1a1a;
+}
+
 // ─── SideNav submenu items font weight ───────────────────────────────────────
 .cds--side-nav__menu-item .cds--side-nav__link-text {
   font-weight: 500;

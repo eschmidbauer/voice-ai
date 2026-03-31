@@ -7,18 +7,22 @@ import { Helmet } from '@/app/components/helmet';
 import { Endpoint } from '@rapidaai/react';
 import toast from 'react-hot-toast/headless';
 import { useRapidaStore } from '@/hooks';
-import { Spinner } from '@/app/components/loader/spinner';
-import { ActionableEmptyMessage } from '@/app/components/container/message/actionable-empty-message';
 import { PrimaryButton } from '@/app/components/carbon/button';
 import { Pagination } from '@/app/components/carbon/pagination';
-import { Add, Renew } from '@carbon/icons-react';
-import { ScrollableResizableTable } from '@/app/components/data-table';
+import { EmptyState } from '@/app/components/carbon/empty-state';
+import { Add, Renew, Connect } from '@carbon/icons-react';
 import { PageHeaderBlock } from '@/app/components/blocks/page-header-block';
 import { PageTitleBlock } from '@/app/components/blocks/page-title-block';
 import {
+  Table,
+  TableHead,
+  TableRow,
+  TableHeader,
+  TableBody,
   TableToolbar,
   TableToolbarContent,
   TableToolbarSearch,
+  Loading,
   Button,
 } from '@carbon/react';
 
@@ -67,8 +71,10 @@ export function EndpointPage() {
     endpointActions.criteria,
   ]);
 
+  const visibleColumns = endpointActions.columns.filter(x => x.visible);
+
   return (
-    <div className="h-full flex flex-col overflow-auto flex-1">
+    <div className="h-full flex flex-col overflow-hidden">
       <Helmet title="Hosted endpoints" />
 
       <PageHeaderBlock>
@@ -102,47 +108,43 @@ export function EndpointPage() {
         </TableToolbarContent>
       </TableToolbar>
 
-      {/* Content */}
-      {endpointActions.endpoints && endpointActions.endpoints.length > 0 ? (
-        <ScrollableResizableTable
-          isActionable={false}
-          optionLabel="Action"
-          clms={endpointActions.columns.filter(x => x.visible)}
-        >
-          {endpointActions.endpoints.map(ed => (
-            <SingleEndpoint key={`endpoint_row_${ed.getId()}`} endpoint={ed} />
-          ))}
-        </ScrollableResizableTable>
-      ) : endpointActions.criteria.length > 0 ? (
-        <div className="h-full flex justify-center items-center">
-          <ActionableEmptyMessage
-            title="No Endpoint"
-            subtitle="There are no endpoints matching with your criteria to display"
-            action="Create new endpoint"
-            onActionClick={() =>
-              navigate('/deployment/endpoint/create-endpoint')
-            }
-          />
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <Loading withOverlay={false} small />
         </div>
-      ) : !loading ? (
-        <div className="h-full flex justify-center items-center">
-          <ActionableEmptyMessage
-            title="No Endpoint"
-            subtitle="There are no endpoints deployed to display"
-            action="Create new endpoint"
-            onActionClick={() =>
-              navigate('/deployment/endpoint/create-endpoint')
-            }
-          />
+      ) : endpointActions.endpoints && endpointActions.endpoints.length > 0 ? (
+        <div className="overflow-auto flex-1">
+          <Table>
+            <TableHead>
+              <TableRow>
+                {visibleColumns.map(col => (
+                  <TableHeader key={col.key}>{col.name}</TableHeader>
+                ))}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {endpointActions.endpoints.map(ed => (
+                <SingleEndpoint
+                  key={`endpoint_row_${ed.getId()}`}
+                  endpoint={ed}
+                />
+              ))}
+            </TableBody>
+          </Table>
         </div>
       ) : (
-        <div className="h-full flex justify-center items-center">
-          <Spinner size="md" />
-        </div>
+        <EmptyState
+          icon={Connect}
+          title="No endpoints found"
+          subtitle="Deploy API endpoints with fine-grained governance, audit trails, and enterprise access control."
+          action="Create new endpoint"
+          onAction={() => navigate('/deployment/endpoint/create-endpoint')}
+        />
       )}
 
       {endpointActions.endpoints && endpointActions.endpoints.length > 0 && (
         <Pagination
+          className="shrink-0"
           totalItems={endpointActions.totalCount}
           page={endpointActions.page}
           pageSize={endpointActions.pageSize}

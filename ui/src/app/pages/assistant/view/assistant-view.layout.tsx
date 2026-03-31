@@ -106,7 +106,7 @@ export const AssistantViewLayout: FC<HTMLAttributes<HTMLDivElement>> = () => {
       )}
 
       {/* ── Main content area ── */}
-      <div className="flex flex-col flex-1 overflow-auto bg-white dark:bg-gray-900">
+      <div className="flex flex-col flex-1 overflow-auto">
         <Outlet />
       </div>
     </div>

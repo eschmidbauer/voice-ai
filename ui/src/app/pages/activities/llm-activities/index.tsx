@@ -17,6 +17,7 @@ import { CarbonStatusIndicator } from '@/app/components/carbon/status-indicator'
 import { Pagination } from '@/app/components/carbon/pagination';
 import { IconOnlyButton } from '@/app/components/carbon/button';
 import { Renew, View, Launch, Ai } from '@carbon/icons-react';
+import { ProviderTag } from '@/app/components/carbon/provider-tag';
 import { EmptyState } from '@/app/components/carbon/empty-state';
 
 import {
@@ -30,7 +31,6 @@ import {
   TableToolbarContent,
   TableToolbarSearch,
   Loading,
-  Tag,
   DefinitionTooltip,
 } from '@carbon/react';
 
@@ -274,29 +274,3 @@ function getActivityLink(metadatas: Metadata[]): {
   return { source: '', link: '' };
 }
 
-const providerLabels: Record<string, string> = {
-  openai: 'OpenAI',
-  anthropic: 'Anthropic',
-  google: 'Google',
-  gemini: 'Gemini',
-  azure: 'Azure',
-  'azure-openai': 'Azure OpenAI',
-  groq: 'Groq',
-  mistral: 'Mistral',
-  cohere: 'Cohere',
-  deepseek: 'DeepSeek',
-};
-
-function ProviderTag({ provider }: { provider?: string }) {
-  const key = provider?.toLowerCase() || '';
-  const label = providerLabels[key] || provider || 'Unknown';
-
-  return (
-    <Tag size="md" type="cool-gray">
-      <span className="inline-flex items-center gap-1.5 leading-none">
-        <Ai size={16} />
-        {label}
-      </span>
-    </Tag>
-  );
-}

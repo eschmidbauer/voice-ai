@@ -20,7 +20,12 @@ export const EmptyState: FC<EmptyStateProps> = ({
   className,
 }) => {
   return (
-    <div className={cn('flex flex-1 flex-col items-center justify-center px-8', className)}>
+    <div
+      className={cn(
+        'flex flex-1 flex-col items-center justify-center px-8',
+        className,
+      )}
+    >
       {Icon && (
         <div className="w-16 h-16 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 mb-5">
           <Icon size={32} className="text-gray-400 dark:text-gray-500" />
@@ -35,7 +40,12 @@ export const EmptyState: FC<EmptyStateProps> = ({
         </p>
       )}
       {action && onAction && (
-        <Button size="sm" kind="tertiary" onClick={onAction}>
+        <Button
+          size="lg"
+          kind="tertiary"
+          className="dark:bg-gray-950! bg-white! dark:hover:text-white! hover:bg-primary! dark:hover:bg-primary! font-medium"
+          onClick={onAction}
+        >
           {action}
         </Button>
       )}
