@@ -1390,7 +1390,7 @@ func TestConcurrency_ResponseAndInterruptRace(t *testing.T) {
 		for i := 0; i < 100; i++ {
 			e.handleResponse(context.Background(), &protos.TalkOutput{
 				Data: &protos.TalkOutput_Assistant{Assistant: &protos.ConversationAssistantMessage{
-					Id: fmt.Sprintf("ctx-%d", i),
+					Id:      fmt.Sprintf("ctx-%d", i),
 					Message: &protos.ConversationAssistantMessage_Text{Text: "resp"},
 				}},
 			}, comm)

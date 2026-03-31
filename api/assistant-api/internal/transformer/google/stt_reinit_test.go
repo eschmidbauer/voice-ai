@@ -35,11 +35,11 @@ func (m *mockStream) Send(req *speechpb.StreamingRecognizeRequest) error {
 	return nil
 }
 func (m *mockStream) Header() (metadata.MD, error) { return nil, nil }
-func (m *mockStream) Trailer() metadata.MD          { return nil }
-func (m *mockStream) CloseSend() error              { return nil }
-func (m *mockStream) Context() context.Context      { return context.Background() }
-func (m *mockStream) SendMsg(interface{}) error      { return nil }
-func (m *mockStream) RecvMsg(interface{}) error      { return nil }
+func (m *mockStream) Trailer() metadata.MD         { return nil }
+func (m *mockStream) CloseSend() error             { return nil }
+func (m *mockStream) Context() context.Context     { return context.Background() }
+func (m *mockStream) SendMsg(interface{}) error    { return nil }
+func (m *mockStream) RecvMsg(interface{}) error    { return nil }
 
 // --- helpers ---
 

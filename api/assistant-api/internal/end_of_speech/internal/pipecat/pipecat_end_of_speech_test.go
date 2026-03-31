@@ -1065,7 +1065,7 @@ func TestEOS_FinalSTTInferenceFailure_UsesConfiguredFallbackTimeout(t *testing.T
 	eos := newTestEOS(callback, newTestOpts(map[string]any{
 		"microphone.eos.fallback_timeout": fallbackMs,
 		"microphone.eos.extended_timeout": 900.0,
-		"microphone.eos.quick_timeout":   20.0,
+		"microphone.eos.quick_timeout":    20.0,
 	}))
 	defer eos.Close()
 
