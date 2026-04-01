@@ -5,11 +5,7 @@ import '@testing-library/jest-dom';
 import { SignInPage } from '@/app/pages/authentication/sign-in';
 import { SignUpPage } from '@/app/pages/authentication/sign-up';
 import { AuthContext } from '@/context/auth-context';
-import {
-  AuthenticateUser,
-  Google,
-  RegisterUser,
-} from '@rapidaai/react';
+import { AuthenticateUser, Google, RegisterUser } from '@rapidaai/react';
 
 const mockNavigate = jest.fn();
 const mockShowLoader = jest.fn();
@@ -106,8 +102,8 @@ jest.mock('@/app/components/form/error-message', () => ({
     message ? <div>{message}</div> : null,
 }));
 
-jest.mock('@/app/components/form/button', () => ({
-  IBlueBGArrowButton: ({ children, isLoading, ...props }: any) => (
+jest.mock('@/app/components/carbon/button', () => ({
+  PrimaryButton: ({ children, isLoading, ...props }: any) => (
     <button {...props}>{children}</button>
   ),
 }));
@@ -119,7 +115,9 @@ jest.mock('@/app/components/form-label', () => ({
 }));
 
 jest.mock('@/app/components/form/fieldset', () => ({
-  FieldSet: ({ children, ...props }: any) => <fieldset {...props}>{children}</fieldset>,
+  FieldSet: ({ children, ...props }: any) => (
+    <fieldset {...props}>{children}</fieldset>
+  ),
 }));
 
 const renderWithAuth = (

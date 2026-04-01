@@ -7,7 +7,7 @@ import { useCurrentCredential } from '@/hooks/use-credential';
 import { useRapidaStore } from '@/hooks';
 import { SectionLoader } from '@/app/components/loader/section-loader';
 import toast from 'react-hot-toast/headless';
-import { ActionableEmptyMessage } from '@/app/components/container/message/actionable-empty-message';
+import { EmptyState } from '@/app/components/carbon/empty-state';
 import { CreateAssistantAnalysis } from '@/app/pages/assistant/actions/configure-assistant-analysis/create-assistant-analysis';
 import { useAssistantAnalysisPageStore } from '@/app/pages/assistant/actions/store/use-analysis-page-store';
 import { UpdateAssistantAnalysis } from '@/app/pages/assistant/actions/configure-assistant-analysis/update-assistant-analysis';
@@ -208,11 +208,11 @@ const ConfigureAssistantAnalysis: FC<{ assistantId: string }> = ({
           </>
         ) : (
           <div className="flex flex-1 items-center justify-center">
-            <ActionableEmptyMessage
+            <EmptyState
               title="No Analysis"
               subtitle="There are no assistant analysis."
               action="Create new analysis"
-              onActionClick={() => navigation.goToCreateAssistantAnalysis(assistantId)}
+              onAction={() => navigation.goToCreateAssistantAnalysis(assistantId)}
             />
           </div>
         )}

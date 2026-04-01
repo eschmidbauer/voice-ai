@@ -5,7 +5,7 @@ import {
   MAX_PROMPT_MESSAGE_LENGTH,
   SUPPORTED_PROMPT_VARIABLE_TYPE,
 } from '@/configs';
-import { IBlueBorderButton } from '@/app/components/form/button';
+import { TertiaryButton } from '@/app/components/carbon/button';
 import { ChevronDown, Plus } from 'lucide-react';
 import { FormLabel } from '@/app/components/form-label';
 import { FieldSet } from '@/app/components/form/fieldset';
@@ -202,10 +202,10 @@ export const ConfigPrompt: FC<IPromptProps> = ({
             />
           ))}
           {existingPrompt.prompt.length < MAX_PROMPT_MESSAGE_LENGTH && (
-            <IBlueBorderButton onClick={handleAddMessage} className="w-full">
+            <TertiaryButton size="md" onClick={handleAddMessage} className="w-full">
               <Plus className="h-4 w-4" />
               Add new message
-            </IBlueBorderButton>
+            </TertiaryButton>
           )}
         </div>
       </FieldSet>

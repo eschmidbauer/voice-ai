@@ -4,7 +4,7 @@ import { KnowledgeDocumentSegment } from '@rapidaai/react';
 import { ServiceError } from '@rapidaai/react';
 import { Modal, ModalHeader, ModalBody, ModalFooter } from '@/app/components/carbon/modal';
 import { FormLabel } from '@/app/components/form-label';
-import { Button, HoverButton } from '@/app/components/form/button';
+import { PrimaryButton, GhostButton } from '@/app/components/carbon/button';
 import { ErrorMessage } from '@/app/components/form/error-message';
 import { FieldSet } from '@/app/components/form/fieldset';
 import { Textarea } from '@/app/components/form/textarea';
@@ -70,12 +70,12 @@ export const DeleteKnowledgeDocumentSegmentDialog: FC<{
         <ErrorMessage message={error || ''} />
       </ModalBody>
       <ModalFooter danger>
-        <HoverButton type="button" onClick={onClose}>
+        <GhostButton size="md" type="button" onClick={onClose}>
           Cancel
-        </HoverButton>
-        <Button type="button" onClick={handleDelete}>
+        </GhostButton>
+        <PrimaryButton size="md" type="button" onClick={handleDelete}>
           Delete Segment
-        </Button>
+        </PrimaryButton>
       </ModalFooter>
     </Modal>
   );

@@ -1,10 +1,10 @@
-import { IButton } from '@/app/components/form/button';
+import { GhostButton } from '@/app/components/carbon/button';
 import { useRapidaStore } from '@/hooks';
 import { FC, useEffect } from 'react';
 import toast from 'react-hot-toast/headless';
 import { useParams } from 'react-router-dom';
 import { useGlobalNavigation } from '@/hooks/use-global-navigator';
-import { ActionableEmptyMessage } from '@/app/components/container/message/actionable-empty-message';
+import { EmptyState } from '@/app/components/carbon/empty-state';
 import { SelectKnowledgeCard } from '@/app/components/base/cards/knowledge-card';
 import { ExternalLink, Info, Plus } from 'lucide-react';
 import { PageHeaderBlock } from '@/app/components/blocks/page-header-block';
@@ -178,11 +178,11 @@ const ConfigureAssistantKnowledge: FC<{ assistantId: string }> = ({
           </div>
         ) : (
           <div className="my-auto mx-auto">
-            <ActionableEmptyMessage
+            <EmptyState
               title="No Context"
               subtitle="There are no Knowledge given added to the context"
               action="Connect knowlege"
-              onActionClick={() => {
+              onAction={() => {
                 navigation.goToCreateAssistantKnowledge(assistantId);
               }}
             />

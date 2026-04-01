@@ -200,9 +200,10 @@ jest.mock('@/app/components/error-container', () => ({
 }));
 
 jest.mock('@/app/components/helmet', () => ({ Helmet: () => null }));
-jest.mock('@/app/components/form/button', () => ({
-  IBlueBGArrowButton: ({ children, ...props }: any) => <button {...props}>{children}</button>,
-  ICancelButton: ({ children, ...props }: any) => <button {...props}>{children}</button>,
+jest.mock('@/app/components/carbon/button', () => ({
+  PrimaryButton: ({ children, isLoading, ...props }: any) => <button {...props}>{children}</button>,
+  SecondaryButton: ({ children, isLoading, ...props }: any) => <button {...props}>{children}</button>,
+  GhostButton: ({ children, isLoading, ...props }: any) => <button {...props}>{children}</button>,
 }));
 
 jest.mock('@/app/components/base/modal/confirm-ui', () => () => null);
@@ -225,8 +226,8 @@ jest.mock('@/app/components/container/message/notice-block', () => ({
 jest.mock('@/app/components/container/message/notice-block/doc-notice-block', () => ({
   DocNoticeBlock: ({ children }: any) => <div>{children}</div>,
 }));
-jest.mock('@/app/components/container/message/actionable-empty-message', () => ({
-  ActionableEmptyMessage: () => null,
+jest.mock('@/app/components/carbon/empty-state', () => ({
+  EmptyState: () => null,
 }));
 
 jest.mock('@/app/components/blocks/section-divider', () => ({

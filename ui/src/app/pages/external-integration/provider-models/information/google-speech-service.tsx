@@ -12,7 +12,7 @@ import { ViewProviderCredentialDialog } from '@/app/components/base/modal/view-p
 import { useAllProviderCredentials } from '@/hooks/use-model';
 import { Check, Plus } from 'lucide-react';
 import { Tooltip } from '@/app/components/tooltip';
-import { IBlueBGButton, IButton } from '@/app/components/form/button';
+import { PrimaryButton, GhostButton } from '@/app/components/carbon/button';
 import { VoiceCard } from '@/app/pages/external-integration/provider-models/information/voice-card';
 import { useLocation } from 'react-router-dom';
 
@@ -118,21 +118,23 @@ export function GoogleSpeechServiceModelInformationPage() {
           }}
         />
         <PaginationButtonBlock className="border-l divide-x">
-          <IButton
+          <GhostButton
+            size="md"
             onClick={() => {
               setViewProviderModalOpen(true);
             }}
           >
             View credential
-          </IButton>
-          <IBlueBGButton
+          </GhostButton>
+          <PrimaryButton
+            size="md"
             onClick={() => {
               setCreateProviderModalOpen(true);
             }}
           >
             Add new credential
             <Plus strokeWidth={1.5} className="ml-1.5 h-4 w-4" />
-          </IBlueBGButton>
+          </PrimaryButton>
         </PaginationButtonBlock>
       </BluredWrapper>
       <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 p-4">

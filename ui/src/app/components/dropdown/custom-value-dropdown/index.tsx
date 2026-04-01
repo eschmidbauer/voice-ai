@@ -14,7 +14,7 @@ import { Float } from '@headlessui-float/react';
 import { FormLabel } from '@/app/components/form-label';
 import { FieldSet } from '@/app/components/form/fieldset';
 import { Input } from '@/app/components/form/input';
-import { IBlueBGButton } from '@/app/components/form/button';
+import { PrimaryButton } from '@/app/components/carbon/button';
 import { DropdownProps } from '@/app/components/dropdown';
 /**
  *
@@ -167,12 +167,13 @@ export function CustomValueDropdown(props: CustomValueDropdownProps<any>) {
                         value={customInput}
                         onChange={e => setCustomInput(e.target.value)}
                       />
-                      <IBlueBGButton
+                      <PrimaryButton
+                        size="md"
                         className="h-10 text-sm rounded-[2px] p-2 px-3"
                         onClick={handleAddCustomValue}
                       >
                         <Plus className="w-4 h-4" strokeWidth={1.5} />
-                      </IBlueBGButton>
+                      </PrimaryButton>
                     </div>
                   </FieldSet>
                 )}

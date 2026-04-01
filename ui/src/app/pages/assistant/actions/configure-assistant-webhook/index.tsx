@@ -7,7 +7,7 @@ import { useRapidaStore } from '@/hooks';
 import { SectionLoader } from '@/app/components/loader/section-loader';
 import { CreateAssistantWebhook } from './create-assistant-webhook';
 import toast from 'react-hot-toast/headless';
-import { ActionableEmptyMessage } from '@/app/components/container/message/actionable-empty-message';
+import { EmptyState } from '@/app/components/carbon/empty-state';
 import { UpdateAssistantWebhook } from '@/app/pages/assistant/actions/configure-assistant-webhook/update-assistant-webhook';
 import { useAssistantWebhookPageStore } from '@/app/pages/assistant/actions/store/use-webhook-page-store';
 import { CarbonStatusIndicator } from '@/app/components/carbon/status-indicator';
@@ -219,12 +219,12 @@ const ConfigureAssistantWebhook: FC<{ assistantId: string }> = ({
             />
           </>
         ) : (
-          <ActionableEmptyMessage
-            centered
+          <EmptyState
+            className="w-full"
             title="No Webhook"
             subtitle="There are no assistant webhook found."
             action="Create new webhook"
-            onActionClick={() =>
+            onAction={() =>
               navigation.goToCreateAssistantWebhook(assistantId)
             }
           />

@@ -7,9 +7,9 @@ import {
   GetAllProjectCredentialResponse,
   ProjectCredential,
 } from '@rapidaai/react';
-import { ActionableEmptyMessage } from '@/app/components/container/message/actionable-empty-message';
-import { CopyButton } from '@/app/components/form/button/copy-button';
-import { ReloadButton } from '@/app/components/form/button/ReloadButton';
+import { EmptyState } from '@/app/components/carbon/empty-state';
+import { CopyButton } from '@/app/components/carbon/button/copy-button';
+import { ReloadButton } from '@/app/components/carbon/button/reload-button';
 import { useRapidaStore } from '@/hooks';
 import { useCurrentCredential } from '@/hooks/use-credential';
 import { toHumanReadableRelativeDay } from '@/utils/date';
@@ -134,11 +134,11 @@ export const RapidaCredentialCard = () => {
 
       {ourKeys.length === 0 ? (
         <div className="px-4 flex justify-center">
-          <ActionableEmptyMessage
+          <EmptyState
             title="No credentials"
             subtitle="There are no SDK Authentication Credentials found to display"
             action="Create new credential"
-            onActionClick={onCreateProjectCredential}
+            onAction={onCreateProjectCredential}
           />
         </div>
       ) : (

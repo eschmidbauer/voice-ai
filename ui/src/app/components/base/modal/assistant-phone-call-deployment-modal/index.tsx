@@ -7,7 +7,7 @@ import { cn } from '@/utils';
 import { ModalProps } from '@/app/components/base/modal';
 import { RightSideModal } from '@/app/components/base/modal/right-side-modal';
 import { CONFIG } from '@/configs';
-import { CopyButton } from '@/app/components/form/button/copy-button';
+import { CopyButton } from '@/app/components/carbon/button/copy-button';
 import { InputHelper } from '@/app/components/input-helper';
 import { YellowNoticeBlock } from '@/app/components/container/message/notice-block';
 import { ProviderPill } from '@/app/components/pill/provider-model-pill';

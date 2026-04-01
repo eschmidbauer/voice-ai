@@ -11,7 +11,7 @@ import { SectionLoader } from '@/app/components/loader/section-loader';
 import { Renew, Download } from '@carbon/icons-react';
 import { GhostButton } from '@/app/components/carbon/button';
 import { Tag, DefinitionTooltip } from '@carbon/react';
-import { ActionableEmptyMessage } from '@/app/components/container/message/actionable-empty-message';
+import { EmptyState } from '@/app/components/carbon/empty-state';
 import {
   getMetadataValueOrDefault,
   getStatusMetric,
@@ -152,7 +152,7 @@ export const ConversationMessages: FC<{
       {/* ── Empty state ── */}
       {conversations.length === 0 && (
         <div className="my-auto mx-auto border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-8 py-8">
-          <ActionableEmptyMessage
+          <EmptyState
             title="No messages yet"
             subtitle="There are no messages yet for this conversation"
           />

@@ -1,6 +1,7 @@
 import { GreenNoticeBlock } from '@/app/components/container/message/notice-block';
 import { Dropdown } from '@/app/components/dropdown';
-import { IBlueBGArrowButton } from '@/app/components/form/button';
+import { PrimaryButton } from '@/app/components/carbon/button';
+import { ChevronRight } from '@carbon/icons-react';
 import { ErrorMessage } from '@/app/components/form/error-message';
 import { Input } from '@/app/components/form/input';
 import {
@@ -361,12 +362,14 @@ export const PreviewPhoneAgent = () => {
               ) : (
                 <span />
               )}
-              <IBlueBGArrowButton
+              <PrimaryButton
+                size="md"
+                renderIcon={ChevronRight}
                 onClick={handleSubmit}
                 isLoading={callStatus === 'calling'}
               >
                 Start Call
-              </IBlueBGArrowButton>
+              </PrimaryButton>
             </div>
           </div>
         </div>

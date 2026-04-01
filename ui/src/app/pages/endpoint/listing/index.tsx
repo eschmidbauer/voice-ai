@@ -11,6 +11,7 @@ import { PrimaryButton } from '@/app/components/carbon/button';
 import { Pagination } from '@/app/components/carbon/pagination';
 import { EmptyState } from '@/app/components/carbon/empty-state';
 import { Add, Renew, Connect } from '@carbon/icons-react';
+import { PageLoading } from '@/app/components/carbon/loading';
 import { PageHeaderBlock } from '@/app/components/blocks/page-header-block';
 import { PageTitleBlock } from '@/app/components/blocks/page-title-block';
 import {
@@ -22,7 +23,6 @@ import {
   TableToolbar,
   TableToolbarContent,
   TableToolbarSearch,
-  Loading,
   Button,
 } from '@carbon/react';
 
@@ -109,9 +109,7 @@ export function EndpointPage() {
       </TableToolbar>
 
       {loading ? (
-        <div className="flex items-center justify-center py-16">
-          <Loading withOverlay={false} small />
-        </div>
+        <PageLoading />
       ) : endpointActions.endpoints && endpointActions.endpoints.length > 0 ? (
         <div className="overflow-auto flex-1">
           <Table>

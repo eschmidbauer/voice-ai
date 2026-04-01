@@ -31,7 +31,7 @@
             }
         },
         "features": {
-            "knowledge": false,
+            "knowledge": true,
             "telemetry": false
         }
     }

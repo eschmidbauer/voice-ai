@@ -9,8 +9,8 @@ import { useKnowledgeDocumentPageStore } from '@/hooks/use-knowledge-document-pa
 import { TablePagination } from '@/app/components/base/tables/table-pagination';
 import { SingleDocument } from '@/app/pages/knowledge-base/view/documents/single-document';
 import { Knowledge } from '@rapidaai/react';
-import { Spinner } from '@/app/components/loader/spinner';
-import { ActionableEmptyMessage } from '@/app/components/container/message/actionable-empty-message';
+import { PageLoading } from '@/app/components/carbon/loading';
+import { EmptyState } from '@/app/components/carbon/empty-state';
 import { ScrollableResizableTable } from '@/app/components/data-table';
 
 export function Documents(props: {
@@ -50,7 +50,9 @@ export function Documents(props: {
 
   return (
     <>
-      {knowledgeDocumentAction.documents &&
+      {rapidaContext.loading ? (
+        <PageLoading className="h-full grow" />
+      ) : knowledgeDocumentAction.documents &&
       knowledgeDocumentAction.documents.length > 0 ? (
         <div className="flex flex-col h-full flex-1">
           <BluredWrapper className="p-0">
@@ -87,27 +89,14 @@ export function Documents(props: {
             {/* </TBody> */}
           </ScrollableResizableTable>
         </div>
-      ) : knowledgeDocumentAction.documents.length > 0 ? (
+      ) : (
         <div className="flex flex-col h-full flex-1 items-center justify-center">
-          <ActionableEmptyMessage
-            title="No documents"
-            subtitle=" There are no documents matching with your criteria."
-            action="Add New Document"
-            onActionClick={() => props.onAddKnowledgeDocument()}
-          />
-        </div>
-      ) : !rapidaContext.loading ? (
-        <div className="flex flex-col h-full flex-1 items-center justify-center">
-          <ActionableEmptyMessage
+          <EmptyState
             title="No Documents"
             subtitle="There are no documents in knowledge to display"
             action="Add New Document"
-            onActionClick={() => props.onAddKnowledgeDocument()}
+            onAction={() => props.onAddKnowledgeDocument()}
           />
-        </div>
-      ) : (
-        <div className="h-full flex justify-center items-center grow">
-          <Spinner size="md" />
         </div>
       )}
     </>

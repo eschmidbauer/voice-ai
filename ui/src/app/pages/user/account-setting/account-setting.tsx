@@ -1,6 +1,7 @@
 import { RedNoticeBlock } from '@/app/components/container/message/notice-block';
 import { FormLabel } from '@/app/components/form-label';
-import { IBlueBGArrowButton, IRedBGButton } from '@/app/components/form/button';
+import { PrimaryButton } from '@/app/components/carbon/button';
+import { ChevronRight } from '@carbon/icons-react';
 import { FieldSet } from '@/app/components/form/fieldset';
 import { Input } from '@/app/components/form/input';
 import { InputHelper } from '@/app/components/input-helper';
@@ -157,14 +158,13 @@ export const AccountSetting = () => {
             </FieldSet>
           </div>
           <div className="flex-col gap-6">
-            <IBlueBGArrowButton
+            <PrimaryButton size="md" renderIcon={ChevronRight}
               type="submit"
               form="account-settings-form"
               isLoading={loading}
-              className="px-4"
             >
               Save changes
-            </IBlueBGArrowButton>
+            </PrimaryButton>
           </div>
         </div>
       </div>

@@ -3,7 +3,7 @@ import { FC, useEffect } from 'react';
 import toast from 'react-hot-toast/headless';
 import { useParams } from 'react-router-dom';
 import { useGlobalNavigation } from '@/hooks/use-global-navigator';
-import { ActionableEmptyMessage } from '@/app/components/container/message/actionable-empty-message';
+import { EmptyState } from '@/app/components/carbon/empty-state';
 import { SelectToolCard } from '@/app/components/base/cards/tool-card';
 import { Add, Renew } from '@carbon/icons-react';
 import { CreateTool } from '@/app/pages/assistant/actions/configure-assistant-tool/create-assistant-tool';
@@ -162,11 +162,11 @@ const ConfigureAssistantTool: FC<{ assistantId: string }> = ({
           </section>
         ) : (
           <div className="my-auto mx-auto">
-            <ActionableEmptyMessage
+            <EmptyState
               title="No Tools"
               subtitle="There are no tools added to the assistant"
               action="Add Tools"
-              onActionClick={() => {
+              onAction={() => {
                 navigation.goToCreateAssistantTool(assistantId);
               }}
             />

@@ -197,9 +197,10 @@ jest.mock('@/app/components/providers/text-to-speech/provider', () => ({
     mockValidateTextToSpeechIfInvalid(...args),
 }));
 
-jest.mock('@/app/components/form/button', () => ({
-  IBlueBGArrowButton: ({ children, isLoading, ...props }: any) => <button {...props}>{children}</button>,
-  ICancelButton: ({ children, isLoading, ...props }: any) => <button {...props}>{children}</button>,
+jest.mock('@/app/components/carbon/button', () => ({
+  PrimaryButton: ({ children, isLoading, ...props }: any) => <button {...props}>{children}</button>,
+  SecondaryButton: ({ children, isLoading, ...props }: any) => <button {...props}>{children}</button>,
+  GhostButton: ({ children, isLoading, ...props }: any) => <button {...props}>{children}</button>,
 }));
 
 describe('Phone deployment create and edit flows', () => {

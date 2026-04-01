@@ -39,7 +39,7 @@ import { ArrowUpRight, Plus } from 'lucide-react';
 import { BUILDIN_TOOLS } from '@/llm-tools';
 import { PageHeaderBlock } from '@/app/components/blocks/page-header-block';
 import { PageTitleBlock } from '@/app/components/blocks/page-title-block';
-import { ActionableEmptyMessage } from '@/app/components/container/message/actionable-empty-message';
+import { EmptyState } from '@/app/components/carbon/empty-state';
 import { ConfigureAssistantToolDialog } from '@/app/components/base/modal/assistant-configure-tool-modal';
 import { DocNoticeBlock } from '@/app/components/container/message/notice-block/doc-notice-block';
 import { CardOptionMenu } from '@/app/components/menu';
@@ -644,11 +644,11 @@ export function CreateAssistantPage() {
                     </section>
                   ) : (
                     <div className="flex flex-1 items-center justify-center">
-                      <ActionableEmptyMessage
+                      <EmptyState
                         title="No Tools"
                         subtitle="There are no tools given added to the assistant"
                         action="Add a tool"
-                        onActionClick={() => setConfigureToolOpen(true)}
+                        onAction={() => setConfigureToolOpen(true)}
                       />
                     </div>
                   )}

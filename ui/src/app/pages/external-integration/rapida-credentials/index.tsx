@@ -11,7 +11,7 @@ import {
 } from '@rapidaai/react';
 import toast from 'react-hot-toast/headless';
 import { Helmet } from '@/app/components/helmet';
-import { ActionableEmptyMessage } from '@/app/components/container/message/actionable-empty-message';
+import { EmptyState } from '@/app/components/carbon/empty-state';
 import { AuthContext } from '@/context/auth-context';
 import { PageHeaderBlock } from '@/app/components/blocks/page-header-block';
 import { PageTitleBlock } from '@/app/components/blocks/page-title-block';
@@ -23,8 +23,8 @@ import { toHumanReadableDate } from '@/utils/date';
 import { DocNoticeBlock } from '@/app/components/container/message/notice-block/doc-notice-block';
 import { FieldSet } from '@/app/components/form/fieldset';
 import { FormLabel } from '@/app/components/form-label';
-import { CopyButton } from '@/app/components/form/button/copy-button';
-import { IButton } from '@/app/components/form/button';
+import { CopyButton } from '@/app/components/carbon/button/copy-button';
+import { GhostButton } from '@/app/components/carbon/button';
 import { BaseCard } from '@/app/components/base/cards';
 
 /**
@@ -139,9 +139,9 @@ export function ProjectCredentialPage() {
           Project Developer Keys
         </PageTitleWithCount>
         <div className="flex items-stretch h-12 border-l border-gray-200 dark:border-gray-800">
-          <IButton onClick={shouldReload} className="h-full">
+          <GhostButton size="md" onClick={shouldReload} className="h-full">
             <RotateCw strokeWidth={1.5} className="w-4 h-4" />
-          </IButton>
+          </GhostButton>
           <button
             type="button"
             onClick={onCreateProjectCredential}
@@ -164,11 +164,11 @@ export function ProjectCredentialPage() {
         </section>
       ) : (
         <div className="flex-1 flex items-center justify-center">
-          <ActionableEmptyMessage
+          <EmptyState
             title="No credentials"
             subtitle="There are no SDK Authentication Credential found to display"
             action="Create new credential"
-            onActionClick={onCreateProjectCredential}
+            onAction={onCreateProjectCredential}
           />
         </div>
       )}
@@ -220,7 +220,8 @@ const CredentialCard: FC<{ credential: ProjectCredential }> = ({
               : maskCredential(credential.getKey())}
           </code>
           <div className="flex shrink-0 border border-gray-200 dark:border-gray-700 divide-x divide-gray-200 dark:divide-gray-700">
-            <IButton
+            <GhostButton
+              size="md"
               onClick={() => setIsVisible(!isVisible)}
               title={isVisible ? 'Hide' : 'Show'}
             >
@@ -229,8 +230,9 @@ const CredentialCard: FC<{ credential: ProjectCredential }> = ({
               ) : (
                 <Eye className="w-4 h-4" />
               )}
-            </IButton>
-            <IButton
+            </GhostButton>
+            <GhostButton
+              size="md"
               onClick={() => copyToClipboard(credential.getKey())}
               title="Copy"
             >
@@ -239,7 +241,7 @@ const CredentialCard: FC<{ credential: ProjectCredential }> = ({
               ) : (
                 <Copy className="w-4 h-4" />
               )}
-            </IButton>
+            </GhostButton>
           </div>
         </div>
       </div>
@@ -303,7 +305,8 @@ export function PersonalCredentialPage() {
                   {isVisible ? token : maskCredential(token)}
                 </code>
                 <div className="flex shrink-0 border border-gray-200 dark:border-gray-700 divide-x divide-gray-200 dark:divide-gray-700">
-                  <IButton
+                  <GhostButton
+                    size="md"
                     onClick={() => setIsVisible(!isVisible)}
                     title={isVisible ? 'Hide' : 'Show'}
                   >
@@ -312,14 +315,14 @@ export function PersonalCredentialPage() {
                     ) : (
                       <Eye className="w-4 h-4" />
                     )}
-                  </IButton>
-                  <IButton onClick={() => copyToClipboard(token)} title="Copy">
+                  </GhostButton>
+                  <GhostButton size="md" onClick={() => copyToClipboard(token)} title="Copy">
                     {isCopied ? (
                       <CheckCircle className="w-4 h-4 text-emerald-400" />
                     ) : (
                       <Copy className="w-4 h-4" />
                     )}
-                  </IButton>
+                  </GhostButton>
                 </div>
               </div>
             </FieldSet>

@@ -1,5 +1,5 @@
 import { TableCell } from '@/app/components/base/tables/table-cell';
-import { BorderButton } from '@/app/components/form/button';
+import { SecondaryButton } from '@/app/components/carbon/button';
 import { CopyIcon } from '@/app/components/Icon/Copy';
 import { TickIcon } from '@/app/components/Icon/Tick';
 import { cn } from '@/utils';
@@ -21,7 +21,8 @@ export function CopyCell(props: { children: string; className?: string }) {
           {props.children}
         </div>
         <div className="flex items-start gap-1.5 opacity-0 transition-all focus-within:opacity-100 group-hover:opacity-100 [&:has([data-state='open'])]:opacity-100">
-          <BorderButton
+          <SecondaryButton
+            size="md"
             className="h-6 w-6 p-0.5 border-[0.2px]"
             onClick={() => {
               copyItem(props.children);
@@ -32,7 +33,7 @@ export function CopyCell(props: { children: string; className?: string }) {
             ) : (
               <CopyIcon className="w-4 h-4" />
             )}
-          </BorderButton>
+          </SecondaryButton>
         </div>
       </div>
     </TableCell>

@@ -8,12 +8,12 @@ import { BluredWrapper } from '@/app/components/wrapper/blured-wrapper';
 import toast from 'react-hot-toast/headless';
 import { useKnowledgePageStore } from '@/hooks/use-knowledge-page-store';
 import { Knowledge } from '@rapidaai/react';
-import { Spinner } from '@/app/components/loader/spinner';
+import { PageLoading } from '@/app/components/carbon/loading';
 import { ClickableKnowledgeCard } from '@/app/components/base/cards/knowledge-card';
-import { ActionableEmptyMessage } from '@/app/components/container/message/actionable-empty-message';
+import { EmptyState } from '@/app/components/carbon/empty-state';
 import { HowKnowledgeWorksDialog } from '@/app/components/base/modal/how-it-works-modal/how-knowledge-works';
 import { useGlobalNavigation } from '@/hooks/use-global-navigator';
-import { IButton } from '@/app/components/form/button';
+import { GhostButton } from '@/app/components/carbon/button';
 import { Plus, RotateCw } from 'lucide-react';
 import { PageHeaderBlock } from '@/app/components/blocks/page-header-block';
 import { PageTitleBlock } from '@/app/components/blocks/page-title-block';
@@ -105,17 +105,20 @@ export function KnowledgePage() {
             pageSize={knowledgeActions.pageSize}
             onChangePageSize={knowledgeActions.setPageSize}
           />
-          <IButton
+          <GhostButton
+            size="md"
             onClick={() => {
               getKnowledges(projectId, token, userId);
             }}
           >
             <RotateCw strokeWidth={1.5} className="h-4 w-4" />
-          </IButton>
+          </GhostButton>
         </PaginationButtonBlock>
       </BluredWrapper>
 
-      {knowledgeActions.knowledgeBases &&
+      {loading ? (
+        <PageLoading className="h-full" />
+      ) : knowledgeActions.knowledgeBases &&
       knowledgeActions.knowledgeBases.length > 0 ? (
         <section className="grid content-start grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4 grow shrink-0 m-4">
           {knowledgeActions.knowledgeBases.map((kf, idx) => (
@@ -124,25 +127,21 @@ export function KnowledgePage() {
         </section>
       ) : knowledgeActions.criteria.length > 0 ? (
         <div className="flex flex-col h-full flex-1 items-center justify-center">
-          <ActionableEmptyMessage
+          <EmptyState
             title="No knowledge bases found"
             subtitle="No knowledge bases match your search criteria."
             action="Create new knowledge"
-            onActionClick={goToCreateKnowledge}
-          />
-        </div>
-      ) : !loading ? (
-        <div className="flex flex-col h-full flex-1 items-center justify-center">
-          <ActionableEmptyMessage
-            title="No knowledge bases"
-            subtitle="You haven't created any knowledge bases yet."
-            action="Create new knowledge"
-            onActionClick={goToCreateKnowledge}
+            onAction={goToCreateKnowledge}
           />
         </div>
       ) : (
-        <div className="h-full flex justify-center items-center">
-          <Spinner size="md" />
+        <div className="flex flex-col h-full flex-1 items-center justify-center">
+          <EmptyState
+            title="No knowledge bases"
+            subtitle="You haven't created any knowledge bases yet."
+            action="Create new knowledge"
+            onAction={goToCreateKnowledge}
+          />
         </div>
       )}
     </div>

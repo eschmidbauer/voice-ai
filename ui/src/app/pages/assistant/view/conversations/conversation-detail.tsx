@@ -26,7 +26,7 @@ import { TableBody } from '@/app/components/base/tables/table-body';
 import { TableRow } from '@/app/components/base/tables/table-row';
 import { TableCell } from '@/app/components/base/tables/table-cell';
 import { BlueNoticeBlock } from '@/app/components/container/message/notice-block';
-import { ActionableEmptyMessage } from '@/app/components/container/message/actionable-empty-message';
+import { EmptyState } from '@/app/components/carbon/empty-state';
 import { connectionConfig } from '@/configs';
 import { cn } from '@/utils';
 import { CarbonStatusIndicator } from '@/app/components/carbon/status-indicator';
@@ -101,7 +101,7 @@ export function ConversationDetailPage() {
           .filter(x => x.getKey().startsWith('analysis.'));
         return items.length === 0 ? (
           <div className="flex flex-1 items-center justify-center">
-            <ActionableEmptyMessage
+            <EmptyState
               title="No Analysis"
               subtitle="There is no analysis yet for this conversation"
             />
@@ -127,7 +127,7 @@ export function ConversationDetailPage() {
         const contexts = currentConversation.getContextsList();
         return contexts.length === 0 ? (
           <div className="flex flex-1 items-center justify-center">
-            <ActionableEmptyMessage
+            <EmptyState
               title="No Context"
               subtitle="No knowledge context was retrieved for this conversation"
             />

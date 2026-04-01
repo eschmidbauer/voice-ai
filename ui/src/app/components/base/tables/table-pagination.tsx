@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { cn } from '@/utils';
-import { IButton } from '@/app/components/form/button';
+import { GhostButton } from '@/app/components/carbon/button';
 import { ColumnPreferencesDialog } from '@/app/components/base/modal/column-preference-modal';
 import { SlidersHorizontal } from 'lucide-react';
 import TooltipPlus from '@/app/components/base/tooltip-plus';
@@ -77,7 +77,8 @@ export function TablePagination(props: TablePaginationProps) {
       ></ColumnPreferencesDialog>
       <ul className="flex items-center text-base">
         <li>
-          <IButton
+          <GhostButton
+            size="md"
             type="button"
             onClick={() => {
               props.currentPage > 1 &&
@@ -104,7 +105,7 @@ export function TablePagination(props: TablePaginationProps) {
                 d="M5 1 1 5l4 4"
               />
             </svg>
-          </IButton>
+          </GhostButton>
         </li>
         {/* page count start */}
         {arr
@@ -114,7 +115,8 @@ export function TablePagination(props: TablePaginationProps) {
           .map((pg, idx) => {
             return (
               <li key={`page-${idx}`}>
-                <IButton
+                <GhostButton
+                  size="md"
                   type="button"
                   className={cn(
                     'text-base! bg-transparent!',
@@ -127,13 +129,14 @@ export function TablePagination(props: TablePaginationProps) {
                   }}
                 >
                   {pg}
-                </IButton>
+                </GhostButton>
               </li>
             );
           })}
 
         <li className="border-r dark:border-gray-800">
-          <IButton
+          <GhostButton
+            size="md"
             type="button"
             disabled={props.currentPage >= maxPage}
             onClick={() => {
@@ -162,12 +165,13 @@ export function TablePagination(props: TablePaginationProps) {
                 d="m1 9 4-4-4-4"
               />
             </svg>
-          </IButton>
+          </GhostButton>
         </li>
 
         {/* setting preference */}
         <li>
-          <IButton
+          <GhostButton
+            size="md"
             type="button"
             onClick={() => {
               setColumnPreferenceModel(true);
@@ -184,7 +188,7 @@ export function TablePagination(props: TablePaginationProps) {
             >
               <SlidersHorizontal className="w-4 h-4" strokeWidth={1.5} />
             </TooltipPlus>
-          </IButton>
+          </GhostButton>
         </li>
       </ul>
     </>

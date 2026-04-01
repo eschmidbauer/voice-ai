@@ -1,5 +1,6 @@
 import { FormLabel } from '@/app/components/form-label';
-import { IBlueBGArrowButton } from '@/app/components/form/button';
+import { PrimaryButton } from '@/app/components/carbon/button';
+import { ChevronRight } from '@carbon/icons-react';
 import { InputCheckbox } from '@/app/components/form/checkbox';
 import { FieldSet } from '@/app/components/form/fieldset';
 import { InputHelper } from '@/app/components/input-helper';
@@ -152,14 +153,16 @@ export const NotificationSetting = () => {
         <PageActionButtonBlock errorMessage={error}>
           <div className="flex-1" />
           <div className="h-full flex">
-            <IBlueBGArrowButton
+            <PrimaryButton
+              size="md"
+              renderIcon={ChevronRight}
               type="submit"
               isLoading={isSaving}
               disabled={isSaving}
               className="h-full min-w-[12rem] px-6 rounded-none border-l border-gray-200 dark:border-gray-800"
             >
               Save changes
-            </IBlueBGArrowButton>
+            </PrimaryButton>
           </div>
         </PageActionButtonBlock>
       </div>

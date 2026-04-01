@@ -6,7 +6,7 @@ import { Tab } from '@/app/components/tab';
 import { cn } from '@/utils';
 import { ModalProps } from '@/app/components/base/modal';
 import { RightSideModal } from '@/app/components/base/modal/right-side-modal';
-import { CopyButton } from '@/app/components/form/button/copy-button';
+import { CopyButton } from '@/app/components/carbon/button/copy-button';
 import { YellowNoticeBlock } from '@/app/components/container/message/notice-block';
 import { ProviderPill } from '@/app/components/pill/provider-model-pill';
 import { FC } from 'react';

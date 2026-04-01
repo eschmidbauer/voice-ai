@@ -4,17 +4,16 @@ import { BluredWrapper } from '@/app/components/wrapper/blured-wrapper';
 import { BaseCard } from '@/app/components/base/cards';
 import { useRapidaStore } from '@/hooks';
 import { useKnowledgeDocumentSegmentPageStore } from '@/hooks/use-knowledge-document-segment-page-store';
-import { cn } from '@/utils';
 import { FC, useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast/headless';
 import { Knowledge } from '@rapidaai/react';
-import { EditButton } from '@/app/components/form/button/edit-button';
-import { DeleteButton } from '@/app/components/form/button/delete-button';
+import { EditButton } from '@/app/components/carbon/button/edit-button';
+import { DeleteButton } from '@/app/components/carbon/button/delete-button';
 import { useCurrentCredential } from '@/hooks/use-credential';
 
 import { EditKnowledgeDocumentSegmentDialog } from '@/app/components/base/modal/edit-knowledge-document-segment-modal';
 import { DeleteKnowledgeDocumentSegmentDialog } from '@/app/components/base/modal/delete-knowledge-document-segment-modal';
-import { ActionableEmptyMessage } from '@/app/components/container/message/actionable-empty-message';
+import { EmptyState } from '@/app/components/carbon/empty-state';
 
 export const DocumentSegments: FC<{
   currentKnowledge: Knowledge;
@@ -85,10 +84,7 @@ export const DocumentSegments: FC<{
           <div className="grid content-start grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 grow shrink-0 m-4">
             {knowledgeDocumentActions.knowledgeDocumentSegments.map(
               (segment, index) => (
-                <BaseCard
-                  key={index}
-                  className="p-6 gap-6"
-                >
+                <BaseCard key={index} className="p-6 gap-6">
                   {/* Segment header */}
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-mono text-gray-500 dark:text-gray-400">
@@ -108,9 +104,7 @@ export const DocumentSegments: FC<{
                   </div>
 
                   {/* Entity tags */}
-                  {Object.entries(
-                    segment.getEntities()?.toObject() || {},
-                  ).some(
+                  {Object.entries(segment.getEntities()?.toObject() || {}).some(
                     ([, values]) => Array.isArray(values) && values.length > 0,
                   ) && (
                     <div className="flex flex-col gap-3 text-sm border-t border-gray-100 dark:border-gray-800 pt-4">
@@ -179,11 +173,11 @@ export const DocumentSegments: FC<{
         </>
       ) : (
         <div className="flex flex-col h-full flex-1 items-center justify-center">
-          <ActionableEmptyMessage
+          <EmptyState
             title="No segments"
             subtitle="There are no document segments in this knowledge base."
             action="Add new document"
-            onActionClick={() => ck.onAddKnowledgeDocument()}
+            onAction={() => ck.onAddKnowledgeDocument()}
           />
         </div>
       )}

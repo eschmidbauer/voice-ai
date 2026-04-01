@@ -1,4 +1,4 @@
-import { SimpleButton } from '@/app/components/form/button';
+import { GhostButton } from '@/app/components/carbon/button';
 import { CloseIcon } from '@/app/components/Icon/Close';
 import { FileExtensionIcon } from '@/app/components/Icon/file-extension';
 import { FileUploadIcon } from '@/app/components/Icon/file-upload';
@@ -112,13 +112,14 @@ export const ManualFile: FC<ManualFileProps> = ({
                       {formatFileSize(knowledgeDocument.size)}
                     </span>
                   </div>
-                  <SimpleButton
+                  <GhostButton
+                    size="md"
                     onClick={() => {
                       onRemoveKnowledgeDocument(knowledgeDocument.name);
                     }}
                   >
                     <CloseIcon className="w-4 h-4" />
-                  </SimpleButton>
+                  </GhostButton>
                 </SingleRowWrapper>
               );
             })}

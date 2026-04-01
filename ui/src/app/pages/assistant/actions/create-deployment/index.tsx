@@ -1,5 +1,5 @@
 import { Helmet } from '@/app/components/helmet';
-import { ActionableEmptyMessage } from '@/app/components/container/message/actionable-empty-message';
+import { EmptyState } from '@/app/components/carbon/empty-state';
 import { useCurrentCredential } from '@/hooks/use-credential';
 import { useGlobalNavigation } from '@/hooks/use-global-navigator';
 import {
@@ -315,7 +315,7 @@ export const ConfigureAssistantDeploymentPage = () => {
         </div>
       ) : (
         <div className="flex flex-col flex-1 items-center justify-center gap-4">
-          <ActionableEmptyMessage
+          <EmptyState
             title="No deployments yet"
             subtitle="Add a channel to make your assistant available to users."
           />

@@ -18,7 +18,7 @@ import {
   VoiceAgent,
 } from '@rapidaai/react';
 import { cn } from '@/utils';
-import { IRedBGButton } from '@/app/components/form/button/index';
+import { DangerButton } from '@/app/components/carbon/button';
 import { Spinner } from '@/app/components/loader/spinner';
 
 /**
@@ -94,9 +94,9 @@ export const AudioMessagingAction: FC<AudioMessagingActionProps> = ({
     <div className={cn('relative flex items-center p-2 py-3 gap-4', className)}>
       <div className="flex items-center justify-center w-full">
         <div className="flex flex-row border divide-x">
-          <IRedBGButton
+          <DangerButton
+            size="sm"
             className="group h-9 px-3 flex flex-row items-center justify-center transition-all duration-300 hover:opacity-80 overflow-hidden w-fit bg-red-500/10 hover:bg-red-500/15 active:bg-red-500/20 dark:bg-red-500/10 dark:hover:bg-red-500/15 dark:active:bg-red-500/20 text-red-500 hover:text-red-500 rounded-none"
-            aria-label="Turn on microphone"
             disabled={!isConnected}
             onClick={async () => {
               await handleToggleMute();
@@ -119,7 +119,7 @@ export const AudioMessagingAction: FC<AudioMessagingActionProps> = ({
                 </>
               )}
             </div>
-          </IRedBGButton>
+          </DangerButton>
           <div className="px-2 flex items-center gap-2">
             <MultibandAudioVisualizerComponent
               classNames="gap-1"

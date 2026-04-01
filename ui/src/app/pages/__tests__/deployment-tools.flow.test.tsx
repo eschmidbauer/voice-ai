@@ -162,11 +162,10 @@ jest.mock('@/app/components/blocks/page-title-block', () => ({
   PageTitleBlock: ({ children }: any) => <h2>{children}</h2>,
 }));
 
-jest.mock('@/app/components/form/button', () => ({
-  IBlueBGButton: ({ children, ...props }: any) => <button {...props}>{children}</button>,
-  IButton: ({ children, ...props }: any) => <button {...props}>{children}</button>,
-  IBlueBGArrowButton: ({ children, ...props }: any) => <button {...props}>{children}</button>,
-  ICancelButton: ({ children, ...props }: any) => <button {...props}>{children}</button>,
+jest.mock('@/app/components/carbon/button', () => ({
+  PrimaryButton: ({ children, isLoading, ...props }: any) => <button {...props}>{children}</button>,
+  SecondaryButton: ({ children, isLoading, ...props }: any) => <button {...props}>{children}</button>,
+  GhostButton: ({ children, isLoading, ...props }: any) => <button {...props}>{children}</button>,
 }));
 
 jest.mock('@/app/components/popover', () => ({
@@ -190,16 +189,16 @@ jest.mock('@/app/components/base/modal/assistant-api-deployment-modal', () => ({
   AssistantApiDeploymentDialog: () => null,
 }));
 
-jest.mock('@/app/components/container/message/actionable-empty-message', () => ({
-  ActionableEmptyMessage: ({ action, onActionClick }: any) => (
-    <button onClick={onActionClick}>{action}</button>
+jest.mock('@/app/components/carbon/empty-state', () => ({
+  EmptyState: ({ action, onAction }: any) => (
+    <button onClick={onAction}>{action}</button>
   ),
 }));
 
 jest.mock('@/app/components/input-helper', () => ({ InputHelper: () => null }));
 jest.mock('@/app/components/form-label', () => ({ FormLabel: ({ children }: any) => <label>{children}</label> }));
 jest.mock('@/app/components/form/fieldset', () => ({ FieldSet: ({ children }: any) => <div>{children}</div> }));
-jest.mock('@/app/components/form/button/copy-button', () => ({ CopyButton: () => null }));
+jest.mock('@/app/components/carbon/button/copy-button', () => ({ CopyButton: () => null }));
 
 jest.mock('@/utils/date', () => ({
   toHumanReadableDateTime: () => 'date-time',

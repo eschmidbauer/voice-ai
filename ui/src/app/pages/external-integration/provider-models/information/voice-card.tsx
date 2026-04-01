@@ -1,4 +1,4 @@
-import { IBlueBorderButton, IButton } from '@/app/components/form/button';
+import { TertiaryButton, GhostButton } from '@/app/components/carbon/button';
 import { Check, Copy, Pause, Play } from 'lucide-react';
 import { FC, useRef, useState } from 'react';
 
@@ -47,7 +47,8 @@ export const VoiceCard: FC<{
         </div>
         {previewUrl && <audio ref={audioRef} src={previewUrl} />}
         {previewUrl && (
-          <IBlueBorderButton
+          <TertiaryButton
+            size="md"
             onClick={togglePlayback}
             className="p-1 px-2.5 bg-blue-600/10 dark:bg-blue-600/10"
           >
@@ -56,7 +57,7 @@ export const VoiceCard: FC<{
             ) : (
               <Play className="w-4 h-4 shrink-0" />
             )}
-          </IBlueBorderButton>
+          </TertiaryButton>
         )}
       </div>
       <div className="py-2 px-4 flex justify-between">
@@ -123,13 +124,13 @@ export const VoiceCard: FC<{
           </p>
           <p className="text-xs/6 font-mono">{voiceId}</p>
         </div>
-        <IButton onClick={handleCopy} title="Copy Voice ID">
+        <GhostButton size="md" onClick={handleCopy} title="Copy Voice ID">
           {copied ? (
             <Check className="text-green-400 w-4 h-4" strokeWidth={1.5} />
           ) : (
             <Copy className="text-slate-400 w-4 h-4" strokeWidth={1.5} />
           )}
-        </IButton>
+        </GhostButton>
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { IBlueBGButton } from '@/app/components/form/button';
+import { PrimaryButton } from '@/app/components/carbon/button';
 
 import { ArrowLeft } from 'lucide-react';
 import { FC } from 'react';
@@ -25,10 +25,10 @@ export const ErrorContainer: FC<ErrorContainerProps> = ({
         <p className="text-3xl md:text-3xl leading-normal mt-4">{title}</p>
         <p className="mb-8 mt-2">{description}</p>
 
-        <IBlueBGButton onClick={onAction} className="pr-4">
+        <PrimaryButton size="md" onClick={onAction} className="pr-4">
           <ArrowLeft className="w-5 h-5 mr-2" strokeWidth={1.5} />{' '}
           <span>{actionLabel}</span>
-        </IBlueBGButton>
+        </PrimaryButton>
       </div>
       <div className="max-w-lg">
         <svg

@@ -144,7 +144,7 @@ export const HomePage = () => {
         <div className="flex items-center gap-4">
           <span>© 2025 Rapida.ai</span>
           <Link href="/static/privacy-policy" inline>Privacy Policy</Link>
-          <Link href="/static/privacy-policy" inline>Terms</Link>
+          <Link href="/static/terms" inline>Terms</Link>
         </div>
       </footer>
     </div>

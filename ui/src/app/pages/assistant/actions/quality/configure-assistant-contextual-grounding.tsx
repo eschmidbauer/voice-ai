@@ -3,10 +3,10 @@ import { PageHeaderBlock } from '@/app/components/blocks/page-header-block';
 import { PageTitleBlock } from '@/app/components/blocks/page-title-block';
 import { FormLabel } from '@/app/components/form-label';
 import {
-  IBlueBGButton,
-  IBlueBorderButton,
-  ICancelButton,
-} from '@/app/components/form/button';
+  PrimaryButton,
+  TertiaryButton,
+  GhostButton,
+} from '@/app/components/carbon/button';
 import { FieldSet } from '@/app/components/form/fieldset';
 import { Input } from '@/app/components/form/input';
 import { Select } from '@/app/components/form/select';
@@ -78,12 +78,13 @@ export const ConfigureAssistantContextualGroundingPage = () => {
                   }}
                   className="w-16 ml-2 h-9 bg-light-background"
                 />
-                <IBlueBorderButton
+                <TertiaryButton
+                  size="md"
                   className="w-fit shrink-0 pe-4"
                   onClick={resetGrounding}
                 >
                   Reset
-                </IBlueBorderButton>
+                </TertiaryButton>
               </FieldSet>
               <FieldSet className="flex justify-between">
                 <FormLabel>Contextual grounding action</FormLabel>
@@ -148,12 +149,13 @@ export const ConfigureAssistantContextualGroundingPage = () => {
                   }}
                   className="w-16 ml-2 h-9 bg-light-background"
                 />
-                <IBlueBorderButton
+                <TertiaryButton
+                  size="md"
                   className="w-fit shrink-0 pe-4"
                   onClick={resetRelevance}
                 >
                   Reset
-                </IBlueBorderButton>
+                </TertiaryButton>
               </FieldSet>
               <FieldSet className="flex justify-between">
                 <FormLabel>Relevance action</FormLabel>
@@ -182,17 +184,17 @@ export const ConfigureAssistantContextualGroundingPage = () => {
       </div>
 
       <PageActionButtonBlock errorMessage={''}>
-        <ICancelButton
-          className="px-4 rounded-[2px]"
+        <GhostButton
+          size="md"
           onClick={() => {
             //   goToAssistant(assistantId);
           }}
         >
           Cancel
-        </ICancelButton>
-        <IBlueBGButton type="submit" className="px-4 rounded-[2px]">
+        </GhostButton>
+        <PrimaryButton size="md" type="submit">
           Configure grounding
-        </IBlueBGButton>
+        </PrimaryButton>
       </PageActionButtonBlock>
     </div>
   );

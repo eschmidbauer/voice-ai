@@ -1,4 +1,4 @@
-import type { ElementType, FC } from 'react';
+import type { ElementType, FC, ReactNode } from 'react';
 import { Button } from '@carbon/react';
 import { cn } from '@/utils';
 
@@ -8,6 +8,7 @@ export interface EmptyStateProps {
   subtitle?: string;
   action?: string;
   onAction?: () => void;
+  actionComponent?: ReactNode;
   className?: string;
 }
 
@@ -17,6 +18,7 @@ export const EmptyState: FC<EmptyStateProps> = ({
   subtitle,
   action,
   onAction,
+  actionComponent,
   className,
 }) => {
   return (
@@ -39,6 +41,7 @@ export const EmptyState: FC<EmptyStateProps> = ({
           {subtitle}
         </p>
       )}
+      {actionComponent}
       {action && onAction && (
         <Button
           size="lg"

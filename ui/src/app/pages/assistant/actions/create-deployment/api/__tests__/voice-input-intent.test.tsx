@@ -1,9 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import {
-  ConfigureAssistantApiDeploymentPage,
-} from '@/app/pages/assistant/actions/create-deployment/api';
+import { ConfigureAssistantApiDeploymentPage } from '@/app/pages/assistant/actions/create-deployment/api';
 import {
   CreateAssistantApiDeployment,
   GetAssistantApiDeployment,
@@ -124,7 +122,11 @@ jest.mock('@/hooks/use-model', () => ({
 }));
 
 jest.mock('@/hooks/use-credential', () => ({
-  useCurrentCredential: () => ({ authId: 'u-1', projectId: 'p-1', token: 't-1' }),
+  useCurrentCredential: () => ({
+    authId: 'u-1',
+    projectId: 'p-1',
+    token: 't-1',
+  }),
 }));
 
 jest.mock('@/hooks/use-global-navigator', () => ({
@@ -173,17 +175,26 @@ jest.mock('@/app/components/form/tab-form', () => ({
   },
 }));
 
-jest.mock('@/app/pages/assistant/actions/create-deployment/commons/configure-experience', () => ({
-  ConfigureExperience: () => <div>experience</div>,
-}));
+jest.mock(
+  '@/app/pages/assistant/actions/create-deployment/commons/configure-experience',
+  () => ({
+    ConfigureExperience: () => <div>experience</div>,
+  }),
+);
 
-jest.mock('@/app/pages/assistant/actions/create-deployment/commons/configure-audio-input', () => ({
-  ConfigureAudioInputProvider: () => <div>audio-input</div>,
-}));
+jest.mock(
+  '@/app/pages/assistant/actions/create-deployment/commons/configure-audio-input',
+  () => ({
+    ConfigureAudioInputProvider: () => <div>audio-input</div>,
+  }),
+);
 
-jest.mock('@/app/pages/assistant/actions/create-deployment/commons/configure-audio-output', () => ({
-  ConfigureAudioOutputProvider: () => <div>audio-output</div>,
-}));
+jest.mock(
+  '@/app/pages/assistant/actions/create-deployment/commons/configure-audio-output',
+  () => ({
+    ConfigureAudioOutputProvider: () => <div>audio-output</div>,
+  }),
+);
 
 jest.mock('@/app/components/providers/speech-to-text/provider', () => ({
   GetDefaultMicrophoneConfig: () => [],
@@ -200,9 +211,13 @@ jest.mock('@/app/components/providers/text-to-speech/provider', () => ({
 jest.mock('@/app/pages/assistant/actions/hooks/use-confirmation', () => {
   const React = require('react');
   return {
-    useConfirmDialog: ({ title = 'Are you sure?' }: { title?: string } = {}) => {
+    useConfirmDialog: ({
+      title = 'Are you sure?',
+    }: { title?: string } = {}) => {
       const [isOpen, setIsOpen] = React.useState(false);
-      const [onConfirm, setOnConfirm] = React.useState<() => void>(() => () => {});
+      const [onConfirm, setOnConfirm] = React.useState<() => void>(
+        () => () => {},
+      );
 
       return {
         showDialog: (cb: () => void) => {
@@ -225,10 +240,16 @@ jest.mock('@/app/pages/assistant/actions/hooks/use-confirmation', () => {
   };
 });
 
-jest.mock('@/app/components/form/button', () => ({
-  IBlueBGArrowButton: ({ children, isLoading, ...props }: any) => <button {...props}>{children}</button>,
-  ICancelButton: ({ children, isLoading, ...props }: any) => <button {...props}>{children}</button>,
-  ISecondaryButton: ({ children, isLoading, ...props }: any) => <button {...props}>{children}</button>,
+jest.mock('@/app/components/carbon/button', () => ({
+  PrimaryButton: ({ children, isLoading, ...props }: any) => (
+    <button {...props}>{children}</button>
+  ),
+  GhostButton: ({ children, isLoading, ...props }: any) => (
+    <button {...props}>{children}</button>
+  ),
+  SecondaryButton: ({ children, isLoading, ...props }: any) => (
+    <button {...props}>{children}</button>
+  ),
 }));
 
 describe('API deployment voice input intent actions', () => {
@@ -254,7 +275,9 @@ describe('API deployment voice input intent actions', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    (GetAssistantApiDeployment as jest.Mock).mockResolvedValue(mockEditDeployment());
+    (GetAssistantApiDeployment as jest.Mock).mockResolvedValue(
+      mockEditDeployment(),
+    );
 
     (CreateAssistantApiDeployment as jest.Mock).mockResolvedValue({
       getData: () => ({ id: 'dep-1' }),
@@ -292,9 +315,7 @@ describe('API deployment voice input intent actions', () => {
     fireEvent.click(
       screen.getByLabelText('Enable voice input (Speech-to-Text)'),
     );
-    expect(
-      screen.getByText(/Voice input is disabled\./i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Voice input is disabled\./i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     fireEvent.click(screen.getByRole('button', { name: 'Deploy API' }));
 
@@ -313,7 +334,9 @@ describe('API deployment voice input intent actions', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     await waitFor(() =>
-      expect(screen.getByText(/Voice output is currently/i)).toBeInTheDocument(),
+      expect(
+        screen.getByText(/Voice output is currently/i),
+      ).toBeInTheDocument(),
     );
     fireEvent.click(
       screen.getByLabelText('Enable voice output (Text-to-Speech)'),

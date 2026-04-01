@@ -24,7 +24,7 @@ import {
   RadioButton,
 } from '@carbon/react';
 import { Copy, Checkmark, Rocket, Renew } from '@carbon/icons-react';
-import { ActionableEmptyMessage } from '@/app/components/container/message/actionable-empty-message';
+import { EmptyState } from '@/app/components/carbon/empty-state';
 
 const headers = [
   { key: 'description', header: 'Description' },
@@ -130,7 +130,7 @@ export function Version(props: {
   if (versions.length === 0 && !rapidaContext.loading) {
     return (
       <div className="flex flex-1 items-center justify-center">
-        <ActionableEmptyMessage
+        <EmptyState
           title="No versions found"
           subtitle="Create a new version of this endpoint to get started."
         />

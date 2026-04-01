@@ -7,8 +7,8 @@ import toast from 'react-hot-toast/headless';
 import SingleAssistant from './single-assistant';
 import { useAssistantPageStore } from '@/hooks/use-assistant-page-store';
 import { Assistant } from '@rapidaai/react';
-import { Spinner } from '@/app/components/loader/spinner';
-import { ActionableEmptyMessage } from '@/app/components/container/message/actionable-empty-message';
+import { PageLoading } from '@/app/components/carbon/loading';
+import { EmptyState } from '@/app/components/carbon/empty-state';
 import { Pagination } from '@/app/components/carbon/pagination';
 import { Renew } from '@carbon/icons-react';
 import {
@@ -102,7 +102,9 @@ export function AssistantPage() {
       </TableToolbar>
 
       {/* Content */}
-      {assistantAction.assistants && assistantAction.assistants.length > 0 ? (
+      {loading ? (
+        <PageLoading className="h-full" />
+      ) : assistantAction.assistants && assistantAction.assistants.length > 0 ? (
         <section className="grid content-start grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4 flex-1 overflow-auto p-4">
           {assistantAction.assistants.map((ast, idx) => (
             <SingleAssistant key={idx} assistant={ast} />
@@ -110,29 +112,25 @@ export function AssistantPage() {
         </section>
       ) : assistantAction.criteria.length > 0 ? (
         <div className="h-full flex justify-center items-center">
-          <ActionableEmptyMessage
+          <EmptyState
             title="No Assistant"
             subtitle="There are no assistant matching with your criteria."
             action="Create new Assistant"
-            onActionClick={() =>
-              navigate('/deployment/assistant/create-assistant')
-            }
-          />
-        </div>
-      ) : !loading ? (
-        <div className="h-full flex justify-center items-center">
-          <ActionableEmptyMessage
-            title="No Assistant"
-            subtitle="There are no Assistants to display"
-            action="Create new Assistant"
-            onActionClick={() =>
+            onAction={() =>
               navigate('/deployment/assistant/create-assistant')
             }
           />
         </div>
       ) : (
         <div className="h-full flex justify-center items-center">
-          <Spinner size="md" />
+          <EmptyState
+            title="No Assistant"
+            subtitle="There are no Assistants to display"
+            action="Create new Assistant"
+            onAction={() =>
+              navigate('/deployment/assistant/create-assistant')
+            }
+          />
         </div>
       )}
 

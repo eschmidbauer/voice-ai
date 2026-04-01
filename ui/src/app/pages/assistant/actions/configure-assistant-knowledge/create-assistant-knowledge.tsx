@@ -3,7 +3,7 @@ import { Card } from '@/app/components/base/cards';
 import { PageActionButtonBlock } from '@/app/components/blocks/page-action-button-block';
 import { KnowledgeDropdown } from '@/app/components/dropdown/knowledge-dropdown';
 import { FormLabel } from '@/app/components/form-label';
-import { IBlueBGButton, ICancelButton } from '@/app/components/form/button';
+import { PrimaryButton, GhostButton } from '@/app/components/carbon/button';
 import CheckboxCard from '@/app/components/form/checkbox-card';
 import { FieldSet } from '@/app/components/form/fieldset';
 import { Input } from '@/app/components/form/input';
@@ -310,16 +310,15 @@ export const CreateKnowledge: FC<{ assistantId: string }> = ({
         </div>
       </div>
       <PageActionButtonBlock errorMessage={errorMessage}>
-        <ICancelButton
-          className="px-4"
+        <GhostButton size="md"
           onClick={() => showDialog(navigator.goBack)}
           type="button"
         >
           Cancel
-        </ICancelButton>
-        <IBlueBGButton type="submit" className="px-4">
+        </GhostButton>
+        <PrimaryButton size="md" type="submit">
           Connect knowledge
-        </IBlueBGButton>
+        </PrimaryButton>
       </PageActionButtonBlock>
     </form>
   );

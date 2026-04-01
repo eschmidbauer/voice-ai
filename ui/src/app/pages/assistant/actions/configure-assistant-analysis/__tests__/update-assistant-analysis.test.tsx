@@ -10,7 +10,9 @@ const mockGoBack = jest.fn();
 const mockGoToConfigureAssistantAnalysis = jest.fn();
 const mockToastError = jest.fn();
 
-let mockParams: Record<string, string | undefined> = { analysisId: 'analysis-1' };
+let mockParams: Record<string, string | undefined> = {
+  analysisId: 'analysis-1',
+};
 
 jest.mock('@rapidaai/react', () => ({
   ConnectionConfig: class ConnectionConfig {
@@ -89,9 +91,13 @@ jest.mock('@/app/components/form/tab-form', () => ({
   },
 }));
 
-jest.mock('@/app/components/form/button', () => ({
-  IBlueBorderButton: ({ children, ...props }: any) => <button {...props}>{children}</button>,
-  IRedBorderButton: ({ children, ...props }: any) => <button {...props}>{children}</button>,
+jest.mock('@/app/components/carbon/button', () => ({
+  TertiaryButton: ({ children, ...props }: any) => (
+    <button {...props}>{children}</button>
+  ),
+  DangerTertiaryButton: ({ children, ...props }: any) => (
+    <button {...props}>{children}</button>
+  ),
 }));
 
 jest.mock('@/app/components/carbon/button', () => ({
@@ -108,10 +114,23 @@ jest.mock('@/app/components/carbon/button', () => ({
 
 jest.mock('@/app/components/carbon/form', () => ({
   Stack: ({ children }: any) => <div>{children}</div>,
-  TextInput: ({ id, labelText, value, onChange, type = 'text', ...rest }: any) => (
+  TextInput: ({
+    id,
+    labelText,
+    value,
+    onChange,
+    type = 'text',
+    ...rest
+  }: any) => (
     <div>
       {labelText ? <label htmlFor={id}>{labelText}</label> : null}
-      <input id={id} value={value ?? ''} onChange={onChange} type={type} {...rest} />
+      <input
+        id={id}
+        value={value ?? ''}
+        onChange={onChange}
+        type={type}
+        {...rest}
+      />
     </div>
   ),
   TextArea: ({ id, labelText, value, onChange, ...rest }: any) => (
@@ -267,8 +286,12 @@ describe('UpdateAssistantAnalysis', () => {
     await waitFor(() => {
       expect(UpdateAnalysis).toHaveBeenCalled();
     });
-    expect(toast.success).toHaveBeenCalledWith(`Assistant's analysis updated successfully`);
-    expect(mockGoToConfigureAssistantAnalysis).toHaveBeenCalledWith('assistant-1');
+    expect(toast.success).toHaveBeenCalledWith(
+      `Assistant's analysis updated successfully`,
+    );
+    expect(mockGoToConfigureAssistantAnalysis).toHaveBeenCalledWith(
+      'assistant-1',
+    );
   });
 
   it('shows human error message when update response is unsuccessful', async () => {
@@ -300,6 +323,8 @@ describe('UpdateAssistantAnalysis', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     fireEvent.click(screen.getByRole('button', { name: 'Update analysis' }));
 
-    expect(await screen.findByText('Invalid analysis name')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Invalid analysis name'),
+    ).toBeInTheDocument();
   });
 });

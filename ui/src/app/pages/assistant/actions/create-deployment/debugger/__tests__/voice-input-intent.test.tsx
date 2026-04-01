@@ -226,10 +226,10 @@ jest.mock('@/app/pages/assistant/actions/hooks/use-confirmation', () => {
   };
 });
 
-jest.mock('@/app/components/form/button', () => ({
-  IBlueBGArrowButton: ({ children, isLoading, ...props }: any) => <button {...props}>{children}</button>,
-  ICancelButton: ({ children, isLoading, ...props }: any) => <button {...props}>{children}</button>,
-  ISecondaryButton: ({ children, isLoading, ...props }: any) => <button {...props}>{children}</button>,
+jest.mock('@/app/components/carbon/button', () => ({
+  PrimaryButton: ({ children, isLoading, ...props }: any) => <button {...props}>{children}</button>,
+  GhostButton: ({ children, isLoading, ...props }: any) => <button {...props}>{children}</button>,
+  SecondaryButton: ({ children, isLoading, ...props }: any) => <button {...props}>{children}</button>,
 }));
 
 describe('Debugger deployment voice input intent actions', () => {

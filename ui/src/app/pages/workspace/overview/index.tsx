@@ -3,8 +3,8 @@ import { Helmet } from '@/app/components/helmet';
 import { DescriptiveHeading } from '@/app/components/heading/descriptive-heading';
 import { Input } from '@/app/components/form/input';
 import { Label } from '@/app/components/form/label';
-import { ArrowButton } from '@/app/components/form/button/ArrowButton';
-import { BorderedButton } from '@/app/components/form/button/Bordered';
+import { ArrowButton } from '@/app/components/carbon/button/arrow-button';
+import { DangerTertiaryButton } from '@/app/components/carbon/button';
 import { ServiceError } from '@rapidaai/react';
 import { UpdateOrganization, GetOrganization } from '@rapidaai/react';
 
@@ -220,15 +220,13 @@ export function OverviewPage() {
 
           <div className="md:mx-0 m-5 flex space-y-2 w-full flex-col">
             <div className="w-60">
-              <BorderedButton
+              <DangerTertiaryButton
+                size="sm"
                 type="button"
                 onClick={() => {}}
-                size="sm"
-                width="w-fit"
-                color="red"
               >
                 Archieve Organization
-              </BorderedButton>
+              </DangerTertiaryButton>
             </div>
           </div>
         </fieldset>

@@ -1,7 +1,7 @@
 import { PageActionButtonBlock } from '@/app/components/blocks/page-action-button-block';
 import { PageHeaderBlock } from '@/app/components/blocks/page-header-block';
 import { PageTitleBlock } from '@/app/components/blocks/page-title-block';
-import { IBlueBGButton, ICancelButton } from '@/app/components/form/button';
+import { PrimaryButton, GhostButton } from '@/app/components/carbon/button';
 import { Select } from '@/app/components/form/select';
 import { Slider } from '@/app/components/form/slider';
 import { InputGroup } from '@/app/components/input-group';
@@ -171,17 +171,16 @@ export const ConfigureAssistantContentFilterPage = () => {
         </div>
       </div>
       <PageActionButtonBlock errorMessage={errorMessage}>
-        <ICancelButton
-          className="px-4 rounded-[2px]"
+        <GhostButton size="md"
           onClick={() => {
             //   goToAssistant(assistantId);
           }}
         >
           Cancel
-        </ICancelButton>
-        <IBlueBGButton type="submit" className="px-4 rounded-[2px]">
+        </GhostButton>
+        <PrimaryButton size="md" type="submit">
           Configure filter
-        </IBlueBGButton>
+        </PrimaryButton>
       </PageActionButtonBlock>
     </div>
   );

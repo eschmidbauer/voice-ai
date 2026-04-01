@@ -2,7 +2,7 @@ import { FC } from 'react';
 import { useParams } from 'react-router-dom';
 import { useConfirmDialog } from '@/app/pages/assistant/actions/hooks/use-confirmation';
 import { useGlobalNavigation } from '@/hooks/use-global-navigator';
-import { IBlueBGButton, ICancelButton } from '@/app/components/form/button';
+import { PrimaryButton, GhostButton } from '@/app/components/carbon/button';
 import React, { useState } from 'react';
 import { InputGroup } from '@/app/components/input-group';
 import { FieldSet } from '@/app/components/form/fieldset';
@@ -44,15 +44,14 @@ const ConfigureAssistantAnalysis: FC<{ assistantId: string }> = ({
         </div>
 
         <PageActionButtonBlock errorMessage={errorMessage}>
-          <ICancelButton
-            className="px-4 rounded-[2px]"
+          <GhostButton size="md"
             onClick={() => showDialog(navigator.goBack)}
           >
             Cancel
-          </ICancelButton>
-          <IBlueBGButton type="submit" className="px-4 rounded-[2px]">
+          </GhostButton>
+          <PrimaryButton size="md" type="submit">
             Configure analysis
-          </IBlueBGButton>
+          </PrimaryButton>
         </PageActionButtonBlock>
       </div>
     </>

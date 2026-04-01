@@ -6,7 +6,7 @@ import { Activity, Edit, TrashCan, Add, Renew } from '@carbon/icons-react';
 import { useCurrentCredential } from '@/hooks/use-credential';
 import { SectionLoader } from '@/app/components/loader/section-loader';
 import toast from 'react-hot-toast/headless';
-import { ActionableEmptyMessage } from '@/app/components/container/message/actionable-empty-message';
+import { EmptyState } from '@/app/components/carbon/empty-state';
 import { CreateAssistantTelemetry } from './create-assistant-telemetry';
 import { UpdateAssistantTelemetry } from './update-assistant-telemetry';
 import { useAssistantTelemetryPageStore } from '@/app/pages/assistant/actions/store/use-telemetry-page-store';
@@ -178,11 +178,11 @@ const ConfigureAssistantTelemetry: FC<{ assistantId: string }> = ({
         </div>
       ) : (
         <div className="flex flex-col flex-1 items-center justify-center">
-          <ActionableEmptyMessage
+          <EmptyState
             title="No telemetry providers"
             subtitle="Add a telemetry destination to export events and metrics from this assistant."
             action="Add telemetry"
-            onActionClick={() => navigation.goToCreateAssistantTelemetry(assistantId)}
+            onAction={() => navigation.goToCreateAssistantTelemetry(assistantId)}
           />
         </div>
       )}

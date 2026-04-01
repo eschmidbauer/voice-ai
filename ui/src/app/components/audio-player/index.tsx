@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, FC, ReactNode } from 'react';
 import WaveSurfer from 'wavesurfer.js';
 import TimelinePlugin from 'wavesurfer.js/dist/plugins/timeline.esm.js';
-import { IButton } from '@/app/components/form/button';
+import { GhostButton } from '@/app/components/carbon/button';
 import { ArrowDownToLine, Pause, Play, Volume2, VolumeX } from 'lucide-react';
 import { Tooltip } from '@/app/components/base/tooltip';
 import { cn } from '@/utils';
@@ -285,13 +285,13 @@ export const AudioPlayer: FC<AudioPlayerProps> = ({
       <div className="flex w-full flex-col justify-between gap-3 md:flex-row md:items-center bg-white dark:bg-gray-900 border-y">
         {/* Play + volume control */}
         <div className="flex items-center justify-between divide-x border-r">
-          <IButton type="button" onClick={togglePlay} disabled={!bothReady}>
+          <GhostButton size="md" type="button" onClick={togglePlay} disabled={!bothReady}>
             {playing ? (
               <Pause className="w-4 h-4" strokeWidth={1.5} />
             ) : (
               <Play className="w-4 h-4" strokeWidth={1.5} />
             )}
-          </IButton>
+          </GhostButton>
 
           <Tooltip
             content={
@@ -307,20 +307,21 @@ export const AudioPlayer: FC<AudioPlayerProps> = ({
               />
             }
           >
-            <IButton onClick={toggleMute} type="button">
+            <GhostButton size="md" onClick={toggleMute} type="button">
               {muted || volume === 0 ? (
                 <VolumeX className="w-4 h-4" strokeWidth={1.5} />
               ) : (
                 <Volume2 className="w-4 h-4" strokeWidth={1.5} />
               )}
-            </IButton>
+            </GhostButton>
           </Tooltip>
         </div>
 
         {/* Speed + download */}
         <div className="flex items-center justify-between divide-x border-l">
           {playbackSpeeds.map(speed => (
-            <IButton
+            <GhostButton
+              size="md"
               key={speed}
               onClick={() => setPlayBackSpeed(speed)}
               className={cn(
@@ -330,24 +331,26 @@ export const AudioPlayer: FC<AudioPlayerProps> = ({
               )}
             >
               {speed}x
-            </IButton>
+            </GhostButton>
           ))}
-          <IButton
+          <GhostButton
+            size="md"
             onClick={() => handleDownloadAudio(assistantSrc, 'assistant')}
             type="button"
             className="rounded-none"
           >
             <ArrowDownToLine className="h-4 w-4 mr-1" strokeWidth={1.5} />{' '}
             <span>Assistant</span>
-          </IButton>
-          <IButton
+          </GhostButton>
+          <GhostButton
+            size="md"
             onClick={() => handleDownloadAudio(userSrc, 'user')}
             type="button"
             className="rounded-none"
           >
             <ArrowDownToLine className="h-4 w-4 mr-1" strokeWidth={1.5} />{' '}
             <span>User</span>
-          </IButton>
+          </GhostButton>
         </div>
       </div>
     </div>

@@ -4,7 +4,7 @@ import { useBoolean } from 'ahooks';
 import MessageTypeSelector from './message-type-selector';
 import type { PromptRole } from '@/models/prompt';
 import { DeleteIcon } from '@/app/components/Icon/delete';
-import { IButton } from '@/app/components/form/button';
+import { GhostButton } from '@/app/components/carbon/button';
 import { TickIcon } from '@/app/components/Icon/Tick';
 import { CopyIcon } from '@/app/components/Icon/Copy';
 import { cn } from '@/utils';
@@ -85,15 +85,17 @@ const AdvancedPromptInput: FC<PromptEditorProps> = ({
         >
           <MessageTypeSelector value={type} onChange={onTypeChange} />
           {canDelete && (
-            <IButton
+            <GhostButton
+              size="md"
               onClick={onDelete}
               tabIndex={-1}
               className="hover:border-red-600  dark:hover:border-red-600 transition-colors border border-transparent border-l-gray-300 dark:border-l-gray-700"
             >
               <DeleteIcon className="w-4 h-4 text-red-600" />
-            </IButton>
+            </GhostButton>
           )}
-          <IButton
+          <GhostButton
+            size="md"
             tabIndex={-1}
             onClick={() => {
               copyItem(value);
@@ -105,8 +107,9 @@ const AdvancedPromptInput: FC<PromptEditorProps> = ({
             ) : (
               <CopyIcon className="h-4 w-4" />
             )}
-          </IButton>
-          <IButton
+          </GhostButton>
+          <GhostButton
+            size="md"
             tabIndex={-1}
             onClick={() => {
               setIsExpand(!isExpand);
@@ -118,7 +121,7 @@ const AdvancedPromptInput: FC<PromptEditorProps> = ({
             ) : (
               <Maximize2 className="h-4 w-4" strokeWidth={1.5} />
             )}
-          </IButton>
+          </GhostButton>
         </div>
 
         <PromptEditor
