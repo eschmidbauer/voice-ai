@@ -96,8 +96,8 @@ jest.mock('@/app/components/providers/telemetry', () => ({
 }));
 
 jest.mock('@/app/components/carbon/button', () => ({
-  PrimaryButton: ({ children, ...props }: any) => <button {...props}>{children}</button>,
-  SecondaryButton: ({ children, ...props }: any) => <button {...props}>{children}</button>,
+  PrimaryButton: ({ children, isLoading: _, ...props }: any) => <button {...props}>{children}</button>,
+  SecondaryButton: ({ children, isLoading: _, ...props }: any) => <button {...props}>{children}</button>,
 }));
 
 jest.mock('@/app/components/carbon/form', () => ({
@@ -108,7 +108,7 @@ jest.mock('@/app/components/carbon/notification', () => ({
   Notification: ({ subtitle }: any) => <div>{subtitle}</div>,
 }));
 
-jest.mock('@/app/components/form/checkbox', () => ({
+jest.mock('@/app/components/carbon/form/input-checkbox', () => ({
   InputCheckbox: ({ checked, onChange, children }: any) => (
     <label>
       <input type="checkbox" checked={checked} onChange={onChange} />
@@ -213,5 +213,16 @@ describe('Create assistant telemetry flow', () => {
     expect(mockNavigator.goToAssistantTelemetry).toHaveBeenCalledWith(
       'assistant-1',
     );
+  });
+
+  it('applies page background tokens for light/dark mode parity', () => {
+    const { container } = render(
+      <CreateAssistantTelemetry assistantId="assistant-1" />,
+    );
+
+    const pageRoot = container.firstElementChild as HTMLElement;
+    expect(pageRoot).toBeInTheDocument();
+    expect(pageRoot).toHaveClass('bg-white');
+    expect(pageRoot).toHaveClass('dark:bg-gray-900');
   });
 });

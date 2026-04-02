@@ -1,0 +1,111 @@
+import { FC, useState } from 'react';
+import { TextInput, TextArea, Stack } from '@/app/components/carbon/form';
+import { Slider } from '@carbon/react';
+import { ChevronDown } from '@carbon/icons-react';
+import { cn } from '@/utils';
+import { ExperienceConfig } from '@/app/pages/assistant/actions/create-deployment/commons/configure-experience';
+import ConfigSelect from '@/app/components/configuration/config-var/config-select';
+
+export const ConfigureWebExperienceModalForm: FC<{
+  experienceConfig: ExperienceConfig;
+  setExperienceConfig: (config: ExperienceConfig) => void;
+}> = ({ experienceConfig, setExperienceConfig }) => {
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  const update = (field: keyof ExperienceConfig, value: any) =>
+    setExperienceConfig({ ...experienceConfig, [field]: value });
+
+  return (
+    <Stack gap={6}>
+      <TextArea
+        id="widget-greeting"
+        labelText="Greeting"
+        rows={3}
+        value={experienceConfig.greeting || ''}
+        onChange={e => update('greeting', e.target.value)}
+        placeholder="Describe your agent so users know how to use it. This will appear as a welcome message."
+      />
+
+      <div>
+        <p className="text-xs font-medium mb-2">Quick-start questions</p>
+        <ConfigSelect
+          options={experienceConfig.suggestions}
+          label="Add question"
+          placeholder="Enter a common user question."
+          helperText="Appears as starter prompts in the web widget. Drag to reorder."
+          onChange={suggestions => update('suggestions', suggestions)}
+        />
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setShowAdvanced(!showAdvanced)}
+        className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+      >
+        <ChevronDown
+          size={16}
+          className={cn(
+            'transition-transform duration-200',
+            showAdvanced && 'rotate-180',
+          )}
+        />
+        {showAdvanced ? 'Hide' : 'Show'} advanced settings
+      </button>
+
+      {showAdvanced && (
+        <div className="pt-6 border-t border-gray-200 dark:border-gray-800">
+          <Stack gap={6}>
+            <TextInput
+              id="widget-error-message"
+              labelText="Error Message"
+              placeholder="Message sent to the user when an error occurs"
+              value={experienceConfig.messageOnError || ''}
+              onChange={e => update('messageOnError', e.target.value)}
+            />
+
+            <Slider
+              id="widget-idle-timeout"
+              labelText="Idle Silence Timeout (Seconds)"
+              min={15}
+              max={120}
+              step={1}
+              value={parseInt(experienceConfig.idealTimeout || '30')}
+              onChange={({ value }: { value: number }) => update('idealTimeout', value.toString())}
+              helperText="Duration of silence after which Rapida will prompt the user (15–120 s)."
+            />
+
+            <Slider
+              id="widget-backoff"
+              labelText="Idle Timeout Backoff (Times)"
+              min={0}
+              max={5}
+              step={1}
+              value={parseInt(experienceConfig.idleTimeoutBackoffTimes || '2')}
+              onChange={({ value }: { value: number }) => update('idleTimeoutBackoffTimes', value.toString())}
+              helperText="How many times the idle timeout multiplies before ending the session."
+            />
+
+            <TextInput
+              id="widget-idle-message"
+              labelText="Idle Message"
+              placeholder="Message spoken when the user hasn't responded"
+              value={experienceConfig.idealMessage || ''}
+              onChange={e => update('idealMessage', e.target.value)}
+            />
+
+            <Slider
+              id="widget-max-duration"
+              labelText="Maximum Session Duration (Seconds)"
+              min={180}
+              max={600}
+              step={1}
+              value={parseInt(experienceConfig.maxCallDuration || '300')}
+              onChange={({ value }: { value: number }) => update('maxCallDuration', value.toString())}
+              helperText="Maximum session length before the call is automatically ended (180–600 s)."
+            />
+          </Stack>
+        </div>
+      )}
+    </Stack>
+  );
+};

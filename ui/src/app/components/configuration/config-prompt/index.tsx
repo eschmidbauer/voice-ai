@@ -202,8 +202,12 @@ export const ConfigPrompt: FC<IPromptProps> = ({
             />
           ))}
           {existingPrompt.prompt.length < MAX_PROMPT_MESSAGE_LENGTH && (
-            <TertiaryButton size="md" onClick={handleAddMessage} className="w-full">
-              <Plus className="h-4 w-4" />
+            <TertiaryButton
+              size="md"
+              renderIcon={Plus}
+              onClick={handleAddMessage}
+              className="!w-full !max-w-none !justify-between !text-left"
+            >
               Add new message
             </TertiaryButton>
           )}

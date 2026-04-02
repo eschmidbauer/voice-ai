@@ -47,6 +47,18 @@ export const useGlobalNavigation = () => {
 
   const goToConfigureDebugger = (assistantId: string) =>
     navigate(`/deployment/assistant/${assistantId}/deployment/debugger`);
+  const goToConfigureDebuggerExperience = (assistantId: string) =>
+    navigate(
+      `/deployment/assistant/${assistantId}/deployment/debugger?editMode=section&section=experience`,
+    );
+  const goToConfigureDebuggerSTT = (assistantId: string) =>
+    navigate(
+      `/deployment/assistant/${assistantId}/deployment/debugger?editMode=section&section=stt`,
+    );
+  const goToConfigureDebuggerTTS = (assistantId: string) =>
+    navigate(
+      `/deployment/assistant/${assistantId}/deployment/debugger?editMode=section&section=tts`,
+    );
 
   const goToConfigureSlack = (assistantId: string) =>
     navigate(`/deployment/assistant/${assistantId}/deployment/slack`);
@@ -180,6 +192,9 @@ export const useGlobalNavigation = () => {
     goToConfigureCall,
     goToConfigureApi,
     goToConfigureDebugger,
+    goToConfigureDebuggerExperience,
+    goToConfigureDebuggerSTT,
+    goToConfigureDebuggerTTS,
     goToEditAssistant,
     goToEndpoint,
     goToManageAssistant,

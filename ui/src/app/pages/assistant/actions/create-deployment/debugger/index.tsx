@@ -8,8 +8,8 @@ import { useRapidaStore } from '@/hooks';
 import { useAllProviderCredentials } from '@/hooks/use-model';
 import { useCurrentCredential } from '@/hooks/use-credential';
 import { useGlobalNavigation } from '@/hooks/use-global-navigator';
-import { FC, useEffect, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { FC, useEffect, useMemo, useRef, useState } from 'react';
+import { useParams, useSearchParams } from 'react-router-dom';
 import {
   AssistantDebuggerDeployment,
   ConnectionConfig,
@@ -43,6 +43,13 @@ import {
 } from '@/app/components/carbon/button';
 import { ButtonSet, Checkbox } from '@carbon/react';
 import { CornerBorderOverlay } from '@/app/components/base/corner-border';
+
+type SectionCode = 'experience' | 'stt' | 'tts';
+type ExistingDebuggerConfig = {
+  experience: ExperienceConfig;
+  inputAudio?: { provider: string; parameters: Metadata[] };
+  outputAudio?: { provider: string; parameters: Metadata[] };
+};
 
 const STEPS = [
   {
@@ -78,6 +85,7 @@ export function ConfigureAssistantDebuggerDeploymentPage() {
 const ConfigureAssistantDebuggerDeployment: FC<{ assistantId: string }> = ({
   assistantId,
 }) => {
+  const [searchParams] = useSearchParams();
   const { goToDeploymentAssistant } = useGlobalNavigation();
   const { showLoader, hideLoader } = useRapidaStore();
   const { providerCredentials } = useAllProviderCredentials();
@@ -89,6 +97,16 @@ const ConfigureAssistantDebuggerDeployment: FC<{ assistantId: string }> = ({
   const [voiceInputEnable, setVoiceInputEnable] = useState(true);
   const [voiceOutputEnable, setVoiceOutputEnable] = useState(true);
   const [success, setSuccess] = useState(false);
+  const [existingConfig, setExistingConfig] = useState<ExistingDebuggerConfig>({
+    experience: {
+      greeting: undefined,
+      messageOnError: undefined,
+      idealTimeout: '30',
+      idealMessage: 'Are you there?',
+      maxCallDuration: '300',
+      idleTimeoutBackoffTimes: '2',
+    },
+  });
 
   const [experienceConfig, setExperienceConfig] = useState<ExperienceConfig>({
     greeting: undefined,
@@ -123,6 +141,17 @@ const ConfigureAssistantDebuggerDeployment: FC<{ assistantId: string }> = ({
 
   const { showDialog, ConfirmDialogComponent } = useConfirmDialog({});
 
+  const section = searchParams.get('section');
+  const editMode = searchParams.get('editMode');
+  const editSection: SectionCode | null = useMemo(() => {
+    if (editMode !== 'section') return null;
+    if (section === 'experience' || section === 'stt' || section === 'tts') {
+      return section;
+    }
+    return null;
+  }, [editMode, section]);
+  const isSectionMode = !!editSection;
+
   const hasFetched = useRef(false);
 
   useEffect(() => {
@@ -146,17 +175,23 @@ const ConfigureAssistantDebuggerDeployment: FC<{ assistantId: string }> = ({
         const deployment = response?.getData();
         if (!deployment) return;
 
-        setExperienceConfig({
+        const fetchedExperience = {
           greeting: deployment.getGreeting(),
           messageOnError: deployment.getMistake(),
           idealTimeout: deployment.getIdealtimeout(),
           idealMessage: deployment.getIdealtimeoutmessage(),
           maxCallDuration: deployment.getMaxsessionduration(),
           idleTimeoutBackoffTimes: deployment.getIdealtimeoutbackoff(),
-        });
+        };
+        setExperienceConfig(fetchedExperience);
 
+        let fetchedInputAudio: ExistingDebuggerConfig['inputAudio'];
         if (deployment.getInputaudio()) {
           const provider = deployment.getInputaudio()!;
+          fetchedInputAudio = {
+            provider: provider.getAudioprovider() || 'deepgram',
+            parameters: provider.getAudiooptionsList() || [],
+          };
           setVoiceInputEnable(true);
           setAudioInputConfig({
             provider: provider.getAudioprovider() || 'deepgram',
@@ -165,10 +200,17 @@ const ConfigureAssistantDebuggerDeployment: FC<{ assistantId: string }> = ({
               GetDefaultMicrophoneConfig(provider.getAudiooptionsList() || []),
             ),
           });
+        } else {
+          setVoiceInputEnable(false);
         }
 
+        let fetchedOutputAudio: ExistingDebuggerConfig['outputAudio'];
         if (deployment.getOutputaudio()) {
           const provider = deployment.getOutputaudio()!;
+          fetchedOutputAudio = {
+            provider: provider.getAudioprovider() || 'cartesia',
+            parameters: provider.getAudiooptionsList() || [],
+          };
           setVoiceOutputEnable(true);
           setAudioOutputConfig({
             provider: provider.getAudioprovider() || 'cartesia',
@@ -180,6 +222,12 @@ const ConfigureAssistantDebuggerDeployment: FC<{ assistantId: string }> = ({
         } else {
           setVoiceOutputEnable(false);
         }
+
+        setExistingConfig({
+          experience: fetchedExperience,
+          inputAudio: fetchedInputAudio,
+          outputAudio: fetchedOutputAudio,
+        });
       })
       .catch(() => {
         hideLoader();
@@ -240,7 +288,10 @@ const ConfigureAssistantDebuggerDeployment: FC<{ assistantId: string }> = ({
     setIsDeploying(true);
     setErrorMessage('');
 
-    if (voiceInputEnable) {
+    const shouldValidateVoiceInput = !isSectionMode || editSection === 'stt';
+    const shouldValidateVoiceOutput = !isSectionMode || editSection === 'tts';
+
+    if (shouldValidateVoiceInput && voiceInputEnable) {
       if (!audioInputConfig.provider) {
         setIsDeploying(false);
         setErrorMessage(
@@ -260,7 +311,7 @@ const ConfigureAssistantDebuggerDeployment: FC<{ assistantId: string }> = ({
       }
     }
 
-    if (voiceOutputEnable) {
+    if (shouldValidateVoiceOutput && voiceOutputEnable) {
       if (!audioOutputConfig.provider) {
         setIsDeploying(false);
         setErrorMessage(
@@ -282,29 +333,47 @@ const ConfigureAssistantDebuggerDeployment: FC<{ assistantId: string }> = ({
 
     const deployment = new AssistantDebuggerDeployment();
     deployment.setAssistantid(assistantId);
-    if (experienceConfig.greeting)
-      deployment.setGreeting(experienceConfig.greeting);
-    if (experienceConfig.messageOnError)
-      deployment.setMistake(experienceConfig.messageOnError);
-    if (experienceConfig.idealTimeout)
-      deployment.setIdealtimeout(experienceConfig.idealTimeout);
-    if (experienceConfig.idleTimeoutBackoffTimes)
+    const resolvedExperience =
+      isSectionMode && editSection !== 'experience'
+        ? existingConfig.experience
+        : experienceConfig;
+    if (resolvedExperience.greeting)
+      deployment.setGreeting(resolvedExperience.greeting);
+    if (resolvedExperience.messageOnError)
+      deployment.setMistake(resolvedExperience.messageOnError);
+    if (resolvedExperience.idealTimeout)
+      deployment.setIdealtimeout(resolvedExperience.idealTimeout);
+    if (resolvedExperience.idleTimeoutBackoffTimes)
       deployment.setIdealtimeoutbackoff(
-        experienceConfig.idleTimeoutBackoffTimes,
+        resolvedExperience.idleTimeoutBackoffTimes,
       );
-    if (experienceConfig.idealMessage)
-      deployment.setIdealtimeoutmessage(experienceConfig.idealMessage);
-    if (experienceConfig.maxCallDuration)
-      deployment.setMaxsessionduration(experienceConfig.maxCallDuration);
+    if (resolvedExperience.idealMessage)
+      deployment.setIdealtimeoutmessage(resolvedExperience.idealMessage);
+    if (resolvedExperience.maxCallDuration)
+      deployment.setMaxsessionduration(resolvedExperience.maxCallDuration);
 
-    if (voiceInputEnable) {
+    if (isSectionMode && editSection !== 'stt') {
+      if (existingConfig.inputAudio) {
+        const inputAudio = new DeploymentAudioProvider();
+        inputAudio.setAudioprovider(existingConfig.inputAudio.provider);
+        inputAudio.setAudiooptionsList(existingConfig.inputAudio.parameters);
+        deployment.setInputaudio(inputAudio);
+      }
+    } else if (voiceInputEnable) {
       const inputAudio = new DeploymentAudioProvider();
       inputAudio.setAudioprovider(audioInputConfig.provider);
       inputAudio.setAudiooptionsList(audioInputConfig.parameters);
       deployment.setInputaudio(inputAudio);
     }
 
-    if (voiceOutputEnable) {
+    if (isSectionMode && editSection !== 'tts') {
+      if (existingConfig.outputAudio) {
+        const outputAudio = new DeploymentAudioProvider();
+        outputAudio.setAudioprovider(existingConfig.outputAudio.provider);
+        outputAudio.setAudiooptionsList(existingConfig.outputAudio.parameters);
+        deployment.setOutputaudio(outputAudio);
+      }
+    } else if (voiceOutputEnable) {
       const outputAudio = new DeploymentAudioProvider();
       outputAudio.setAudioprovider(audioOutputConfig.provider);
       outputAudio.setAudiooptionsList(audioOutputConfig.parameters);
@@ -325,8 +394,13 @@ const ConfigureAssistantDebuggerDeployment: FC<{ assistantId: string }> = ({
     )
       .then(response => {
         if (response?.getData() && response.getSuccess()) {
-          toast.success('Debugger deployment updated successfully.');
-          setSuccess(true);
+          if (isSectionMode) {
+            toast.success('Debugger deployment section updated successfully.');
+            goToDeploymentAssistant(assistantId);
+          } else {
+            toast.success('Debugger deployment updated successfully.');
+            setSuccess(true);
+          }
         } else {
           toast.error(
             response?.getError()?.getHumanmessage() ||
@@ -344,6 +418,91 @@ const ConfigureAssistantDebuggerDeployment: FC<{ assistantId: string }> = ({
       });
   };
 
+  const experienceBody = (
+    <ConfigureExperience
+      experienceConfig={experienceConfig}
+      setExperienceConfig={setExperienceConfig}
+    />
+  );
+
+  const voiceInputBody = (
+    <div>
+      <div className="px-6 pt-6 pb-4">
+        <button
+          type="button"
+          onClick={() => setVoiceInputEnable(!voiceInputEnable)}
+          className="relative group w-full text-left p-4 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950/50 hover:bg-gray-50 dark:hover:bg-gray-900/60 transition-colors"
+        >
+          <CornerBorderOverlay className={voiceInputEnable ? 'opacity-100' : undefined} />
+          <div onClick={e => e.stopPropagation()}>
+            <Checkbox
+              id="voice-input-toggle"
+              labelText="Enable voice input (Speech-to-Text)"
+              checked={voiceInputEnable}
+              onChange={(_, { checked }) => setVoiceInputEnable(checked)}
+            />
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-6">
+            {voiceInputEnable
+              ? 'Voice input is currently enabled.'
+              : 'Voice input is disabled. This deployment will not transcribe user speech.'}
+          </p>
+        </button>
+      </div>
+      {voiceInputEnable && (
+        <ConfigureAudioInputProvider
+          audioInputConfig={audioInputConfig}
+          setAudioInputConfig={setAudioInputConfig}
+        />
+      )}
+    </div>
+  );
+
+  const voiceOutputBody = (
+    <div>
+      <div className="px-6 pt-6 pb-4">
+        <button
+          type="button"
+          onClick={() => setVoiceOutputEnable(!voiceOutputEnable)}
+          className="relative group w-full text-left p-4 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950/50 hover:bg-gray-50 dark:hover:bg-gray-900/60 transition-colors"
+        >
+          <CornerBorderOverlay className={voiceOutputEnable ? 'opacity-100' : undefined} />
+          <div onClick={e => e.stopPropagation()}>
+            <Checkbox
+              id="voice-output-toggle"
+              labelText="Enable voice output (Text-to-Speech)"
+              checked={voiceOutputEnable}
+              onChange={(_, { checked }) => setVoiceOutputEnable(checked)}
+            />
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-6">
+            {voiceOutputEnable
+              ? 'Voice output is currently enabled.'
+              : 'Voice output is disabled. Assistant responses will be text only.'}
+          </p>
+        </button>
+      </div>
+      {voiceOutputEnable && (
+        <ConfigureAudioOutputProvider
+          audioOutputConfig={audioOutputConfig}
+          setAudioOutputConfig={setAudioOutputConfig}
+        />
+      )}
+    </div>
+  );
+
+  const sectionBodyMap: Record<SectionCode, React.ReactNode> = {
+    experience: experienceBody,
+    stt: voiceInputBody,
+    tts: voiceOutputBody,
+  };
+
+  const sectionTitleMap: Record<SectionCode, string> = {
+    experience: 'Experience',
+    stt: 'STT',
+    tts: 'TTS',
+  };
+
   return (
     <>
       <ConfirmDialogComponent />
@@ -356,166 +515,127 @@ const ConfigureAssistantDebuggerDeployment: FC<{ assistantId: string }> = ({
         assistantId={assistantId}
       />
       <div className="flex flex-col flex-1 min-h-0 bg-white dark:bg-gray-900">
-        {/* Page header */}
-        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800 shrink-0 flex items-center gap-3">
-          <div>
-            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-              Debugger Deployment
-            </p>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              Set up an internal testing environment for your assistant.
-            </p>
+        {isSectionMode && editSection ? (
+          <div className="flex flex-col flex-1 min-h-0">
+            <div className="px-6 pt-6 pb-4 border-b border-gray-200 dark:border-gray-800">
+              <h2 className="text-2xl font-light tracking-tight">
+                Edit {sectionTitleMap[editSection]} settings
+              </h2>
+            </div>
+            <div className="flex-1 overflow-auto">{sectionBodyMap[editSection]}</div>
+            <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-800">
+              {errorMessage && (
+                <p className="text-sm text-red-600 dark:text-red-400 mb-3">
+                  {errorMessage}
+                </p>
+              )}
+              <ButtonSet className="!w-full [&>button]:!flex-1 [&>button]:!max-w-none">
+                <SecondaryButton
+                  size="lg"
+                  onClick={() =>
+                    showDialog(() => goToDeploymentAssistant(assistantId))
+                  }
+                >
+                  Cancel
+                </SecondaryButton>
+                <PrimaryButton
+                  size="lg"
+                  isLoading={isDeploying}
+                  disabled={isDeploying}
+                  onClick={handleDeployDebugger}
+                >
+                  Save
+                </PrimaryButton>
+              </ButtonSet>
+            </div>
           </div>
-        </div>
-
-        <TabForm
-          formHeading="Complete all steps to configure your debugger deployment."
-          activeTab={activeTab}
-          onChangeActiveTab={handleTabChange}
-          errorMessage={errorMessage}
-          form={[
-            {
-              code: 'experience',
-              name: 'General Experience',
-              description:
-                'Define how the assistant greets users and handles sessions.',
-              body: (
-                <ConfigureExperience
-                  experienceConfig={experienceConfig}
-                  setExperienceConfig={setExperienceConfig}
-                />
-              ),
-              actions: [
-                <ButtonSet className="!w-full [&>button]:!flex-1 [&>button]:!max-w-none">
-                  <SecondaryButton size="lg"
-                    onClick={() =>
-                      showDialog(() => goToDeploymentAssistant(assistantId))
-                    }
-                  >
-                    Cancel
-                  </SecondaryButton>
-                  <PrimaryButton size="lg" onClick={handleNext}>
-                    Next
-                  </PrimaryButton>
-                </ButtonSet>,
-              ],
-            },
-            {
-              code: 'voice-input',
-              name: 'Voice Input',
-              description:
-                'Configure the speech-to-text provider for capturing user audio.',
-              body: (
-                <div>
-                  <div className="px-6 pt-6 pb-4">
-                    <button
-                      type="button"
-                      onClick={() => setVoiceInputEnable(!voiceInputEnable)}
-                      className="relative group w-full text-left p-4 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950/50 hover:bg-gray-50 dark:hover:bg-gray-900/60 transition-colors"
+        ) : (
+          <TabForm
+            formHeading="Complete all steps to configure your debugger deployment."
+            activeTab={activeTab}
+            onChangeActiveTab={handleTabChange}
+            errorMessage={errorMessage}
+            form={[
+              {
+                code: 'experience',
+                name: 'General Experience',
+                description:
+                  'Define how the assistant greets users and handles sessions.',
+                body: experienceBody,
+                actions: [
+                  <ButtonSet className="!w-full [&>button]:!flex-1 [&>button]:!max-w-none">
+                    <SecondaryButton
+                      size="lg"
+                      onClick={() =>
+                        showDialog(() => goToDeploymentAssistant(assistantId))
+                      }
                     >
-                      <CornerBorderOverlay className={voiceInputEnable ? 'opacity-100' : undefined} />
-                      <div onClick={e => e.stopPropagation()}>
-                        <Checkbox
-                          id="voice-input-toggle"
-                          labelText="Enable voice input (Speech-to-Text)"
-                          checked={voiceInputEnable}
-                          onChange={(_, { checked }) => setVoiceInputEnable(checked)}
-                        />
-                      </div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-6">
-                        {voiceInputEnable
-                          ? 'Voice input is currently enabled.'
-                          : 'Voice input is disabled. This deployment will not transcribe user speech.'}
-                      </p>
-                    </button>
-                  </div>
-                  {voiceInputEnable && (
-                    <ConfigureAudioInputProvider
-                      audioInputConfig={audioInputConfig}
-                      setAudioInputConfig={setAudioInputConfig}
-                    />
-                  )}
-                </div>
-              ),
-              actions: [
-                <ButtonSet className="!w-full [&>button]:!flex-1 [&>button]:!max-w-none">
-                  <GhostButton size="lg" onClick={handlePrevious}>
-                    Previous
-                  </GhostButton>
-                  <SecondaryButton size="lg"
-                    onClick={() =>
-                      showDialog(() => goToDeploymentAssistant(assistantId))
-                    }
-                  >
-                    Cancel
-                  </SecondaryButton>
-                  <PrimaryButton size="lg" onClick={handleNext}>
-                    Next
-                  </PrimaryButton>
-                </ButtonSet>,
-              ],
-            },
-            {
-              code: 'voice-output',
-              name: 'Voice Output',
-              description:
-                'Configure the text-to-speech provider for audio responses.',
-              body: (
-                <div>
-                  <div className="px-6 pt-6 pb-4">
-                    <button
-                      type="button"
-                      onClick={() => setVoiceOutputEnable(!voiceOutputEnable)}
-                      className="relative group w-full text-left p-4 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950/50 hover:bg-gray-50 dark:hover:bg-gray-900/60 transition-colors"
+                      Cancel
+                    </SecondaryButton>
+                    <PrimaryButton size="lg" onClick={handleNext}>
+                      Next
+                    </PrimaryButton>
+                  </ButtonSet>,
+                ],
+              },
+              {
+                code: 'voice-input',
+                name: 'Voice Input',
+                description:
+                  'Configure the speech-to-text provider for capturing user audio.',
+                body: voiceInputBody,
+                actions: [
+                  <ButtonSet className="!w-full [&>button]:!flex-1 [&>button]:!max-w-none">
+                    <GhostButton size="lg" onClick={handlePrevious}>
+                      Previous
+                    </GhostButton>
+                    <SecondaryButton
+                      size="lg"
+                      onClick={() =>
+                        showDialog(() => goToDeploymentAssistant(assistantId))
+                      }
                     >
-                      <CornerBorderOverlay className={voiceOutputEnable ? 'opacity-100' : undefined} />
-                      <div onClick={e => e.stopPropagation()}>
-                        <Checkbox
-                          id="voice-output-toggle"
-                          labelText="Enable voice output (Text-to-Speech)"
-                          checked={voiceOutputEnable}
-                          onChange={(_, { checked }) => setVoiceOutputEnable(checked)}
-                        />
-                      </div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-6">
-                        {voiceOutputEnable
-                          ? 'Voice output is currently enabled.'
-                          : 'Voice output is disabled. Assistant responses will be text only.'}
-                      </p>
-                    </button>
-                  </div>
-                  {voiceOutputEnable && (
-                    <ConfigureAudioOutputProvider
-                      audioOutputConfig={audioOutputConfig}
-                      setAudioOutputConfig={setAudioOutputConfig}
-                    />
-                  )}
-                </div>
-              ),
-              actions: [
-                <ButtonSet className="!w-full [&>button]:!flex-1 [&>button]:!max-w-none">
-                  <GhostButton size="lg" onClick={handlePrevious}>
-                    Previous
-                  </GhostButton>
-                  <SecondaryButton size="lg"
-                    onClick={() =>
-                      showDialog(() => goToDeploymentAssistant(assistantId))
-                    }
-                  >
-                    Cancel
-                  </SecondaryButton>
-                  <PrimaryButton size="lg"
-                    isLoading={isDeploying}
-                    disabled={isDeploying}
-                    onClick={handleDeployDebugger}
-                  >
-                    Deploy Debugger
-                  </PrimaryButton>
-                </ButtonSet>,
-              ],
-            },
-          ]}
-        />
+                      Cancel
+                    </SecondaryButton>
+                    <PrimaryButton size="lg" onClick={handleNext}>
+                      Next
+                    </PrimaryButton>
+                  </ButtonSet>,
+                ],
+              },
+              {
+                code: 'voice-output',
+                name: 'Voice Output',
+                description:
+                  'Configure the text-to-speech provider for audio responses.',
+                body: voiceOutputBody,
+                actions: [
+                  <ButtonSet className="!w-full [&>button]:!flex-1 [&>button]:!max-w-none">
+                    <GhostButton size="lg" onClick={handlePrevious}>
+                      Previous
+                    </GhostButton>
+                    <SecondaryButton
+                      size="lg"
+                      onClick={() =>
+                        showDialog(() => goToDeploymentAssistant(assistantId))
+                      }
+                    >
+                      Cancel
+                    </SecondaryButton>
+                    <PrimaryButton
+                      size="lg"
+                      isLoading={isDeploying}
+                      disabled={isDeploying}
+                      onClick={handleDeployDebugger}
+                    >
+                      Deploy Debugger
+                    </PrimaryButton>
+                  </ButtonSet>,
+                ],
+              },
+            ]}
+          />
+        )}
       </div>
     </>
   );

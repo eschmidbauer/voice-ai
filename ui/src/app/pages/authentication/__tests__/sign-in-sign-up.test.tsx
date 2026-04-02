@@ -87,7 +87,7 @@ jest.mock('@/app/components/helmet', () => ({
   Helmet: () => null,
 }));
 
-jest.mock('@/app/components/form/button-group/SocialButtonGroup', () => ({
+jest.mock('@/app/components/carbon/button/social-button-group', () => ({
   SocialButtonGroup: () => <div data-testid="social-buttons" />,
 }));
 
@@ -103,7 +103,7 @@ jest.mock('@/app/components/form/error-message', () => ({
 }));
 
 jest.mock('@/app/components/carbon/button', () => ({
-  PrimaryButton: ({ children, isLoading, ...props }: any) => (
+  PrimaryButton: ({ children, isLoading: _, renderIcon: _r, hasIconOnly: _h, iconDescription: _d, ...props }: any) => (
     <button {...props}>{children}</button>
   ),
 }));

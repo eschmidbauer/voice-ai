@@ -32,11 +32,19 @@ import {
 } from 'recharts/types/component/DefaultTooltipContent';
 import { ContentType } from 'recharts/types/component/Tooltip';
 import { useAssistantTracePageStore } from '@/hooks/use-assistant-trace-page-store';
-import { FC, useEffect, useState } from 'react';
+import { FC, ReactNode, useEffect, useState } from 'react';
 import { cn } from '@/utils';
 import { useCurrentCredential } from '@/hooks/use-credential';
+import { useGlobalNavigation } from '@/hooks/use-global-navigator';
 import { Dropdown } from '@/app/components/carbon/dropdown';
 import { Tile } from '@/app/components/carbon/tile';
+import {
+  Button,
+  Toggletip,
+  ToggletipButton,
+  ToggletipContent,
+} from '@carbon/react';
+import { Information } from '@carbon/icons-react';
 
 const CHART_COLORS = [
   'var(--cds-interactive, #1e40af)',
@@ -73,6 +81,7 @@ const getStartDate = (range: string): Date => {
 
 export const AssistantAnalytics: FC<{ assistant: Assistant }> = props => {
   const assistantTraceAction = useAssistantTracePageStore();
+  const navigation = useGlobalNavigation();
   const [autoRefreshInterval, setAutoRefreshInterval] = useState<null | number>(null);
   const [selectedRange, setSelectedRange] = useState<string>('last_30_days');
   const [convList, setConvList] = useState<AssistantConversation[]>([]);
@@ -309,7 +318,38 @@ export const AssistantAnalytics: FC<{ assistant: Assistant }> = props => {
               {/* Row 1: Session counts */}
               <Tile isLoading={loading} className="!rounded-none !p-0 !bg-white dark:!bg-transparent border border-gray-200 dark:border-gray-800">
                 <div className="px-4 pt-4 pb-1">
-                  <h3 className="text-sm font-semibold">Sessions</h3>
+                  <div className="flex items-center gap-1">
+                    <h3 className="text-sm font-semibold">Sessions</h3>
+                    <Toggletip align="bottom-left">
+                      <ToggletipButton
+                        label="Sessions actions"
+                        title="Sessions actions"
+                      >
+                        <Information
+                          size={16}
+                          className="text-gray-600 dark:text-gray-300"
+                        />
+                      </ToggletipButton>
+                      <ToggletipContent>
+                        <p className="text-xs mb-2">
+                          Open the full sessions page for this assistant.
+                        </p>
+                        <div className="flex justify-end">
+                          <Button
+                            kind="primary"
+                            size="sm"
+                            onClick={() =>
+                              navigation.goToAssistantSessionList(
+                                props.assistant.getId(),
+                              )
+                            }
+                          >
+                            Go to sessions
+                          </Button>
+                        </div>
+                      </ToggletipContent>
+                    </Toggletip>
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4">
                   <MetricCell label="Sessions" value={totalSessions} />
@@ -491,7 +531,7 @@ export const AssistantAnalytics: FC<{ assistant: Assistant }> = props => {
 
 // ─── Metric cell (inside a grouped tile) ────────────────────────────────────
 
-const MetricCell: FC<{ label: string; value: number; unit?: string }> = ({
+const MetricCell: FC<{ label: ReactNode; value: number; unit?: string }> = ({
   label, value, unit,
 }) => (
   <div className="px-4 py-4">

@@ -164,7 +164,7 @@ export const EditAssistant: FC<{ assistantId: string }> = ({ assistantId }) => {
   });
 
   return (
-    <div className="w-full flex flex-col flex-1 overflow-auto">
+    <div className="w-full flex flex-col flex-1 overflow-auto bg-white dark:bg-gray-900">
       <Deletion.ConfirmDeleteDialogComponent />
 
       {/* Page header */}

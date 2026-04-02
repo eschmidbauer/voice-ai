@@ -1,6 +1,6 @@
 import { useCallback, useContext, useEffect, useState } from 'react';
 import { Helmet } from '@/app/components/helmet';
-import { SocialButtonGroup } from '@/app/components/form/button-group/SocialButtonGroup';
+import { SocialButtonGroup } from '@/app/components/carbon/button/social-button-group';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { RegisterUser } from '@rapidaai/react';
 import { AuthenticateResponse } from '@rapidaai/react';

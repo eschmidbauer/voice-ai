@@ -76,7 +76,7 @@ jest.mock('@carbon/react', () => ({
       </select>
     );
   },
-  Button: ({ children, iconDescription, ...props }: any) => (
+  Button: ({ children, iconDescription, hasIconOnly: _, renderIcon: _r, ...props }: any) => (
     <button aria-label={iconDescription} {...props}>
       {children}
     </button>

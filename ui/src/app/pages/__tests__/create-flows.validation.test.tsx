@@ -148,7 +148,13 @@ jest.mock('@/app/components/form/tab-form', () => ({
         <h1>{formHeading}</h1>
         {errorMessage ? <div>{errorMessage}</div> : null}
         <div>{active.body}</div>
-        <div>{active.actions}</div>
+        <div>
+          {Array.isArray(active.actions)
+            ? active.actions.map((action: React.ReactElement, idx: number) => (
+                <div key={idx}>{action}</div>
+              ))
+            : active.actions}
+        </div>
       </div>
     );
   },
@@ -201,9 +207,9 @@ jest.mock('@/app/components/error-container', () => ({
 
 jest.mock('@/app/components/helmet', () => ({ Helmet: () => null }));
 jest.mock('@/app/components/carbon/button', () => ({
-  PrimaryButton: ({ children, isLoading, ...props }: any) => <button {...props}>{children}</button>,
-  SecondaryButton: ({ children, isLoading, ...props }: any) => <button {...props}>{children}</button>,
-  GhostButton: ({ children, isLoading, ...props }: any) => <button {...props}>{children}</button>,
+  PrimaryButton: ({ children, isLoading: _, renderIcon: _r, hasIconOnly: _h, iconDescription: _d, ...props }: any) => <button {...props}>{children}</button>,
+  SecondaryButton: ({ children, isLoading: _, renderIcon: _r, hasIconOnly: _h, iconDescription: _d, ...props }: any) => <button {...props}>{children}</button>,
+  GhostButton: ({ children, isLoading: _, renderIcon: _r, hasIconOnly: _h, iconDescription: _d, ...props }: any) => <button {...props}>{children}</button>,
 }));
 
 jest.mock('@/app/components/base/modal/confirm-ui', () => () => null);
@@ -438,14 +444,15 @@ describe('Requested create/update flow pages', () => {
     expect(endpointConfigPrompt.showRuntimeReplacementHint).toBeUndefined();
   });
 
-  it('create assistant version shows unavailable state when assistantId is missing', () => {
+  it('create assistant version shows unavailable state when assistantId is missing', async () => {
     mockParams = {};
     render(<CreateVersionAssistantPage />);
     expect(screen.getByText('403')).toBeInTheDocument();
     expect(screen.getByText('Assistant not available')).toBeInTheDocument();
+    await act(async () => {});
   });
 
-  it('create assistant version moves to commit step after prompt edit', () => {
+  it('create assistant version moves to commit step after prompt edit', async () => {
     mockParams = { assistantId: 'a-1' };
     render(<CreateVersionAssistantPage />);
 
@@ -460,9 +467,10 @@ describe('Requested create/update flow pages', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
 
     expect(screen.getByText('Version note')).toBeInTheDocument();
+    await act(async () => {});
   });
 
-  it('create assistant version validates using changed provider', () => {
+  it('create assistant version validates using changed provider', async () => {
     mockParams = { assistantId: 'a-1' };
     render(<CreateVersionAssistantPage />);
 
@@ -483,5 +491,6 @@ describe('Requested create/update flow pages', () => {
 
     expect(mockValidateTextProviderDefaultOptions).toHaveBeenCalled();
     expect(mockValidateTextProviderDefaultOptions.mock.calls.at(-1)?.[0]).toBe('meta');
+    await act(async () => {});
   });
 });

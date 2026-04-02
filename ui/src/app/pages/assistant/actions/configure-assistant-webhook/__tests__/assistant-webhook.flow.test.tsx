@@ -67,13 +67,20 @@ jest.mock('@/app/pages/assistant/actions/hooks/use-confirmation', () => ({
 
 jest.mock('@/app/components/form/tab-form', () => ({
   TabForm: ({ form, activeTab, errorMessage, formHeading }: any) => {
+    const React = require('react');
     const active = form.find((f: any) => f.code === activeTab) || form[0];
     return (
       <div>
         <h1>{formHeading}</h1>
         {errorMessage ? <div>{errorMessage}</div> : null}
         <div>{active.body}</div>
-        <div>{active.actions}</div>
+        <div>
+          {Array.isArray(active.actions)
+            ? active.actions.map((action: React.ReactElement, idx: number) => (
+                <div key={idx}>{action}</div>
+              ))
+            : active.actions}
+        </div>
       </div>
     );
   },
@@ -130,11 +137,11 @@ jest.mock('@/app/components/form/slider', () => {
 jest.mock('@/app/components/carbon/button', () => {
   const React = require('react');
   return {
-    PrimaryButton: ({ children, ...props }: any) =>
+    PrimaryButton: ({ children, isLoading: _, renderIcon: _r, hasIconOnly: _h, iconDescription: _d, ...props }: any) =>
       React.createElement('button', props, children),
-    SecondaryButton: ({ children, ...props }: any) =>
+    SecondaryButton: ({ children, isLoading: _, renderIcon: _r, hasIconOnly: _h, iconDescription: _d, ...props }: any) =>
       React.createElement('button', props, children),
-    TertiaryButton: ({ children, ...props }: any) =>
+    TertiaryButton: ({ children, isLoading: _, renderIcon: _r, hasIconOnly: _h, iconDescription: _d, ...props }: any) =>
       React.createElement('button', props, children),
   };
 });
@@ -178,7 +185,7 @@ jest.mock('@carbon/react', () => {
         }),
         labelText,
       ),
-    Button: ({ iconDescription, children, ...props }: any) =>
+    Button: ({ iconDescription, children, hasIconOnly: _, renderIcon: _r, ...props }: any) =>
       React.createElement(
         'button',
         { ...props, 'aria-label': iconDescription || children || 'button' },

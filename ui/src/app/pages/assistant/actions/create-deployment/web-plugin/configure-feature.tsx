@@ -1,4 +1,4 @@
-import { InputCheckbox } from '@/app/components/form/checkbox';
+import { InputCheckbox } from '@/app/components/carbon/form/input-checkbox';
 import { FormLabel } from '@/app/components/form-label';
 import { InputHelper } from '@/app/components/input-helper';
 

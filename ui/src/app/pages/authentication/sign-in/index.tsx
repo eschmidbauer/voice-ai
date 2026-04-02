@@ -1,6 +1,6 @@
 import { useState, useContext, useEffect, useCallback } from 'react';
 import { Helmet } from '@/app/components/helmet';
-import { SocialButtonGroup } from '@/app/components/form/button-group/SocialButtonGroup';
+import { SocialButtonGroup } from '@/app/components/carbon/button/social-button-group';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import {

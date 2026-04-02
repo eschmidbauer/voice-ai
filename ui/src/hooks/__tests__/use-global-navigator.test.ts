@@ -33,6 +33,9 @@ describe('useGlobalNavigation', () => {
     result.current.goToAssistantVersions('a-1');
     result.current.goToCreateAssistantVersion('a-1');
     result.current.goToConfigureApi('a-1');
+    result.current.goToConfigureDebuggerExperience('a-1');
+    result.current.goToConfigureDebuggerSTT('a-1');
+    result.current.goToConfigureDebuggerTTS('a-1');
     result.current.goToCreateAssistantTool('a-1');
 
     expect(mockNavigate).toHaveBeenNthCalledWith(1, '/deployment/assistant/a-1');
@@ -50,6 +53,18 @@ describe('useGlobalNavigation', () => {
     );
     expect(mockNavigate).toHaveBeenNthCalledWith(
       5,
+      '/deployment/assistant/a-1/deployment/debugger?editMode=section&section=experience',
+    );
+    expect(mockNavigate).toHaveBeenNthCalledWith(
+      6,
+      '/deployment/assistant/a-1/deployment/debugger?editMode=section&section=stt',
+    );
+    expect(mockNavigate).toHaveBeenNthCalledWith(
+      7,
+      '/deployment/assistant/a-1/deployment/debugger?editMode=section&section=tts',
+    );
+    expect(mockNavigate).toHaveBeenNthCalledWith(
+      8,
       '/deployment/assistant/a-1/configure-tool/create',
     );
   });

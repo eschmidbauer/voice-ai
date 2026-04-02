@@ -39,8 +39,9 @@ import { useConfirmDialog } from '@/app/pages/assistant/actions/hooks/use-confir
 import {
   PrimaryButton,
   SecondaryButton,
+  GhostButton,
 } from '@/app/components/carbon/button';
-import { InputCheckbox } from '@/app/components/form/checkbox';
+import { InputCheckbox } from '@/app/components/carbon/form/input-checkbox';
 import { InputHelper } from '@/app/components/input-helper';
 import { BaseCard } from '@/app/components/base/cards';
 import { ButtonSet } from '@carbon/react';
@@ -246,6 +247,14 @@ const ConfigureAssistantWebDeployment: FC<{ assistantId: string }> = ({
     }
   };
 
+  const handlePrevious = () => {
+    setErrorMessage('');
+    const idx = STEPS.findIndex(s => s.code === activeTab);
+    if (idx > 0) {
+      setActiveTab(STEPS[idx - 1].code);
+    }
+  };
+
   const handleDeployWebPlugin = () => {
     setIsDeploying(true);
     setErrorMessage('');
@@ -381,18 +390,6 @@ const ConfigureAssistantWebDeployment: FC<{ assistantId: string }> = ({
         }}
       />
       <div className="flex flex-col flex-1 min-h-0 bg-white dark:bg-gray-900">
-        {/* Page header */}
-        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800 shrink-0 flex items-center gap-3">
-          <div>
-            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-              Web Widget Deployment
-            </p>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              Embed a voice-enabled chat widget on your website.
-            </p>
-          </div>
-        </div>
-
         <TabForm
           formHeading="Complete all steps to configure your web widget deployment."
           activeTab={activeTab}
@@ -462,6 +459,9 @@ const ConfigureAssistantWebDeployment: FC<{ assistantId: string }> = ({
               ),
               actions: [
                 <ButtonSet className="!w-full [&>button]:!flex-1 [&>button]:!max-w-none">
+                  <GhostButton size="lg" onClick={handlePrevious}>
+                    Previous
+                  </GhostButton>
                   <SecondaryButton size="lg"
                     className="w-full h-full"
                     onClick={() =>
@@ -512,6 +512,9 @@ const ConfigureAssistantWebDeployment: FC<{ assistantId: string }> = ({
               ),
               actions: [
                 <ButtonSet className="!w-full [&>button]:!flex-1 [&>button]:!max-w-none">
+                  <GhostButton size="lg" onClick={handlePrevious}>
+                    Previous
+                  </GhostButton>
                   <SecondaryButton size="lg"
                     className="w-full h-full"
                     onClick={() =>

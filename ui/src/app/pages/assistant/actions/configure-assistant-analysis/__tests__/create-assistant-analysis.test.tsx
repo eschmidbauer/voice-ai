@@ -68,13 +68,20 @@ jest.mock('@/app/components/dropdown/endpoint-dropdown', () => ({
 
 jest.mock('@/app/components/form/tab-form', () => ({
   TabForm: ({ form, activeTab, errorMessage, formHeading }: any) => {
+    const React = require('react');
     const active = form.find((f: any) => f.code === activeTab) || form[0];
     return (
       <div>
         <h1>{formHeading}</h1>
         {errorMessage ? <div>{errorMessage}</div> : null}
         <div>{active.body}</div>
-        <div>{active.actions}</div>
+        <div>
+          {Array.isArray(active.actions)
+            ? active.actions.map((action: React.ReactElement, idx: number) => (
+                <div key={idx}>{action}</div>
+              ))
+            : active.actions}
+        </div>
       </div>
     );
   },
@@ -82,22 +89,22 @@ jest.mock('@/app/components/form/tab-form', () => ({
 
 jest.mock('@/app/components/carbon/form', () => ({
   Stack: ({ children }: any) => <div>{children}</div>,
-  TextInput: ({ labelText, helperText, ...props }: any) => <input {...props} />,
-  TextArea: ({ labelText, helperText, ...props }: any) => <textarea {...props} />,
+  TextInput: ({ labelText: _l, helperText: _h, hideLabel: _hl, warn: _w, warnText: _wt, invalid: _inv, invalidText: _it, ...props }: any) => <input {...props} />,
+  TextArea: ({ labelText: _l, helperText: _h, hideLabel: _hl, warn: _w, warnText: _wt, invalid: _inv, invalidText: _it, ...props }: any) => <textarea {...props} />,
 }));
 
 jest.mock('@/app/components/carbon/button', () => ({
-  PrimaryButton: ({ children, ...props }: any) => <button {...props}>{children}</button>,
-  SecondaryButton: ({ children, ...props }: any) => <button {...props}>{children}</button>,
-  TertiaryButton: ({ children, ...props }: any) => <button {...props}>{children}</button>,
+  PrimaryButton: ({ children, isLoading: _, renderIcon: _r, hasIconOnly: _h, iconDescription: _d, ...props }: any) => <button {...props}>{children}</button>,
+  SecondaryButton: ({ children, isLoading: _, renderIcon: _r, hasIconOnly: _h, iconDescription: _d, ...props }: any) => <button {...props}>{children}</button>,
+  TertiaryButton: ({ children, isLoading: _, renderIcon: _r, hasIconOnly: _h, iconDescription: _d, ...props }: any) => <button {...props}>{children}</button>,
 }));
 
 jest.mock('@carbon/react', () => ({
   ButtonSet: ({ children }: any) => <div>{children}</div>,
-  Button: ({ children, ...props }: any) => <button {...props}>{children}</button>,
-  Select: ({ children, ...props }: any) => <select {...props}>{children}</select>,
+  Button: ({ children, hasIconOnly: _, renderIcon: _r, iconDescription: _d, ...props }: any) => <button {...props}>{children}</button>,
+  Select: ({ children, labelText: _, hideLabel: _h, ...props }: any) => <select {...props}>{children}</select>,
   SelectItem: ({ value, text }: any) => <option value={value}>{text}</option>,
-  NumberInput: ({ label, helperText, onChange, value }: any) => (
+  NumberInput: ({ label, helperText: _ht, onChange, value, hideLabel: _hl, ...rest }: any) => (
     <input
       aria-label={label}
       value={value}

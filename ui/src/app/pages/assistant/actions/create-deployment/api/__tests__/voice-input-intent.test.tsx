@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { ConfigureAssistantApiDeploymentPage } from '@/app/pages/assistant/actions/create-deployment/api';
 import {
@@ -139,7 +139,7 @@ jest.mock('@/app/components/helmet', () => ({ Helmet: () => null }));
 jest.mock('@/app/components/base/cards', () => ({
   BaseCard: ({ children }: any) => <div>{children}</div>,
 }));
-jest.mock('@/app/components/form/checkbox', () => ({
+jest.mock('@/app/components/carbon/form/input-checkbox', () => ({
   InputCheckbox: ({ children, ...props }: any) => (
     <label>
       <input type="checkbox" {...props} />
@@ -303,6 +303,7 @@ describe('API deployment voice input intent actions', () => {
     const req = (CreateAssistantApiDeployment as jest.Mock).mock.calls[0][1];
     const deployment = req.getApi();
     expect(deployment.getInputaudio()).toBeDefined();
+    await act(async () => {});
   });
 
   it('unchecking voice input removes input audio on save', async () => {
@@ -326,6 +327,7 @@ describe('API deployment voice input intent actions', () => {
     const req = (CreateAssistantApiDeployment as jest.Mock).mock.calls[0][1];
     const deployment = req.getApi();
     expect(deployment.getInputaudio()).toBeUndefined();
+    await act(async () => {});
   });
 
   it('unchecking voice output removes output audio on save', async () => {
@@ -350,6 +352,7 @@ describe('API deployment voice input intent actions', () => {
     const req = (CreateAssistantApiDeployment as jest.Mock).mock.calls[0][1];
     const deployment = req.getApi();
     expect(deployment.getOutputaudio()).toBeUndefined();
+    await act(async () => {});
   });
 
   it('create mode deploys without existing deployment data', async () => {
@@ -371,5 +374,6 @@ describe('API deployment voice input intent actions', () => {
     const deployment = req.getApi();
     expect(deployment.getInputaudio()).toBeUndefined();
     expect(deployment.getOutputaudio()).toBeDefined();
+    await act(async () => {});
   });
 });

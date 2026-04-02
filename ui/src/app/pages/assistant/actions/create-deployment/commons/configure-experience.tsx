@@ -11,6 +11,7 @@ export interface ExperienceConfig {
   idealMessage?: string;
   maxCallDuration?: string;
   idleTimeoutBackoffTimes?: string;
+  suggestions?: string[];
 }
 
 export const ConfigureExperience: FC<{

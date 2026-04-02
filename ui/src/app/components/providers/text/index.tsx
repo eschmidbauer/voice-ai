@@ -89,12 +89,13 @@ export const TextProvider: React.FC<ProviderComponentProps> = props => {
   return (
     <>
       <div className="flex items-stretch border border-gray-200 dark:border-gray-700">
-        <div className="w-48 shrink-0 border-r border-gray-200 dark:border-gray-700 [&_.cds--list-box]:!border-none [&_.cds--dropdown]:!rounded-none">
+        <div className="w-48 shrink-0 border-r border-gray-200 dark:border-gray-700">
           <Dropdown
             id="text-provider"
             titleText=""
             hideLabel
             label="Select provider"
+            size="md"
             items={textProviders}
             selectedItem={selectedProvider}
             itemToString={(item: any) => item?.name || ''}

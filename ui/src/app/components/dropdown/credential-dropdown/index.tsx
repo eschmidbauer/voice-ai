@@ -5,7 +5,8 @@ import { CreateProviderCredentialDialog } from '@/app/components/base/modal/crea
 import { useAllProviderCredentials } from '@/hooks/use-model';
 import { useProviderContext } from '@/context/provider-context';
 import { allProvider } from '@/providers';
-import { Dropdown, Button } from '@carbon/react';
+import { Button } from '@carbon/react';
+import { Dropdown } from '@/app/components/carbon/dropdown';
 
 interface CredentialDropdownProps {
   className?: string;
@@ -43,13 +44,12 @@ export const CredentialDropdown: FC<CredentialDropdownProps> = props => {
         currentProvider={props.provider}
       />
       <div>
-        <p className="text-xs font-medium mb-1">Credential</p>
-        <div className="flex">
-          <div className="flex-1 [&_.cds--dropdown]:!rounded-none [&_.cds--list-box]:!rounded-none">
+        <div className="flex items-end">
+          <div className="flex-1 min-w-0">
             <Dropdown
               id="credential-dropdown"
-              titleText=""
-              hideLabel
+              titleText="Credential"
+              hideLabel={false}
               label="Select credential"
               items={currentProviderCredentials}
               selectedItem={selectedItem}

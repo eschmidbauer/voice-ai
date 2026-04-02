@@ -42,6 +42,7 @@ import { TabForm } from '@/app/components/form/tab-form';
 import {
   PrimaryButton,
   SecondaryButton,
+  GhostButton,
 } from '@/app/components/carbon/button';
 import { ButtonSet } from '@carbon/react';
 
@@ -255,6 +256,14 @@ const ConfigureAssistantCallDeployment: FC<{ assistantId: string }> = ({
     }
   };
 
+  const handlePrevious = () => {
+    setErrorMessage('');
+    const idx = STEPS.findIndex(s => s.code === activeTab);
+    if (idx > 0) {
+      setActiveTab(STEPS[idx - 1].code);
+    }
+  };
+
   const handleDeployPhone = () => {
     setIsDeploying(true);
     setErrorMessage('');
@@ -369,18 +378,6 @@ const ConfigureAssistantCallDeployment: FC<{ assistantId: string }> = ({
 
   return (
     <div className="flex flex-col flex-1 min-h-0 bg-white dark:bg-gray-900">
-      {/* Page header */}
-      <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800 shrink-0 flex items-center gap-3">
-        <div>
-          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-            Phone Call Deployment
-          </p>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            Configure inbound and outbound phone call handling.
-          </p>
-        </div>
-      </div>
-
       <TabForm
         formHeading="Complete all steps to configure your phone call deployment."
         activeTab={activeTab}
@@ -437,6 +434,12 @@ const ConfigureAssistantCallDeployment: FC<{ assistantId: string }> = ({
             ),
             actions: [
               <ButtonSet className="!w-full [&>button]:!flex-1 [&>button]:!max-w-none">
+                <GhostButton size="lg"
+                  className="w-full h-full"
+                  onClick={handlePrevious}
+                >
+                  Previous
+                </GhostButton>
                 <SecondaryButton size="lg"
                   className="w-full h-full"
                   onClick={() => goToDeploymentAssistant(assistantId)}
@@ -466,6 +469,12 @@ const ConfigureAssistantCallDeployment: FC<{ assistantId: string }> = ({
             ),
             actions: [
               <ButtonSet className="!w-full [&>button]:!flex-1 [&>button]:!max-w-none">
+                <GhostButton size="lg"
+                  className="w-full h-full"
+                  onClick={handlePrevious}
+                >
+                  Previous
+                </GhostButton>
                 <SecondaryButton size="lg"
                   className="w-full h-full"
                   onClick={() => goToDeploymentAssistant(assistantId)}
@@ -495,6 +504,12 @@ const ConfigureAssistantCallDeployment: FC<{ assistantId: string }> = ({
             ),
             actions: [
               <ButtonSet className="!w-full [&>button]:!flex-1 [&>button]:!max-w-none">
+                <GhostButton size="lg"
+                  className="w-full h-full"
+                  onClick={handlePrevious}
+                >
+                  Previous
+                </GhostButton>
                 <SecondaryButton size="lg"
                   className="w-full h-full"
                   onClick={() => goToDeploymentAssistant(assistantId)}

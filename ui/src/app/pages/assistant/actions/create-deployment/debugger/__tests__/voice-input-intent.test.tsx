@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import {
   ConfigureAssistantDebuggerDeploymentPage,
@@ -12,6 +12,8 @@ import {
 let mockParams: Record<string, string | undefined> = {
   assistantId: 'assistant-1',
 };
+let mockSearchParams = new URLSearchParams();
+const mockGoToDeploymentAssistant = jest.fn();
 
 jest.mock('@rapidaai/react', () => {
   class ConnectionConfig {
@@ -107,6 +109,7 @@ jest.mock('@rapidaai/react', () => {
 jest.mock('react-router-dom', () => ({
   ...jest.requireActual('react-router-dom'),
   useParams: () => mockParams,
+  useSearchParams: () => [mockSearchParams, jest.fn()],
 }));
 
 jest.mock('@/hooks', () => ({
@@ -127,7 +130,7 @@ jest.mock('@/hooks/use-credential', () => ({
 
 jest.mock('@/hooks/use-global-navigator', () => ({
   useGlobalNavigation: () => ({
-    goToDeploymentAssistant: jest.fn(),
+    goToDeploymentAssistant: mockGoToDeploymentAssistant,
   }),
 }));
 
@@ -138,7 +141,7 @@ jest.mock('@/app/components/base/modal/debugger-deployment-success-modal', () =>
 jest.mock('@/app/components/base/cards', () => ({
   BaseCard: ({ children }: any) => <div>{children}</div>,
 }));
-jest.mock('@/app/components/form/checkbox', () => ({
+jest.mock('@/app/components/carbon/form/input-checkbox', () => ({
   InputCheckbox: ({ children, ...props }: any) => (
     <label>
       <input type="checkbox" {...props} />
@@ -227,9 +230,9 @@ jest.mock('@/app/pages/assistant/actions/hooks/use-confirmation', () => {
 });
 
 jest.mock('@/app/components/carbon/button', () => ({
-  PrimaryButton: ({ children, isLoading, ...props }: any) => <button {...props}>{children}</button>,
-  GhostButton: ({ children, isLoading, ...props }: any) => <button {...props}>{children}</button>,
-  SecondaryButton: ({ children, isLoading, ...props }: any) => <button {...props}>{children}</button>,
+  PrimaryButton: ({ children, isLoading: _, ...props }: any) => <button {...props}>{children}</button>,
+  GhostButton: ({ children, isLoading: _, ...props }: any) => <button {...props}>{children}</button>,
+  SecondaryButton: ({ children, isLoading: _, ...props }: any) => <button {...props}>{children}</button>,
 }));
 
 describe('Debugger deployment voice input intent actions', () => {
@@ -254,6 +257,8 @@ describe('Debugger deployment voice input intent actions', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSearchParams = new URLSearchParams();
+    mockGoToDeploymentAssistant.mockReset();
 
     (GetAssistantDebuggerDeployment as jest.Mock).mockResolvedValue(
       mockEditDeployment(),
@@ -283,6 +288,7 @@ describe('Debugger deployment voice input intent actions', () => {
     const req = (CreateAssistantDebuggerDeployment as jest.Mock).mock.calls[0][1];
     const deployment = req.getDebugger();
     expect(deployment.getInputaudio()).toBeDefined();
+    await act(async () => {});
   });
 
   it('unchecking voice input removes input audio on save', async () => {
@@ -308,6 +314,7 @@ describe('Debugger deployment voice input intent actions', () => {
     const req = (CreateAssistantDebuggerDeployment as jest.Mock).mock.calls[0][1];
     const deployment = req.getDebugger();
     expect(deployment.getInputaudio()).toBeUndefined();
+    await act(async () => {});
   });
 
   it('unchecking voice output removes output audio on save', async () => {
@@ -330,6 +337,58 @@ describe('Debugger deployment voice input intent actions', () => {
     const req = (CreateAssistantDebuggerDeployment as jest.Mock).mock.calls[0][1];
     const deployment = req.getDebugger();
     expect(deployment.getOutputaudio()).toBeUndefined();
+    await act(async () => {});
+  });
+
+  it('section mode renders only selected section', async () => {
+    mockSearchParams = new URLSearchParams(
+      'editMode=section&section=experience',
+    );
+    render(<ConfigureAssistantDebuggerDeploymentPage />);
+
+    await waitFor(() => expect(screen.getByText('experience')).toBeInTheDocument());
+    expect(screen.queryByText('audio-input')).not.toBeInTheDocument();
+    expect(screen.queryByText('audio-output')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+  });
+
+  it('section mode cancel navigates back to deployment listing', async () => {
+    mockSearchParams = new URLSearchParams('editMode=section&section=tts');
+    render(<ConfigureAssistantDebuggerDeploymentPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Are you sure?' }));
+    expect(mockGoToDeploymentAssistant).toHaveBeenCalledWith('assistant-1');
+  });
+
+  it('section mode saves selected section and preserves untouched section values', async () => {
+    mockSearchParams = new URLSearchParams('editMode=section&section=stt');
+    render(<ConfigureAssistantDebuggerDeploymentPage />);
+
+    await waitFor(() =>
+      expect(screen.getByText(/Voice input is currently/i)).toBeInTheDocument(),
+    );
+
+    fireEvent.click(
+      screen.getByLabelText('Enable voice input (Speech-to-Text)'),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(CreateAssistantDebuggerDeployment).toHaveBeenCalledTimes(1),
+    );
+
+    const req = (CreateAssistantDebuggerDeployment as jest.Mock).mock.calls[0][1];
+    const deployment = req.getDebugger();
+    expect(deployment.getInputaudio()).toBeUndefined();
+    expect(deployment.getOutputaudio()?.getAudioprovider()).toBe('cartesia');
+    expect(mockGoToDeploymentAssistant).toHaveBeenCalledWith('assistant-1');
+    await act(async () => {});
   });
 
   it('create mode deploys without existing deployment data', async () => {
@@ -351,5 +410,6 @@ describe('Debugger deployment voice input intent actions', () => {
     const deployment = req.getDebugger();
     expect(deployment.getInputaudio()).toBeDefined();
     expect(deployment.getOutputaudio()).toBeDefined();
+    await act(async () => {});
   });
 });

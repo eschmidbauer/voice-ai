@@ -12,7 +12,7 @@ import {
 import { Stack } from '@/app/components/carbon/form';
 import { Notification } from '@/app/components/carbon/notification';
 import { ButtonSet, Breadcrumb, BreadcrumbItem } from '@carbon/react';
-import { InputCheckbox } from '@/app/components/form/checkbox';
+import { InputCheckbox } from '@/app/components/carbon/form/input-checkbox';
 import { useConfirmDialog } from '@/app/pages/assistant/actions/hooks/use-confirmation';
 import { TelemetryProvider } from '@/app/components/providers/telemetry';
 import {
@@ -87,7 +87,7 @@ export const CreateAssistantTelemetry: FC<{ assistantId: string }> = ({
   return (
     <>
       <ConfirmDialogComponent />
-      <div className="flex flex-col flex-1 min-h-0">
+      <div className="flex flex-col flex-1 min-h-0 bg-white dark:bg-gray-900">
         {/* Header */}
         <div className="px-8 pt-6 pb-4 border-b border-gray-200 dark:border-gray-800 shrink-0">
           <Breadcrumb noTrailingSlash className="mb-2">

@@ -458,6 +458,35 @@ li::marker {
     pointer-events: none;
 }
 
+.deployment-card-footer {
+    display: flex;
+}
+
+.deployment-card-footer>.cds--btn,
+.deployment-card-footer>.cds--menu-button__container,
+.deployment-card-footer>.cds--icon-tooltip {
+    flex: 1 1 0;
+    min-inline-size: 0;
+}
+
+.deployment-card-footer .cds--btn,
+.deployment-card-footer .cds--menu-button__trigger {
+    inline-size: 100%;
+    max-inline-size: none;
+    min-inline-size: 0;
+}
+
+.deployment-card-footer .cds--menu-item__label {
+    font-size: 0.8125rem;
+    font-weight: 500;
+}
+
+.deployment-card-footer .cds--icon-tooltip .cds--btn--icon-only {
+    inline-size: 100%;
+    max-inline-size: none;
+    min-inline-size: 0;
+}
+
 .listening::after {
     width: 20vmax;
     height: 20vmax;

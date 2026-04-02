@@ -1,7 +1,7 @@
 import { FormLabel } from '@/app/components/form-label';
 import { PrimaryButton } from '@/app/components/carbon/button';
 import { ChevronRight } from '@carbon/icons-react';
-import { InputCheckbox } from '@/app/components/form/checkbox';
+import { InputCheckbox } from '@/app/components/carbon/form/input-checkbox';
 import { FieldSet } from '@/app/components/form/fieldset';
 import { InputHelper } from '@/app/components/input-helper';
 import { connectionConfig } from '@/configs';

@@ -79,13 +79,20 @@ jest.mock('@/app/components/dropdown/endpoint-dropdown', () => ({
 
 jest.mock('@/app/components/form/tab-form', () => ({
   TabForm: ({ form, activeTab, errorMessage, formHeading }: any) => {
+    const React = require('react');
     const active = form.find((f: any) => f.code === activeTab) || form[0];
     return (
       <div>
         <h1>{formHeading}</h1>
         {errorMessage ? <div>{errorMessage}</div> : null}
         <div>{active.body}</div>
-        <div>{active.actions}</div>
+        <div>
+          {Array.isArray(active.actions)
+            ? active.actions.map((action: React.ReactElement, idx: number) => (
+                <div key={idx}>{action}</div>
+              ))
+            : active.actions}
+        </div>
       </div>
     );
   },
@@ -120,6 +127,12 @@ jest.mock('@/app/components/carbon/form', () => ({
     value,
     onChange,
     type = 'text',
+    helperText: _h,
+    hideLabel: _hl,
+    warn: _w,
+    warnText: _wt,
+    invalid: _inv,
+    invalidText: _it,
     ...rest
   }: any) => (
     <div>
@@ -133,7 +146,7 @@ jest.mock('@/app/components/carbon/form', () => ({
       />
     </div>
   ),
-  TextArea: ({ id, labelText, value, onChange, ...rest }: any) => (
+  TextArea: ({ id, labelText, value, onChange, helperText: _h, hideLabel: _hl, warn: _w, warnText: _wt, invalid: _inv, invalidText: _it, ...rest }: any) => (
     <div>
       {labelText ? <label htmlFor={id}>{labelText}</label> : null}
       <textarea id={id} value={value ?? ''} onChange={onChange} {...rest} />
@@ -152,7 +165,7 @@ jest.mock('@carbon/react', () => ({
     </div>
   ),
   SelectItem: ({ value, text }: any) => <option value={value}>{text}</option>,
-  Button: ({ children, iconDescription, ...props }: any) => (
+  Button: ({ children, iconDescription, hasIconOnly: _, renderIcon: _r, ...props }: any) => (
     <button aria-label={iconDescription} {...props}>
       {children}
     </button>

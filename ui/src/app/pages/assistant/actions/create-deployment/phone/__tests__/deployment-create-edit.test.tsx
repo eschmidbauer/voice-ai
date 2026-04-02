@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import {
   ConfigureAssistantCallDeploymentPage,
@@ -254,6 +254,7 @@ describe('Phone deployment create and edit flows', () => {
     expect(deployment.getPhoneprovidername()).toBe('twilio');
     expect(deployment.getInputaudio()).toBeDefined();
     expect(deployment.getOutputaudio()).toBeDefined();
+    await act(async () => {});
   });
 
   it('create mode deploys with default telephony + audio payload', async () => {
@@ -277,6 +278,7 @@ describe('Phone deployment create and edit flows', () => {
     expect(deployment.getPhoneprovidername()).toBe('twilio');
     expect(deployment.getInputaudio()).toBeDefined();
     expect(deployment.getOutputaudio()).toBeDefined();
+    await act(async () => {});
   });
 
   it('blocks moving forward when telephony configuration is invalid', async () => {

@@ -598,6 +598,7 @@ function renderTextMainDropdown(
         titleText=""
         hideLabel
         items={data}
+        size="md"
         selectedItem={selectedItem}
         itemToString={(item: any) => item?.name || ''}
         placeholder="Select model"
@@ -610,7 +611,6 @@ function renderTextMainDropdown(
           }
         }}
         allowCustomValue
-        className="[&_.cds--list-box]:!border-none"
       />
     );
   }
@@ -621,13 +621,13 @@ function renderTextMainDropdown(
       titleText=""
       hideLabel
       label="Select model"
+      size="md"
       items={data}
       selectedItem={selectedItem}
       itemToString={(item: any) => item?.name || ''}
       onChange={({ selectedItem: item }: any) => {
         if (item) handleSelect(item);
       }}
-      className="[&_.cds--list-box]:!border-none"
     />
   );
 }

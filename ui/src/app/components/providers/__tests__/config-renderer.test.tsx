@@ -271,7 +271,7 @@ jest.mock('@carbon/react', () => {
     ModalHeader: ({ title }: any) => React.createElement('div', null, title),
     ModalBody: ({ children }: any) => React.createElement('div', null, children),
     ModalFooter: ({ children }: any) => React.createElement('div', null, children),
-    Button: ({ children, ...props }: any) => React.createElement('button', props, children),
+    Button: ({ children, hasIconOnly: _, renderIcon: _r, iconDescription: _d, ...props }: any) => React.createElement('button', props, children),
   };
 });
 

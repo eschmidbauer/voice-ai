@@ -10,7 +10,7 @@ import { InputHelper } from '@/app/components/input-helper';
 import { PageHeaderBlock } from '@/app/components/blocks/page-header-block';
 import { PageTitleBlock } from '@/app/components/blocks/page-title-block';
 import { PageActionButtonBlock } from '@/app/components/blocks/page-action-button-block';
-import { InputCheckbox } from '@/app/components/form/checkbox';
+import { InputCheckbox } from '@/app/components/carbon/form/input-checkbox';
 
 export function ConfigureAssistantAnalysisPage() {
   const { assistantId } = useParams();

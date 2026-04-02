@@ -16,7 +16,7 @@ import {
 } from '@/app/components/carbon/button';
 import { ButtonSet } from '@carbon/react';
 import { FieldSet } from '@/app/components/form/fieldset';
-import { InputCheckbox } from '@/app/components/form/checkbox';
+import { InputCheckbox } from '@/app/components/carbon/form/input-checkbox';
 import { InputHelper } from '@/app/components/input-helper';
 import { useConfirmDialog } from '@/app/pages/assistant/actions/hooks/use-confirmation';
 import { TelemetryProvider } from '@/app/components/providers/telemetry';

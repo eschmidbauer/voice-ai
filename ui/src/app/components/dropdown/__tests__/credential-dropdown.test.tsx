@@ -41,9 +41,10 @@ jest.mock('@/providers', () => ({
   allProvider: () => mockAllProvider(),
 }));
 
-jest.mock('@carbon/react', () => ({
+jest.mock('@/app/components/carbon/dropdown', () => ({
   Dropdown: ({
     id,
+    titleText,
     label,
     items,
     selectedItem,
@@ -52,25 +53,31 @@ jest.mock('@carbon/react', () => ({
   }: any) => {
     const selectedIndex = Math.max(items.findIndex((x: any) => x === selectedItem), 0);
     return (
-      <select
-        id={id}
-        aria-label={label}
-        data-testid={id}
-        value={String(selectedIndex)}
-        onChange={e => {
-          const idx = Number(e.target.value);
-          onChange({ selectedItem: items[idx] ?? null });
-        }}
-      >
-        {items.map((item: any, idx: number) => (
-          <option key={item.getId?.() || idx} value={String(idx)}>
-            {itemToString(item)}
-          </option>
-        ))}
-      </select>
+      <div>
+        <label htmlFor={id}>{titleText}</label>
+        <select
+          id={id}
+          aria-label={label}
+          data-testid={id}
+          value={String(selectedIndex)}
+          onChange={e => {
+            const idx = Number(e.target.value);
+            onChange({ selectedItem: items[idx] ?? null });
+          }}
+        >
+          {items.map((item: any, idx: number) => (
+            <option key={item.getId?.() || idx} value={String(idx)}>
+              {itemToString(item)}
+            </option>
+          ))}
+        </select>
+      </div>
     );
   },
-  Button: ({ children, iconDescription, ...props }: any) => (
+}));
+
+jest.mock('@carbon/react', () => ({
+  Button: ({ children, iconDescription, hasIconOnly: _, renderIcon: _r, ...props }: any) => (
     <button aria-label={iconDescription} {...props}>
       {children}
     </button>
@@ -109,6 +116,7 @@ describe('CredentialDropdown', () => {
       />,
     );
 
+    expect(screen.getByText('Credential')).toBeInTheDocument();
     const select = screen.getByTestId('credential-dropdown');
     expect(screen.getByRole('option', { name: 'OpenAI / Primary' })).toBeInTheDocument();
     expect(screen.queryByRole('option', { name: 'Azure / Secondary' })).not.toBeInTheDocument();

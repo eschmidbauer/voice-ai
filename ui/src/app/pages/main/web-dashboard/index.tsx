@@ -98,7 +98,7 @@ export const HomePage = () => {
 
       {/* ── Quick start cards — horizontal scroll ── */}
       <section className="px-6 pb-6">
-        <div className="grid grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
           {quickStart.map((item, idx) => (
             <ClickableTile
               key={idx}
@@ -106,18 +106,20 @@ export const HomePage = () => {
               className={cn(
                 '!rounded-none !h-[320px] !flex !flex-col !p-5 !border-0 !bg-white dark:!bg-gray-950',
                 item.featured &&
-                  '!bg-gradient-to-b !from-blue-600 !to-indigo-700 dark:!from-blue-700 dark:!to-indigo-800 !text-white [&_*]:!text-white',
+                  '!bg-gradient-to-b !from-blue-600 !to-indigo-700 dark:!from-blue-700 dark:!to-indigo-800',
               )}
             >
               <h3 className={cn(
                 'text-lg font-semibold mb-3',
-                item.featured && '!text-2xl !font-light',
+                item.featured && '!text-2xl !font-light !text-white',
               )}>
                 {item.title}
               </h3>
               <p className={cn(
                 'text-sm leading-relaxed flex-1',
-                item.featured ? 'opacity-90' : 'text-gray-500 dark:text-gray-400',
+                item.featured
+                  ? 'text-white/90'
+                  : 'text-gray-500 dark:text-gray-400',
               )}>
                 {item.description}
               </p>
@@ -125,7 +127,14 @@ export const HomePage = () => {
                 <Tag size="md" type={item.featured ? 'blue' : 'cool-gray'}>
                   {item.tag}
                 </Tag>
-                <Launch size={16} className={item.featured ? 'opacity-70' : 'text-gray-400 dark:text-gray-500'} />
+                <Launch
+                  size={16}
+                  className={
+                    item.featured
+                      ? 'text-white/70'
+                      : 'text-gray-400 dark:text-gray-500'
+                  }
+                />
               </div>
             </ClickableTile>
           ))}
