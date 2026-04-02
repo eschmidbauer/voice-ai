@@ -54,7 +54,7 @@ jest.mock('@rapidaai/react', () => {
     }
   }
 
-  class AssistantDebuggerDeployment {
+  class AssistantApiDeployment {
     private inputAudio?: DeploymentAudioProvider;
     private outputAudio?: DeploymentAudioProvider;
     setAssistantid(_: string) {}
@@ -79,8 +79,8 @@ jest.mock('@rapidaai/react', () => {
   }
 
   class CreateAssistantDeploymentRequest {
-    private api?: AssistantDebuggerDeployment;
-    setApi(v: AssistantDebuggerDeployment) {
+    private api?: AssistantApiDeployment;
+    setApi(v: AssistantApiDeployment) {
       this.api = v;
     }
     getApi() {
@@ -96,7 +96,7 @@ jest.mock('@rapidaai/react', () => {
     ConnectionConfig,
     Metadata,
     DeploymentAudioProvider,
-    AssistantDebuggerDeployment,
+    AssistantApiDeployment,
     CreateAssistantDeploymentRequest,
     GetAssistantDeploymentRequest,
     GetAssistantApiDeployment: jest.fn(),

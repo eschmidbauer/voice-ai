@@ -84,6 +84,47 @@ jest.mock('@rapidaai/react', () => {
     setInputaudio(_: unknown) {}
     setOutputaudio(_: unknown) {}
   }
+  class AssistantApiDeployment {
+    setAssistantid(_: string) {}
+    setGreeting(_: string) {}
+    setMistake(_: string) {}
+    setIdealtimeout(_: string) {}
+    setIdealtimeoutbackoff(_: string) {}
+    setIdealtimeoutmessage(_: string) {}
+    setMaxsessionduration(_: string) {}
+    setInputaudio(_: unknown) {}
+    setOutputaudio(_: unknown) {}
+  }
+  class AssistantWebpluginDeployment {
+    setAssistantid(_: string) {}
+    setGreeting(_: string) {}
+    setMistake(_: string) {}
+    setIdealtimeout(_: string) {}
+    setIdealtimeoutbackoff(_: string) {}
+    setIdealtimeoutmessage(_: string) {}
+    setMaxsessionduration(_: string) {}
+    setInputaudio(_: unknown) {}
+    setOutputaudio(_: unknown) {}
+    setSuggestionList(_: unknown) {}
+    setHelpcenterenabled(_: boolean) {}
+    setProductcatalogenabled(_: boolean) {}
+    setArticlecatalogenabled(_: boolean) {}
+    setUploadfileenabled(_: boolean) {}
+    getSuggestionList() { return []; }
+  }
+  class AssistantPhoneDeployment {
+    setAssistantid(_: string) {}
+    setGreeting(_: string) {}
+    setMistake(_: string) {}
+    setIdealtimeout(_: string) {}
+    setIdealtimeoutbackoff(_: string) {}
+    setIdealtimeoutmessage(_: string) {}
+    setMaxsessionduration(_: string) {}
+    setInputaudio(_: unknown) {}
+    setOutputaudio(_: unknown) {}
+    setPhoneprovidername(_: string) {}
+    setPhoneoptionsList(_: unknown[]) {}
+  }
   class DeploymentAudioProvider {
     setAudioprovider(_: string) {}
     setAudiooptionsList(_: unknown[]) {}
@@ -94,6 +135,9 @@ jest.mock('@rapidaai/react', () => {
     GetAssistantRequest,
     AssistantDefinition,
     AssistantDebuggerDeployment,
+    AssistantApiDeployment,
+    AssistantWebpluginDeployment,
+    AssistantPhoneDeployment,
     DeploymentAudioProvider,
     GetAssistantDeploymentRequest,
     CreateAssistantDeploymentRequest,
@@ -240,6 +284,43 @@ jest.mock('@/app/components/carbon/modal', () => ({
   ModalHeader: ({ title }: any) => <div>{title}</div>,
   ModalBody: ({ children }: any) => <div>{children}</div>,
   ModalFooter: ({ children }: any) => <div>{children}</div>,
+}));
+
+jest.mock('@/hooks/use-model', () => ({
+  useAllProviderCredentials: () => ({ providerCredentials: [] }),
+}));
+
+jest.mock('@/app/components/providers/telephony', () => ({
+  TelephonyProvider: () => <div>telephony</div>,
+  ValidateTelephonyOptions: () => true,
+}));
+
+jest.mock('@/app/components/base/modal/assistant-debugger-edit-section-modal/configure-experience-form', () => ({
+  ConfigureExperienceModalForm: () => <div>experience-form</div>,
+}));
+jest.mock('@/app/components/base/modal/assistant-debugger-edit-section-modal/configure-web-experience-form', () => ({
+  ConfigureWebExperienceModalForm: () => <div>web-experience-form</div>,
+}));
+jest.mock('@/app/components/base/modal/assistant-debugger-edit-section-modal/configure-audio-input-form', () => ({
+  ConfigureAudioInputModalForm: () => <div>audio-input-form</div>,
+}));
+jest.mock('@/app/components/base/modal/assistant-debugger-edit-section-modal/configure-audio-output-form', () => ({
+  ConfigureAudioOutputModalForm: () => <div>audio-output-form</div>,
+}));
+
+jest.mock('@/app/components/base/corner-border', () => ({
+  CornerBorderOverlay: () => null,
+}));
+
+jest.mock('@/app/components/providers/speech-to-text/provider', () => ({
+  GetDefaultMicrophoneConfig: () => [],
+  GetDefaultSpeechToTextIfInvalid: () => [],
+  ValidateSpeechToTextIfInvalid: () => undefined,
+}));
+jest.mock('@/app/components/providers/text-to-speech/provider', () => ({
+  GetDefaultSpeakerConfig: () => [],
+  GetDefaultTextToSpeechIfInvalid: () => [],
+  ValidateTextToSpeechIfInvalid: () => undefined,
 }));
 
 jest.mock('@/app/components/base/cards', () => ({
