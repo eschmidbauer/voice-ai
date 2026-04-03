@@ -12,11 +12,6 @@ import (
 	sip_infra "github.com/rapidaai/api/assistant-api/sip/infra"
 )
 
-// =============================================================================
-// Inbound setup handlers (future — called when pipeline owns the full flow)
-// =============================================================================
-
-// handleInviteReceived parses SDP and extracts DID from the incoming INVITE.
 func (d *Dispatcher) handleInviteReceived(ctx context.Context, v sip_infra.InviteReceivedPipeline) {
 	sdpInfo, err := d.server.ParseSDP(v.SDPBody)
 	if err != nil {
@@ -25,9 +20,9 @@ func (d *Dispatcher) handleInviteReceived(ctx context.Context, v sip_infra.Invit
 		sdpInfo = &sip_infra.SDPMediaInfo{PreferredCodec: &pcmu}
 	}
 
-	did := extractDIDFromURI(v.ToURI)
+	did := sip_infra.ExtractDIDFromURI(v.ToURI)
 	if did == "" {
-		did = extractDIDFromURI(v.FromURI)
+		did = sip_infra.ExtractDIDFromURI(v.FromURI)
 	}
 
 	d.OnPipeline(ctx, sip_infra.RouteResolvedPipeline{
@@ -41,7 +36,6 @@ func (d *Dispatcher) handleInviteReceived(ctx context.Context, v sip_infra.Invit
 	})
 }
 
-// handleRouteResolved looks up the assistant by DID.
 func (d *Dispatcher) handleRouteResolved(ctx context.Context, v sip_infra.RouteResolvedPipeline) {
 	if v.DID == "" {
 		d.logger.Warnw("No DID found in INVITE", "call_id", v.ID)
@@ -67,16 +61,10 @@ func (d *Dispatcher) handleRouteResolved(ctx context.Context, v sip_infra.RouteR
 	})
 }
 
-// handleAuthenticated is a future extension point for when the pipeline owns session
-// creation (RTP allocation, 180/200 OK). Currently server.go handles this via the
-// middleware chain, so this handler emits SessionEstablishedPipeline directly.
+// handleAuthenticated is a future extension point for pipeline-native session creation.
+// Currently server.go handles SIP protocol via the middleware chain.
 func (d *Dispatcher) handleAuthenticated(ctx context.Context, v sip_infra.AuthenticatedPipeline) {
 	d.logger.Infow("Pipeline: Authenticated",
 		"call_id", v.ID,
 		"assistant_id", v.AssistantID)
-
-	// Future: session creation, RTP allocation, 180/200 will happen here.
-	// For now, server.go handles SIP protocol and emits SessionEstablishedPipeline
-	// directly via onInvite, so this handler is only reached in the future
-	// pipeline-native path.
 }

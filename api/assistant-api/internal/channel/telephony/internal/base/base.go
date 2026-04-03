@@ -24,7 +24,7 @@ type TelephonyOption func(*telephonyConfig)
 
 type telephonyConfig struct {
 	// sourceAudioConfig is the native audio format received from the telephony
-	// provider. Defaults to RAPIDA_AUDIO_CONFIG (linear16 16kHz) if nil.
+	// provider. Defaults to rapida16kConfig (linear16 16kHz) if nil.
 	sourceAudioConfig *protos.AudioConfig
 
 	// baseOpts are forwarded to channel_base.NewBaseStreamer.
@@ -33,7 +33,7 @@ type telephonyConfig struct {
 
 // WithSourceAudioConfig sets the native audio format of the telephony provider.
 // This drives automatic derivation of input/output buffer thresholds in BaseStreamer.
-// Pass nil to default to RAPIDA_AUDIO_CONFIG (linear16 16kHz — no resampling).
+// Pass nil to default to rapida16kConfig (linear16 16kHz — no resampling).
 func WithSourceAudioConfig(cfg *protos.AudioConfig) TelephonyOption {
 	return func(c *telephonyConfig) { c.sourceAudioConfig = cfg }
 }
@@ -46,11 +46,7 @@ func WithBaseOption(opts ...channel_base.Option) TelephonyOption {
 }
 
 // internal rapida audio config
-var RAPIDA_AUDIO_CONFIG = internal_audio.NewLinear16khzMonoAudioConfig()
-
-// ============================================================================
-// BaseTelephonyStreamer — telephony-specific base that embeds BaseStreamer
-// ============================================================================
+var rapida16kConfig = internal_audio.NewLinear16khzMonoAudioConfig()
 
 // BaseTelephonyStreamer embeds channel_base.BaseStreamer for common buffer,
 // channel, and lifecycle management. It adds telephony-specific concerns:
@@ -85,7 +81,7 @@ type BaseTelephonyStreamer struct {
 // CallContext and vault credential. Use TelephonyOption values to configure
 // the source audio format and any BaseStreamer overrides.
 //
-// By default the source audio config is RAPIDA_AUDIO_CONFIG (linear16 16kHz),
+// By default the source audio config is rapida16kConfig (linear16 16kHz),
 // and input/output thresholds are automatically derived from that config
 // (60 ms input, 20 ms output frames). Concrete streamers only need to provide
 // WithSourceAudioConfig to declare their native format — everything else is
@@ -109,7 +105,7 @@ func NewBaseTelephonyStreamer(
 
 	sourceAudioCfg := tc.sourceAudioConfig
 	if sourceAudioCfg == nil {
-		sourceAudioCfg = RAPIDA_AUDIO_CONFIG
+		sourceAudioCfg = rapida16kConfig
 	}
 
 	// Build base options: derive thresholds from the source audio config,
@@ -132,10 +128,6 @@ func NewBaseTelephonyStreamer(
 	}
 }
 
-// ============================================================================
-// Telephony helpers
-// ============================================================================
-
 // CreateVoiceRequest resamples raw audio from the provider's native format
 // to the internal Rapida format (linear16 16kHz) and wraps it in a
 // ConversationUserMessage for downstream processing.
@@ -144,10 +136,10 @@ func (base *BaseTelephonyStreamer) CreateVoiceRequest(audioData []byte) *protos.
 	// 	"input_size", len(audioData),
 	// 	"source_format", base.sourceAudioConfig.GetAudioFormat(),
 	// 	"source_rate", base.sourceAudioConfig.GetSampleRate(),
-	// 	"target_format", RAPIDA_AUDIO_CONFIG.GetAudioFormat(),
-	// 	"target_rate", RAPIDA_AUDIO_CONFIG.GetSampleRate())
+	// 	"target_format", rapida16kConfig.GetAudioFormat(),
+	// 	"target_rate", rapida16kConfig.GetSampleRate())
 
-	resampled, err := base.resampler.Resample(audioData, base.sourceAudioConfig, RAPIDA_AUDIO_CONFIG)
+	resampled, err := base.resampler.Resample(audioData, base.sourceAudioConfig, rapida16kConfig)
 	if err != nil {
 		base.Logger.Warnw("Failed to resample input audio, forwarding raw bytes",
 			"error", err.Error(),

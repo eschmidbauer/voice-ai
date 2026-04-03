@@ -12,7 +12,6 @@ import (
 	sip_infra "github.com/rapidaai/api/assistant-api/sip/infra"
 )
 
-// handleRegisterRequested sends a SIP REGISTER for a DID.
 func (d *Dispatcher) handleRegisterRequested(ctx context.Context, v sip_infra.RegisterRequestedPipeline) {
 	if d.registrationClient == nil {
 		d.logger.Warnw("Pipeline: RegisterRequested but no registration client", "did", v.DID)
@@ -35,22 +34,18 @@ func (d *Dispatcher) handleRegisterRequested(ctx context.Context, v sip_infra.Re
 	})
 }
 
-// handleRegisterActive logs successful registration.
 func (d *Dispatcher) handleRegisterActive(ctx context.Context, v sip_infra.RegisterActivePipeline) {
 	d.logger.Infow("Pipeline: RegisterActive",
 		"did", v.DID,
 		"assistant_id", v.AssistantID)
 }
 
-// handleRegisterFailed logs registration failure.
 func (d *Dispatcher) handleRegisterFailed(ctx context.Context, v sip_infra.RegisterFailedPipeline) {
 	d.logger.Warnw("Pipeline: RegisterFailed",
 		"did", v.DID,
 		"error", v.Error)
 }
 
-// handleRegisterExpiring handles an expiring registration that needs renewal.
 func (d *Dispatcher) handleRegisterExpiring(ctx context.Context, v sip_infra.RegisterExpiringPipeline) {
 	d.logger.Debugw("Pipeline: RegisterExpiring", "did", v.DID)
-	// Renewal is handled by RegistrationClient's renewLoop — this is for observability
 }

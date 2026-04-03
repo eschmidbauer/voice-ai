@@ -12,8 +12,10 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
+	internal_audio "github.com/rapidaai/api/assistant-api/internal/audio"
 	callcontext "github.com/rapidaai/api/assistant-api/internal/callcontext"
 	internal_asterisk "github.com/rapidaai/api/assistant-api/internal/channel/telephony/internal/asterisk/internal"
 	internal_telephony_base "github.com/rapidaai/api/assistant-api/internal/channel/telephony/internal/base"
@@ -23,21 +25,18 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// asteriskWebsocketStreamer handles WebSocket communication with Asterisk chan_websocket.
 type asteriskWebsocketStreamer struct {
 	internal_telephony_base.BaseTelephonyStreamer
 
-	audioProcessor *AudioProcessor
+	audioProcessor *internal_asterisk.AudioProcessor
 	connection     *websocket.Conn
 	channelName    string
 
-	// Output sender state
 	outputSenderStarted bool
 	outputSenderMu      sync.Mutex
 	audioCtx            context.Context
 	audioCancel         context.CancelFunc
 
-	// Media buffering state
 	mediaBuffering bool
 	mediaBufferMu  sync.Mutex
 }
@@ -48,11 +47,15 @@ func NewAsteriskWebsocketStreamer(
 	connection *websocket.Conn,
 	cc *callcontext.CallContext,
 	vaultCred *protos.VaultCredential,
-) internal_type.Streamer {
-	audioProcessor, err := NewAudioProcessor(logger)
+) (internal_type.Streamer, error) {
+	audioProcessor, err := internal_asterisk.NewAudioProcessor(logger, internal_asterisk.AudioProcessorConfig{
+		AsteriskConfig:   internal_audio.NewMulaw8khzMonoAudioConfig(),
+		DownstreamConfig: internal_audio.NewLinear16khzMonoAudioConfig(),
+		SilenceByte:      0xFF, // mu-law silence
+		FrameSize:        160,  // 20ms at 8kHz 8-bit
+	})
 	if err != nil {
-		logger.Error("Failed to create audio processor", "error", err)
-		return nil
+		return nil, fmt.Errorf("failed to create audio processor: %w", err)
 	}
 
 	aws := &asteriskWebsocketStreamer{
@@ -63,32 +66,26 @@ func NewAsteriskWebsocketStreamer(
 		connection:     connection,
 	}
 
-	// Set up callbacks
 	audioProcessor.SetInputAudioCallback(aws.sendProcessedInputAudio)
 	audioProcessor.SetOutputChunkCallback(aws.sendAudioChunk)
 
 	go aws.runWebSocketReader()
-	return aws
+	return aws, nil
 }
 
-// sendProcessedInputAudio is the callback for processed input audio.
 func (aws *asteriskWebsocketStreamer) sendProcessedInputAudio(audio []byte) {
 	aws.WithInputBuffer(func(buf *bytes.Buffer) {
 		buf.Write(audio)
 	})
 }
 
-// sendAudioChunk sends an audio chunk to Asterisk
-func (aws *asteriskWebsocketStreamer) sendAudioChunk(chunk *AudioChunk) error {
+func (aws *asteriskWebsocketStreamer) sendAudioChunk(chunk *internal_asterisk.AudioChunk) error {
 	if aws.connection == nil {
 		return nil
 	}
-
-	// Send binary audio data directly to Asterisk
 	return aws.connection.WriteMessage(websocket.BinaryMessage, chunk.Data)
 }
 
-// runWebSocketReader reads from the Asterisk WebSocket and pushes to priority channels.
 func (aws *asteriskWebsocketStreamer) runWebSocketReader() {
 	conn := aws.connection
 	if conn == nil {
@@ -166,15 +163,12 @@ func (aws *asteriskWebsocketStreamer) runWebSocketReader() {
 	}
 }
 
-// handleAudioData processes incoming binary audio data from Asterisk.
 func (aws *asteriskWebsocketStreamer) handleAudioData(audio []byte) (*protos.ConversationUserMessage, error) {
-	// Process input audio through audio processor (converts ulaw 8kHz -> linear16 16kHz)
 	if err := aws.audioProcessor.ProcessInputAudio(audio); err != nil {
 		aws.Logger.Debug("Failed to process input audio", "error", err.Error())
 		return nil, nil
 	}
 
-	// Check if we have enough buffered audio to send downstream
 	var audioRequest *protos.ConversationUserMessage
 	aws.WithInputBuffer(func(buf *bytes.Buffer) {
 		if buf.Len() > 0 {
@@ -186,14 +180,11 @@ func (aws *asteriskWebsocketStreamer) handleAudioData(audio []byte) (*protos.Con
 	return audioRequest, nil
 }
 
-// Send sends output to Asterisk
 func (aws *asteriskWebsocketStreamer) Send(response internal_type.Stream) error {
 	switch data := response.(type) {
 	case *protos.ConversationAssistantMessage:
 		switch content := data.Message.(type) {
 		case *protos.ConversationAssistantMessage_Audio:
-			// Process audio through the audio processor (converts 16kHz -> 8kHz ulaw)
-			// The audio will be sent at consistent 20ms intervals by RunOutputSender
 			if err := aws.audioProcessor.ProcessOutputAudio(content.Audio); err != nil {
 				aws.Logger.Error("Failed to process output audio", "error", err.Error())
 				return err
@@ -202,10 +193,7 @@ func (aws *asteriskWebsocketStreamer) Send(response internal_type.Stream) error 
 
 	case *protos.ConversationInterruption:
 		if data.Type == protos.ConversationInterruption_INTERRUPTION_TYPE_WORD {
-			// Clear both input and output buffers
 			aws.audioProcessor.ClearOutputBuffer()
-			// No direct "clear" command in Asterisk media WebSocket,
-			// but we can stop buffering if active
 			if aws.isMediaBuffering() {
 				aws.sendCommand("STOP_MEDIA_BUFFERING")
 			}
@@ -231,7 +219,6 @@ func (aws *asteriskWebsocketStreamer) Send(response internal_type.Stream) error 
 	return nil
 }
 
-// stopAudioProcessing stops the output sender goroutine
 func (aws *asteriskWebsocketStreamer) stopAudioProcessing() {
 	aws.outputSenderMu.Lock()
 	if aws.audioCancel != nil {
@@ -241,7 +228,6 @@ func (aws *asteriskWebsocketStreamer) stopAudioProcessing() {
 	aws.outputSenderMu.Unlock()
 }
 
-// startOutputSender starts the consistent audio output sender
 func (aws *asteriskWebsocketStreamer) startOutputSender() {
 	aws.outputSenderMu.Lock()
 	defer aws.outputSenderMu.Unlock()
@@ -255,7 +241,6 @@ func (aws *asteriskWebsocketStreamer) startOutputSender() {
 	go aws.audioProcessor.RunOutputSender(aws.audioCtx)
 }
 
-// sendCommand sends a text command to Asterisk
 func (aws *asteriskWebsocketStreamer) sendCommand(command string) error {
 	if aws.connection == nil {
 		return nil
@@ -263,25 +248,21 @@ func (aws *asteriskWebsocketStreamer) sendCommand(command string) error {
 	return aws.connection.WriteMessage(websocket.TextMessage, []byte(command))
 }
 
-// setMediaBuffering sets the media buffering state
 func (aws *asteriskWebsocketStreamer) setMediaBuffering(buffering bool) {
 	aws.mediaBufferMu.Lock()
 	aws.mediaBuffering = buffering
 	aws.mediaBufferMu.Unlock()
 }
 
-// isMediaBuffering returns whether media buffering is active
 func (aws *asteriskWebsocketStreamer) isMediaBuffering() bool {
 	aws.mediaBufferMu.Lock()
 	defer aws.mediaBufferMu.Unlock()
 	return aws.mediaBuffering
 }
 
-// hangupViaARI hangs up the call using the Asterisk ARI API
-// This is a fallback mechanism when the WebSocket HANGUP command fails
 func (aws *asteriskWebsocketStreamer) hangupViaARI() error {
 	vaultCredential := aws.VaultCredential()
-	if vaultCredential == nil {
+	if vaultCredential == nil || vaultCredential.GetValue() == nil {
 		return fmt.Errorf("vault credential is nil")
 	}
 
@@ -299,7 +280,7 @@ func (aws *asteriskWebsocketStreamer) hangupViaARI() error {
 
 	req.SetBasicAuth(user, password)
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to execute request: %w", err)
@@ -314,11 +295,11 @@ func (aws *asteriskWebsocketStreamer) hangupViaARI() error {
 	return nil
 }
 
-func (tws *asteriskWebsocketStreamer) Cancel() error {
-	if tws.connection != nil {
-		tws.connection.Close()
-		tws.connection = nil
+func (aws *asteriskWebsocketStreamer) Cancel() error {
+	if aws.connection != nil {
+		aws.connection.Close()
+		aws.connection = nil
 	}
-	tws.BaseStreamer.Cancel()
+	aws.BaseStreamer.Cancel()
 	return nil
 }

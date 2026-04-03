@@ -125,106 +125,6 @@ func (d *InboundDispatcher) HandleStatusCallbackByContext(c *gin.Context, contex
 	return d.HandleStatusCallback(c, cc.Provider, auth, cc.AssistantID, cc.ConversationID)
 }
 
-// HandleReceiveCall processes an inbound call webhook. It resolves the telephony provider,
-// receives the call, creates a conversation, saves a CallContext in Postgres, applies telemetry,
-// and instructs the provider to answer the call.
-// Returns the contextID for AudioSocket/WebSocket resolution.
-// InboundCallResult carries the output of HandleReceiveCall for pipeline/observer use.
-// Includes CallInfo data so the pipeline can emit telemetry through the observer.
-type InboundCallResult struct {
-	ContextID      string
-	ConversationID uint64
-	AssistantID    uint64
-	Provider       string
-	CallerNumber   string
-	CallStatus     string
-	CallEvent      string
-	CallPayload    interface{}        // raw provider event payload
-	Extra          map[string]string // provider-specific metadata
-}
-
-func (d *InboundDispatcher) HandleReceiveCall(c *gin.Context, provider string, auth types.SimplePrinciple, assistantId uint64) (*InboundCallResult, error) {
-	tel, err := GetTelephony(Telephony(provider), d.cfg, d.logger, d.telephonyOpt)
-	if err != nil {
-		return nil, fmt.Errorf("telephony provider %s not connected: %w", provider, err)
-	}
-
-	callInfo, err := tel.ReceiveCall(c)
-	if err != nil {
-		return nil, fmt.Errorf("receive call failed: %w", err)
-	}
-	if callInfo == nil {
-		return nil, nil
-	}
-
-	assistant, err := d.assistantService.Get(c, auth, assistantId, utils.GetVersionDefinition("latest"), &internal_services.GetAssistantOption{InjectPhoneDeployment: true})
-	if err != nil {
-		d.logger.Debugf("unable to find assistant %v", err)
-		return nil, fmt.Errorf("unable to find assistant: %w", err)
-	}
-
-	conversationID, err := d.createConversation(c, auth, callInfo.CallerNumber, assistant.Id, assistant.AssistantProviderId, type_enums.DIRECTION_INBOUND, utils.PhoneCall)
-	if err != nil {
-		return nil, fmt.Errorf("unable to create conversation: %w", err)
-	}
-
-	// Telemetry is emitted by the pipeline handler via observer — not here.
-	// CallInfo data is carried in InboundCallResult for pipeline use.
-
-	// Store call context in Postgres for AudioSocket/WebSocket resolution.
-	// ChannelUUID comes directly from CallInfo — no need to scan metadata.
-	cc := &callcontext.CallContext{
-		AssistantID:         assistant.Id,
-		ConversationID:      conversationID,
-		AssistantProviderId: assistant.AssistantProviderId,
-		AuthToken:           auth.GetCurrentToken(),
-		AuthType:            auth.Type(),
-		Direction:           "inbound",
-		CallerNumber:        callInfo.CallerNumber,
-		Provider:            provider,
-		ChannelUUID:         callInfo.ChannelUUID,
-	}
-	if auth.GetCurrentProjectId() != nil {
-		cc.ProjectID = *auth.GetCurrentProjectId()
-	}
-	if auth.GetCurrentOrganizationId() != nil {
-		cc.OrganizationID = *auth.GetCurrentOrganizationId()
-	}
-	contextID, err := d.store.Save(c, cc)
-	if err != nil {
-		d.logger.Errorf("failed to save call context: %v", err)
-		return nil, fmt.Errorf("failed to create call context: %w", err)
-	}
-
-	// Pass contextId to the telephony provider for inbound call setup
-	// For Asterisk: the contextId is returned as plain text — dialplan uses it as the AudioSocket UUID
-	// For WebSocket providers: the contextId is embedded in the WebSocket URL path
-	c.Set("contextId", contextID)
-
-	if err := tel.InboundCall(c, auth, assistant.Id, callInfo.CallerNumber, conversationID); err != nil {
-		d.logger.Errorf("failed to initiate inbound call: %v", err)
-		return nil, fmt.Errorf("unable to initiate inbound call: %w", err)
-	}
-
-	// Build extra metadata from CallInfo
-	extra := make(map[string]string)
-	for k, v := range callInfo.Extra {
-		extra[k] = v
-	}
-
-	return &InboundCallResult{
-		ContextID:      contextID,
-		ConversationID: conversationID,
-		AssistantID:    assistant.Id,
-		Provider:       provider,
-		CallerNumber:   callInfo.CallerNumber,
-		CallStatus:     callInfo.Status,
-		CallEvent:      callInfo.StatusInfo.Event,
-		CallPayload:    callInfo.StatusInfo.Payload,
-		Extra:          extra,
-	}, nil
-}
-
 // ResolveVaultCredential fetches the vault credential for the given assistant.
 // This is the only DB round-trip needed — call IDs (assistant, conversation,
 // provider) are already in the CallContext from Redis.
@@ -284,10 +184,6 @@ func (d *InboundDispatcher) CompleteCallSession(ctx context.Context, contextID s
 		d.logger.Warnf("failed to complete call context %s: %v", contextID, err)
 	}
 }
-
-// =============================================================================
-// Individual stage methods — called by pipeline callbacks
-// =============================================================================
 
 // ReceiveCall parses the provider webhook and returns CallInfo.
 func (d *InboundDispatcher) ReceiveCall(c *gin.Context, provider string) (*internal_type.CallInfo, error) {

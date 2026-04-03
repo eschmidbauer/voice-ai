@@ -10,14 +10,15 @@ import (
 	"context"
 	"fmt"
 
+	obs "github.com/rapidaai/api/assistant-api/internal/observe"
 	"github.com/rapidaai/protos"
 )
 
 func (d *Dispatcher) handleDisconnectRequested(ctx context.Context, v DisconnectRequestedPipeline) {
 	d.logger.Infow("Pipeline: DisconnectRequested", "call_id", v.ID, "reason", v.Reason)
-	d.emitEvent(ctx, v.ID, "session", map[string]string{
-		"type":   "disconnect_requested",
-		"reason": v.Reason,
+	d.emitEvent(ctx, v.ID, obs.ComponentSession, map[string]string{
+		obs.DataType:   obs.EventDisconnectRequested,
+		obs.DataReason: v.Reason,
 	})
 }
 
@@ -28,17 +29,22 @@ func (d *Dispatcher) handleCallCompleted(ctx context.Context, v CallCompletedPip
 		"messages", v.Messages,
 		"reason", v.Reason)
 
-	d.emitEvent(ctx, v.ID, "session", map[string]string{
-		"type":        "call_completed",
-		"reason":      v.Reason,
-		"duration_ms": fmt.Sprintf("%d", v.Duration.Milliseconds()),
-		"messages":    fmt.Sprintf("%d", v.Messages),
+	d.emitEvent(ctx, v.ID, obs.ComponentSession, map[string]string{
+		obs.DataType:     obs.EventCallCompleted,
+		obs.DataReason:   v.Reason,
+		obs.DataDuration: fmt.Sprintf("%d", v.Duration.Milliseconds()),
+		obs.DataMessages: fmt.Sprintf("%d", v.Messages),
 	})
 
 	d.emitMetric(ctx, v.ID, []*protos.Metric{
-		{Name: "telephony.call_duration_ms", Value: fmt.Sprintf("%d", v.Duration.Milliseconds()), Description: "Call duration"},
-		{Name: "telephony.end_reason", Value: v.Reason, Description: "Call end reason"},
+		{Name: obs.MetricCallDurationMs, Value: fmt.Sprintf("%d", v.Duration.Milliseconds()), Description: "Call duration"},
+		{Name: obs.MetricCallEndReason, Value: v.Reason, Description: "Call end reason"},
 	})
+
+	if hooks, ok := d.getHooks(v.ID); ok {
+		hooks.OnEnd(ctx)
+		d.removeHooks(v.ID)
+	}
 
 	d.removeObserver(ctx, v.ID)
 }
@@ -49,15 +55,20 @@ func (d *Dispatcher) handleCallFailed(ctx context.Context, v CallFailedPipeline)
 		"stage", v.Stage,
 		"error", v.Error)
 
-	d.emitEvent(ctx, v.ID, "session", map[string]string{
-		"type":  "call_failed",
-		"stage": v.Stage,
-		"error": fmt.Sprintf("%v", v.Error),
+	d.emitEvent(ctx, v.ID, obs.ComponentSession, map[string]string{
+		obs.DataType:  obs.EventCallFailed,
+		obs.DataStage: v.Stage,
+		obs.DataError: fmt.Sprintf("%v", v.Error),
 	})
 
 	d.emitMetric(ctx, v.ID, []*protos.Metric{
-		{Name: "telephony.call_failed", Value: v.Stage, Description: fmt.Sprintf("Call failed at %s: %v", v.Stage, v.Error)},
+		{Name: obs.MetricCallFailed, Value: v.Stage, Description: fmt.Sprintf("Call failed at %s: %v", v.Stage, v.Error)},
 	})
+
+	if hooks, ok := d.getHooks(v.ID); ok {
+		hooks.OnError(ctx)
+		d.removeHooks(v.ID)
+	}
 
 	d.removeObserver(ctx, v.ID)
 }

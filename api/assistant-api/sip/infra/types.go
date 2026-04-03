@@ -8,13 +8,17 @@ package sip_infra
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"strconv"
 	"strings"
 	"time"
 
 	internal_type "github.com/rapidaai/api/assistant-api/internal/type"
 	"github.com/rapidaai/pkg/types"
+	"github.com/rapidaai/protos"
 )
 
 // SIP-specific errors
@@ -314,11 +318,78 @@ type SIPSession struct {
 	Cancel      context.CancelFunc
 }
 
+// ParseConfigFromVault extracts SIP provider credentials from a vault credential.
+// Handles: sip_uri, sip_server, sip_port, sip_username, sip_password, sip_realm,
+// sip_domain, sip_caller_id, sip_headers (JSON string).
+// Does NOT set operational fields (transport, RTP range) — call ApplyOperationalDefaults after.
+func ParseConfigFromVault(vaultCredential *protos.VaultCredential) (*Config, error) {
+	if vaultCredential == nil || vaultCredential.GetValue() == nil {
+		return nil, fmt.Errorf("vault credential is required")
+	}
+
+	credMap := vaultCredential.GetValue().AsMap()
+	cfg := &Config{}
+
+	// Parse sip_uri → server + port (e.g. "sip:192.168.1.5:5060")
+	if sipURI, ok := credMap["sip_uri"].(string); ok && sipURI != "" {
+		raw := strings.TrimPrefix(strings.TrimPrefix(sipURI, "sips:"), "sip:")
+		host, portStr, err := net.SplitHostPort(raw)
+		if err != nil {
+			cfg.Server = raw
+		} else {
+			cfg.Server = host
+			if p, err := strconv.Atoi(portStr); err == nil && p > 0 {
+				cfg.Port = p
+			}
+		}
+	}
+
+	if server, ok := credMap["sip_server"].(string); ok && server != "" {
+		cfg.Server = server
+	}
+	if cfg.Port <= 0 {
+		cfg.Port = parsePortValue(credMap["sip_port"])
+	}
+	if username, ok := credMap["sip_username"].(string); ok {
+		cfg.Username = username
+	}
+	if password, ok := credMap["sip_password"].(string); ok {
+		cfg.Password = password
+	}
+	if realm, ok := credMap["sip_realm"].(string); ok {
+		cfg.Realm = realm
+	}
+	if domain, ok := credMap["sip_domain"].(string); ok {
+		cfg.Domain = domain
+	}
+	if callerID, ok := credMap["sip_caller_id"].(string); ok {
+		cfg.CallerID = callerID
+	}
+	if headersRaw, ok := credMap["sip_headers"].(string); ok && headersRaw != "" {
+		parsed := make(map[string]string)
+		if err := json.Unmarshal([]byte(headersRaw), &parsed); err == nil {
+			cfg.CustomHeaders = parsed
+		}
+	}
+
+	return cfg, nil
+}
+
+func parsePortValue(v any) int {
+	switch p := v.(type) {
+	case float64:
+		if int(p) > 0 && int(p) <= 65535 {
+			return int(p)
+		}
+	case string:
+		if port, err := strconv.Atoi(p); err == nil && port > 0 && port <= 65535 {
+			return port
+		}
+	}
+	return 0
+}
+
 // ExtractDIDFromURI extracts the user part from a SIP URI as a phone number (DID).
-//
-//	"sip:+15551234567@provider.com" → "+15551234567"
-//	"sip:15551234567@provider.com"  → "+15551234567"
-//	"sip:user:pass@host"            → "" (credential pair, not a DID)
 func ExtractDIDFromURI(uri string) string {
 	raw := strings.TrimPrefix(strings.TrimPrefix(uri, "sip:"), "sips:")
 

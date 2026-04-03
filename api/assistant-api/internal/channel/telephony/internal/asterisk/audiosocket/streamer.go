@@ -15,7 +15,9 @@ import (
 	"strings"
 	"sync"
 
+	internal_audio "github.com/rapidaai/api/assistant-api/internal/audio"
 	callcontext "github.com/rapidaai/api/assistant-api/internal/callcontext"
+	internal_asterisk "github.com/rapidaai/api/assistant-api/internal/channel/telephony/internal/asterisk/internal"
 	internal_telephony_base "github.com/rapidaai/api/assistant-api/internal/channel/telephony/internal/base"
 	internal_type "github.com/rapidaai/api/assistant-api/internal/type"
 	"github.com/rapidaai/pkg/commons"
@@ -31,9 +33,8 @@ type Streamer struct {
 	reader         *bufio.Reader
 	writer         *bufio.Writer
 	writeMu        sync.Mutex
-	audioProcessor *AudioProcessor
+	audioProcessor *internal_asterisk.AudioProcessor
 
-	// AudioSocket manages its own context for output lifecycle control.
 	ctx          context.Context
 	cancel       context.CancelFunc
 	outputCtx    context.Context
@@ -44,7 +45,7 @@ type Streamer struct {
 
 // NewStreamer creates a new AudioSocket streamer.
 // initialUUID is the contextId already read from the first UUID frame by the AudioSocket
-// engine — when set, the streamer emits ConversationInitialization on the first Recv()
+// engine -- when set, the streamer emits ConversationInitialization on the first Recv()
 // without waiting for another UUID frame from the wire.
 func NewStreamer(
 	logger commons.Logger,
@@ -54,10 +55,16 @@ func NewStreamer(
 	cc *callcontext.CallContext,
 	vaultCred *protos.VaultCredential,
 ) (internal_type.Streamer, error) {
-	audioProcessor, err := NewAudioProcessor(logger)
+	audioProcessor, err := internal_asterisk.NewAudioProcessor(logger, internal_asterisk.AudioProcessorConfig{
+		AsteriskConfig:   internal_audio.NewLinear8khzMonoAudioConfig(),
+		DownstreamConfig: internal_audio.NewLinear16khzMonoAudioConfig(),
+		SilenceByte:      0x00, // SLIN silence
+		FrameSize:        320,  // 20ms at 8kHz 16-bit
+	})
 	if err != nil {
 		return nil, err
 	}
+
 	if reader == nil {
 		reader = bufio.NewReader(conn)
 	}
@@ -66,6 +73,7 @@ func NewStreamer(
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	outputCtx, outputCancel := context.WithCancel(ctx)
 
 	as := &Streamer{
 		BaseTelephonyStreamer: internal_telephony_base.NewBaseTelephonyStreamer(
@@ -75,10 +83,10 @@ func NewStreamer(
 		reader:         reader,
 		writer:         writer,
 		audioProcessor: audioProcessor,
-		outputCtx:      ctx,
-		outputCancel:   cancel,
 		ctx:            ctx,
 		cancel:         cancel,
+		outputCtx:      outputCtx,
+		outputCancel:   outputCancel,
 		initialUUID:    cc.ContextID,
 	}
 
@@ -95,7 +103,7 @@ func (as *Streamer) sendProcessedInputAudio(audio []byte) {
 	})
 }
 
-func (as *Streamer) sendAudioChunk(chunk *AudioChunk) error {
+func (as *Streamer) sendAudioChunk(chunk *internal_asterisk.AudioChunk) error {
 	if as.conn == nil {
 		return nil
 	}
@@ -112,13 +120,10 @@ func (as *Streamer) writeFrame(frameType byte, payload []byte) error {
 	return as.writer.Flush()
 }
 
-// Context returns the streamer context.
 func (as *Streamer) Context() context.Context {
 	return as.ctx
 }
 
-// runFrameReader reads AudioSocket frames in a background goroutine and pushes
-// to the priority channels inherited from BaseStreamer.
 func (as *Streamer) runFrameReader() {
 	as.PushInputLow(&protos.ConversationEvent{
 		Name: "channel",
@@ -183,7 +188,6 @@ func (as *Streamer) runFrameReader() {
 	}
 }
 
-// Send writes audio/output frames back to Asterisk.
 func (as *Streamer) Send(response internal_type.Stream) error {
 	switch data := response.(type) {
 	case *protos.ConversationAssistantMessage:
@@ -216,6 +220,9 @@ func (as *Streamer) close() error {
 	}
 	as.BaseStreamer.Cancel()
 	if as.conn != nil {
+		if as.writer != nil {
+			_ = as.writer.Flush()
+		}
 		_ = as.conn.Close()
 		as.conn = nil
 	}

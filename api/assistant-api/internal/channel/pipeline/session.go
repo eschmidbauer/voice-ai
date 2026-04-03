@@ -12,11 +12,7 @@ import (
 	obs "github.com/rapidaai/api/assistant-api/internal/observe"
 )
 
-// handleSessionConnected is the SYNC handler for WebSocket/AudioSocket connections.
-// It resolves the call context, creates streamer + talker, runs Talk() (blocking),
-// then fires hooks and cleans up. The controller blocks on resultCh.
-//
-// Runs in a goroutine to avoid blocking the mediaCh dispatcher.
+// handleSessionConnected resolves context, creates streamer/talker, runs Talk (blocking), then cleans up.
 func (d *Dispatcher) handleSessionConnected(ctx context.Context, v SessionConnectedPipeline, resultCh chan<- *PipelineResult) {
 	go func() {
 		defer func() {
@@ -28,7 +24,6 @@ func (d *Dispatcher) handleSessionConnected(ctx context.Context, v SessionConnec
 
 		d.logger.Infow("Pipeline: SessionConnected", "call_id", v.ID)
 
-		// Step 1: Resolve call context + vault credential
 		if d.onResolveSession == nil {
 			sendResult(resultCh, &PipelineResult{Error: ErrCallbackNotConfigured})
 			return
@@ -40,19 +35,17 @@ func (d *Dispatcher) handleSessionConnected(ctx context.Context, v SessionConnec
 			return
 		}
 
-		// Step 2: Create streamer
 		if d.onCreateStreamer == nil {
 			sendResult(resultCh, &PipelineResult{Error: ErrCallbackNotConfigured})
 			return
 		}
-		streamer, err := d.onCreateStreamer(ctx, cc, vc, v.WebSocket, v.Conn)
+		streamer, err := d.onCreateStreamer(ctx, cc, vc, v.WebSocket, v.Conn, v.Reader, v.Writer)
 		if err != nil {
 			d.logger.Error("Pipeline: streamer creation failed", "call_id", v.ID, "error", err)
 			sendResult(resultCh, &PipelineResult{Error: err})
 			return
 		}
 
-		// Step 3: Create talker
 		if d.onCreateTalker == nil {
 			sendResult(resultCh, &PipelineResult{Error: ErrCallbackNotConfigured})
 			return
@@ -70,7 +63,6 @@ func (d *Dispatcher) handleSessionConnected(ctx context.Context, v SessionConnec
 			contextID = v.ID
 		}
 
-		// Step 4: Create observer (if not already created by handleCallReceived)
 		if _, exists := d.getObserver(contextID); !exists && d.onCreateObserver != nil {
 			o := d.onCreateObserver(ctx, contextID, auth, cc.AssistantID, cc.ConversationID)
 			if o != nil {
@@ -78,7 +70,6 @@ func (d *Dispatcher) handleSessionConnected(ctx context.Context, v SessionConnec
 			}
 		}
 
-		// Step 5: Create hooks + fire OnBegin
 		if d.onCreateHooks != nil {
 			hooks := d.onCreateHooks(ctx, auth, cc.AssistantID, cc.ConversationID)
 			if hooks != nil {
@@ -92,14 +83,12 @@ func (d *Dispatcher) handleSessionConnected(ctx context.Context, v SessionConnec
 			obs.DataProvider: cc.Provider,
 		})
 
-		// Step 6: Run Talk (BLOCKS for call duration)
 		if d.onRunTalk == nil {
 			sendResult(resultCh, &PipelineResult{Error: ErrCallbackNotConfigured})
 			return
 		}
 		talkErr := d.onRunTalk(ctx, talker, auth)
 
-		// Step 7: Talk returned — fire hooks, emit completion, cleanup
 		if hooks, ok := d.getHooks(contextID); ok {
 			hooks.OnEnd(ctx)
 			d.removeHooks(contextID)
@@ -120,17 +109,14 @@ func (d *Dispatcher) handleSessionConnected(ctx context.Context, v SessionConnec
 	}()
 }
 
-// handleSessionInitialized logs session initialization.
 func (d *Dispatcher) handleSessionInitialized(ctx context.Context, v SessionInitializedPipeline) {
 	d.logger.Infow("Pipeline: SessionInitialized", "call_id", v.ID)
 }
 
-// handleCallActive logs active call state.
 func (d *Dispatcher) handleCallActive(ctx context.Context, v CallActivePipeline) {
 	d.logger.Infow("Pipeline: CallActive", "call_id", v.ID)
 }
 
-// handleModeSwitch logs audio/text mode transitions.
 func (d *Dispatcher) handleModeSwitch(ctx context.Context, v ModeSwitchPipeline) {
 	d.logger.Infow("Pipeline: ModeSwitch", "call_id", v.ID, "from", v.From, "to", v.To)
 	d.emitEvent(ctx, v.ID, obs.ComponentSession, map[string]string{

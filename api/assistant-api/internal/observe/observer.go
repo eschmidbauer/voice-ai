@@ -16,34 +16,21 @@ import (
 	"github.com/rapidaai/protos"
 )
 
-// PersistFunc persists metrics/metadata to DB for a conversation.
-// Implementations are provided by the conversation service layer.
-type PersistFunc struct {
-	ApplyMetrics  func(ctx context.Context, auth types.SimplePrinciple, assistantID, conversationID uint64, metrics []*types.Metric) error
-	ApplyMetadata func(ctx context.Context, auth types.SimplePrinciple, assistantID, conversationID uint64, metadata []*types.Metadata) error
+// ConversationPersister persists metrics and metadata to DB for a conversation.
+// Implemented by AssistantConversationService — the observer only depends on this
+// narrow interface, not the full service.
+type ConversationPersister interface {
+	PersistMetrics(ctx context.Context, auth types.SimplePrinciple, assistantID, conversationID uint64, metrics []*types.Metric) error
+	PersistMetadata(ctx context.Context, auth types.SimplePrinciple, assistantID, conversationID uint64, metadata []*types.Metadata) error
 }
 
-// ConversationObserver provides unified observability for a conversation's lifecycle.
-// It combines:
-//   - DB persistence (metrics + metadata via PersistFunc)
-//   - Telemetry export (events + metrics via EventCollector + MetricCollector)
-//
-// This is the shared infrastructure used by:
-//   - SIP pipeline (pre-talk and post-talk stages)
-//   - Telephony providers (Twilio, Asterisk, etc.)
-//   - Audio dispatch pipeline (genericRequestor delegates to this)
-//
-// The observer is scoped to a single conversation. Create one per conversation
-// via NewConversationObserver after the conversation is created in DB.
+// ConversationObserver provides unified observability for a conversation's lifecycle:
+// DB persistence (via ConversationPersister) and telemetry export (via collectors).
 type ConversationObserver struct {
-	logger commons.Logger
-	meta   SessionMeta
-	auth   types.SimplePrinciple
-
-	// DB persistence
-	persist PersistFunc
-
-	// Telemetry collectors (fan-out to exporters: OpenSearch, OTLP, X-Ray, etc.)
+	logger  commons.Logger
+	meta    SessionMeta
+	auth    types.SimplePrinciple
+	persist ConversationPersister
 	events  EventCollector
 	metrics MetricCollector
 }
@@ -56,7 +43,7 @@ type ConversationObserverConfig struct {
 	ConversationID uint64
 	ProjectID      uint64
 	OrganizationID uint64
-	Persist        PersistFunc
+	Persist        ConversationPersister
 	Events         EventCollector
 	Metrics        MetricCollector
 }
@@ -103,14 +90,13 @@ func (o *ConversationObserver) EmitEvent(ctx context.Context, name string, data 
 		Time:      time.Now(),
 	})
 
-	// DB persistence (conversation metadata)
-	if o.persist.ApplyMetadata != nil {
+	if o.persist != nil {
 		metadata := make([]*types.Metadata, 0, len(data)+1)
 		metadata = append(metadata, types.NewMetadata(fmt.Sprintf("%s.event", name), dataType(data)))
 		for k, v := range data {
 			metadata = append(metadata, types.NewMetadata(fmt.Sprintf("%s.%s", name, k), v))
 		}
-		if err := o.persist.ApplyMetadata(ctx, o.auth, o.meta.AssistantID, o.meta.AssistantConversationID, metadata); err != nil {
+		if err := o.persist.PersistMetadata(ctx, o.auth, o.meta.AssistantID, o.meta.AssistantConversationID, metadata); err != nil {
 			o.logger.Warnw("observer: failed to persist event metadata", "name", name, "error", err)
 		}
 	}
@@ -129,8 +115,7 @@ func (o *ConversationObserver) EmitMetric(ctx context.Context, metrics []*protos
 		Time:           time.Now(),
 	})
 
-	// DB persistence
-	if o.persist.ApplyMetrics != nil {
+	if o.persist != nil {
 		converted := make([]*types.Metric, 0, len(metrics))
 		for _, pm := range metrics {
 			converted = append(converted, &types.Metric{
@@ -139,7 +124,7 @@ func (o *ConversationObserver) EmitMetric(ctx context.Context, metrics []*protos
 				Description: pm.Description,
 			})
 		}
-		if err := o.persist.ApplyMetrics(ctx, o.auth, o.meta.AssistantID, o.meta.AssistantConversationID, converted); err != nil {
+		if err := o.persist.PersistMetrics(ctx, o.auth, o.meta.AssistantID, o.meta.AssistantConversationID, converted); err != nil {
 			o.logger.Warnw("observer: failed to persist metrics", "error", err)
 		}
 	}
@@ -150,8 +135,8 @@ func (o *ConversationObserver) EmitMetadata(ctx context.Context, metadata []*typ
 	if len(metadata) == 0 {
 		return
 	}
-	if o.persist.ApplyMetadata != nil {
-		if err := o.persist.ApplyMetadata(ctx, o.auth, o.meta.AssistantID, o.meta.AssistantConversationID, metadata); err != nil {
+	if o.persist != nil {
+		if err := o.persist.PersistMetadata(ctx, o.auth, o.meta.AssistantID, o.meta.AssistantConversationID, metadata); err != nil {
 			o.logger.Warnw("observer: failed to persist metadata", "error", err)
 		}
 	}
@@ -179,10 +164,26 @@ func (o *ConversationObserver) Meta() SessionMeta {
 	return o.meta
 }
 
-// dataType extracts the "type" field from event data, or returns "unknown".
 func dataType(data map[string]string) string {
 	if t, ok := data["type"]; ok {
 		return t
 	}
 	return "unknown"
+}
+
+// ServicePersister adapts any service with ApplyConversationMetrics/ApplyConversationMetadata
+// (which return a typed result + error) to the ConversationPersister interface (error only).
+type ServicePersister struct {
+	ApplyMetrics  func(ctx context.Context, auth types.SimplePrinciple, assistantID, conversationID uint64, metrics []*types.Metric) (interface{}, error)
+	ApplyMetadata func(ctx context.Context, auth types.SimplePrinciple, assistantID, conversationID uint64, metadata []*types.Metadata) (interface{}, error)
+}
+
+func (s *ServicePersister) PersistMetrics(ctx context.Context, auth types.SimplePrinciple, assistantID, conversationID uint64, metrics []*types.Metric) error {
+	_, err := s.ApplyMetrics(ctx, auth, assistantID, conversationID, metrics)
+	return err
+}
+
+func (s *ServicePersister) PersistMetadata(ctx context.Context, auth types.SimplePrinciple, assistantID, conversationID uint64, metadata []*types.Metadata) error {
+	_, err := s.ApplyMetadata(ctx, auth, assistantID, conversationID, metadata)
+	return err
 }

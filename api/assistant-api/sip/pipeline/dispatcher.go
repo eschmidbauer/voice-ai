@@ -18,30 +18,20 @@ import (
 	"github.com/rapidaai/protos"
 )
 
-// Channel buffer sizes — tuned per priority tier.
 const (
-	signalChSize  = 64   // BYE, CANCEL, transfer — small but never blocked
-	setupChSize   = 256  // INVITE, route, auth — moderate burst capacity
-	mediaChSize   = 256  // RTP, codec, hold — moderate burst capacity
-	controlChSize = 512  // metrics, CDR, events — highest volume, lowest priority
+	signalChSize  = 64
+	setupChSize   = 256
+	mediaChSize   = 256
+	controlChSize = 512
 )
 
-// callEnvelope bundles a pipeline stage with its originating context
-// so cancellation signals propagate through the pipeline.
 type callEnvelope struct {
 	ctx context.Context
 	p   sip_infra.Pipeline
 }
 
 // Dispatcher routes SIP pipeline stages to priority-based channel goroutines.
-// Each channel has a dedicated consumer so no tier can stall another.
-//
-// Priority:
-//
-//	signal  — BYE, CANCEL, transfer                     (preempts everything)
-//	setup   — INVITE, route, auth, session creation      (call setup)
-//	media   — RTP, codec negotiation, hold/resume        (media path)
-//	control — metrics, CDR, events, recording, DTMF      (background work)
+// Priority: signal > setup > media > control.
 type Dispatcher struct {
 	mu     sync.RWMutex
 	logger commons.Logger
@@ -51,46 +41,27 @@ type Dispatcher struct {
 	mediaCh   chan callEnvelope
 	controlCh chan callEnvelope
 
-	// Per-call observer store — maps callID to ConversationObserver.
-	// Populated by handleSessionEstablished after onCallSetup succeeds.
-	// Used by all handlers to emit events/metrics/metadata (DB + exporters).
-	// Removed by handleCallEnded.
 	observers map[string]*observe.ConversationObserver
+	hooks     map[string]*observe.ConversationHooks
 
-	// Dependencies injected by SIPEngine
 	server             *sip_infra.Server
 	registrationClient *sip_infra.RegistrationClient
 
-	// Callbacks — injected by SIPEngine for operations requiring DB/vault/services.
 	didResolver      DIDResolverFunc
 	onCallSetup      OnCallSetupFunc
 	onCallStart      OnCallStartFunc
 	onCallEnd        OnCallEndFunc
 	onCreateObserver OnCreateObserverFunc
 	onCreateHooks    OnCreateHooksFunc
-
-	// Per-call hooks store (webhooks/analysis on call start/end/fail)
-	hooks map[string]*observe.ConversationHooks
-
-	// Pluggable stages — nil means skip
-	// callScreener  CallScreener
-	// ivrHandler    IVRHandler
-	// dtmfRouter    DTMFRouter
-	// recorder      CallRecorder
-	// transferAgent TransferAgent
-	// callQueue     CallQueue
 }
 
-
-// DIDResolverFunc resolves a DID to an assistant ID and auth principal.
 type DIDResolverFunc func(did string) (assistantID uint64, auth types.SimplePrinciple, err error)
 
-// OnCallSetupFunc creates a conversation and returns a CallContext.
-// Called by handleAuthenticated after the assistant is resolved.
 type OnCallSetupFunc func(ctx context.Context, session *sip_infra.Session, auth types.SimplePrinciple, assistantID uint64, fromURI string, direction string) (*CallSetupResult, error)
 
 // CallSetupResult carries the output of OnCallSetupFunc into the pipeline.
 type CallSetupResult struct {
+	AssistantID         uint64
 	ConversationID      uint64
 	AssistantProviderId uint64
 	AuthToken           string
@@ -99,21 +70,14 @@ type CallSetupResult struct {
 	OrganizationID      uint64
 }
 
-// OnCallStartFunc creates a streamer and talker, then runs talker.Talk (blocking).
-// Called by handleSessionEstablished.
 type OnCallStartFunc func(ctx context.Context, session *sip_infra.Session, setup *CallSetupResult, vaultCred interface{}, sipConfig *sip_infra.Config, direction string)
 
-// OnCallEndFunc cleans up a call (cancel context, release session from map).
 type OnCallEndFunc func(callID string)
 
-// OnCreateObserverFunc creates a ConversationObserver for a call after setup.
-// SIPEngine implements this using the conversation service + telemetry providers.
 type OnCreateObserverFunc func(ctx context.Context, setup *CallSetupResult, auth types.SimplePrinciple) *observe.ConversationObserver
 
-// OnCreateHooksFunc creates ConversationHooks for a call (webhooks + analysis).
 type OnCreateHooksFunc func(ctx context.Context, auth types.SimplePrinciple, assistantID, conversationID uint64) *observe.ConversationHooks
 
-// DispatcherConfig holds dependencies for creating a Dispatcher.
 type DispatcherConfig struct {
 	Logger             commons.Logger
 	Server             *sip_infra.Server
@@ -147,15 +111,12 @@ func NewDispatcher(cfg *DispatcherConfig) *Dispatcher {
 	}
 }
 
-// storeObserver creates and stores a ConversationObserver for a call.
-// Called by handleSessionEstablished after onCallSetup succeeds.
 func (d *Dispatcher) storeObserver(callID string, obs *observe.ConversationObserver) {
 	d.mu.Lock()
 	d.observers[callID] = obs
 	d.mu.Unlock()
 }
 
-// getObserver retrieves the ConversationObserver for a call.
 func (d *Dispatcher) getObserver(callID string) (*observe.ConversationObserver, bool) {
 	d.mu.RLock()
 	obs, ok := d.observers[callID]
@@ -163,7 +124,6 @@ func (d *Dispatcher) getObserver(callID string) (*observe.ConversationObserver, 
 	return obs, ok
 }
 
-// removeObserver removes and shuts down the observer for a call.
 func (d *Dispatcher) removeObserver(ctx context.Context, callID string) {
 	d.mu.Lock()
 	obs, ok := d.observers[callID]
@@ -177,8 +137,6 @@ func (d *Dispatcher) removeObserver(ctx context.Context, callID string) {
 	}
 }
 
-// emitEvent writes a SIP event via the call's ConversationObserver (DB + exporters).
-// No-op if no observer exists for this call (pre-conversation stages).
 func (d *Dispatcher) emitEvent(ctx context.Context, callID, name string, data map[string]string) {
 	obs, ok := d.getObserver(callID)
 	if !ok {
@@ -187,7 +145,6 @@ func (d *Dispatcher) emitEvent(ctx context.Context, callID, name string, data ma
 	obs.EmitEvent(ctx, name, data)
 }
 
-// emitMetric writes SIP metrics via the call's ConversationObserver (DB + exporters).
 func (d *Dispatcher) emitMetric(ctx context.Context, callID string, metrics []*protos.Metric) {
 	if len(metrics) == 0 {
 		return
@@ -218,7 +175,6 @@ func (d *Dispatcher) removeHooks(callID string) {
 	d.mu.Unlock()
 }
 
-// Start launches the four dispatcher goroutines. Call before any OnPipeline calls.
 func (d *Dispatcher) Start(ctx context.Context) {
 	go d.runSignalDispatcher(ctx)
 	go d.runSetupDispatcher(ctx)
@@ -228,13 +184,10 @@ func (d *Dispatcher) Start(ctx context.Context) {
 	d.logger.Infow("SIP pipeline dispatcher started")
 }
 
-// OnPipeline enqueues pipeline stages into the appropriate priority channel.
-// Handlers call this to emit the next stage, forming chains without explicit wiring.
 func (d *Dispatcher) OnPipeline(ctx context.Context, stages ...sip_infra.Pipeline) {
 	for _, s := range stages {
 		e := callEnvelope{ctx: ctx, p: s}
 		switch s.(type) {
-		// Signal — BYE, CANCEL, transfer (preempts everything)
 		case sip_infra.ByeReceivedPipeline,
 			sip_infra.CancelReceivedPipeline,
 			sip_infra.TransferRequestedPipeline,
@@ -242,7 +195,6 @@ func (d *Dispatcher) OnPipeline(ctx context.Context, stages ...sip_infra.Pipelin
 			sip_infra.CallFailedPipeline:
 			d.signalCh <- e
 
-		// Setup — INVITE, routing, auth
 		case sip_infra.InviteReceivedPipeline,
 			sip_infra.RouteResolvedPipeline,
 			sip_infra.AuthenticatedPipeline,
@@ -251,14 +203,12 @@ func (d *Dispatcher) OnPipeline(ctx context.Context, stages ...sip_infra.Pipelin
 			sip_infra.AnswerReceivedPipeline:
 			d.setupCh <- e
 
-		// Media — session, RTP, codec, hold
 		case sip_infra.SessionEstablishedPipeline,
 			sip_infra.CallStartedPipeline,
 			sip_infra.HoldRequestedPipeline,
 			sip_infra.ReInviteReceivedPipeline:
 			d.mediaCh <- e
 
-		// Control — metrics, events, recording, DTMF, registration
 		case sip_infra.EventEmittedPipeline,
 			sip_infra.MetricEmittedPipeline,
 			sip_infra.RecordingStartedPipeline,
@@ -275,10 +225,6 @@ func (d *Dispatcher) OnPipeline(ctx context.Context, stages ...sip_infra.Pipelin
 		}
 	}
 }
-
-// =============================================================================
-// Dispatcher goroutines — one per priority tier
-// =============================================================================
 
 func (d *Dispatcher) runSignalDispatcher(ctx context.Context) {
 	for {
@@ -328,7 +274,6 @@ func (d *Dispatcher) runControlDispatcher(ctx context.Context) {
 	}
 }
 
-// drain processes remaining items in a channel after context cancellation.
 func (d *Dispatcher) drain(ch chan callEnvelope) {
 	for {
 		select {
@@ -340,13 +285,8 @@ func (d *Dispatcher) drain(ch chan callEnvelope) {
 	}
 }
 
-// =============================================================================
-// dispatch — routes a single pipeline stage to its handler
-// =============================================================================
-
 func (d *Dispatcher) dispatch(ctx context.Context, p sip_infra.Pipeline) {
 	switch v := p.(type) {
-	// Setup handlers
 	case sip_infra.InviteReceivedPipeline:
 		d.handleInviteReceived(ctx, v)
 	case sip_infra.RouteResolvedPipeline:
@@ -360,7 +300,6 @@ func (d *Dispatcher) dispatch(ctx context.Context, p sip_infra.Pipeline) {
 	case sip_infra.AnswerReceivedPipeline:
 		d.handleAnswerReceived(ctx, v)
 
-	// Media handlers
 	case sip_infra.SessionEstablishedPipeline:
 		d.handleSessionEstablished(ctx, v)
 	case sip_infra.CallStartedPipeline:
@@ -370,7 +309,6 @@ func (d *Dispatcher) dispatch(ctx context.Context, p sip_infra.Pipeline) {
 	case sip_infra.ReInviteReceivedPipeline:
 		d.handleReInviteReceived(ctx, v)
 
-	// Signal handlers
 	case sip_infra.ByeReceivedPipeline:
 		d.handleByeReceived(ctx, v)
 	case sip_infra.CancelReceivedPipeline:
@@ -382,7 +320,6 @@ func (d *Dispatcher) dispatch(ctx context.Context, p sip_infra.Pipeline) {
 	case sip_infra.CallFailedPipeline:
 		d.handleCallFailed(ctx, v)
 
-	// Control handlers
 	case sip_infra.EventEmittedPipeline:
 		d.handleEventEmitted(ctx, v)
 	case sip_infra.MetricEmittedPipeline:

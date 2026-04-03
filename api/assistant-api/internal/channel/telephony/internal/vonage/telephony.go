@@ -35,32 +35,61 @@ func NewVonageTelephony(config *config.AssistantConfig, logger commons.Logger) (
 	}, nil
 }
 
-func (tpc *vonageTelephony) CatchAllStatusCallback(ctx *gin.Context) (*internal_type.StatusInfo, error) {
+func vonageAuth(vaultCredential *protos.VaultCredential) (vonage.Auth, error) {
+	if vaultCredential.GetValue() == nil {
+		return nil, fmt.Errorf("vault credential value is nil")
+	}
+	vaultMap := vaultCredential.GetValue().AsMap()
+	privateKey, ok := vaultMap["private_key"]
+	if !ok {
+		return nil, fmt.Errorf("illegal vault config privateKey is not found")
+	}
+	applicationId, ok := vaultMap["application_id"]
+	if !ok {
+		return nil, fmt.Errorf("illegal vault config application_id is not found")
+	}
+	pk, ok := privateKey.(string)
+	if !ok {
+		return nil, fmt.Errorf("illegal vault config private_key is not a string")
+	}
+	appID, ok := applicationId.(string)
+	if !ok {
+		return nil, fmt.Errorf("illegal vault config application_id is not a string")
+	}
+	clientAuth, err := vonage.CreateAuthFromAppPrivateKey(appID, []byte(pk))
+	if err != nil {
+		return nil, err
+	}
+	return clientAuth, nil
+}
+
+func (vng *vonageTelephony) CatchAllStatusCallback(ctx *gin.Context) (*internal_type.StatusInfo, error) {
 	return nil, nil
 }
-func (tpc *vonageTelephony) StatusCallback(c *gin.Context, auth types.SimplePrinciple, assistantId uint64, assistantConversationId uint64) (*internal_type.StatusInfo, error) {
+
+func (vng *vonageTelephony) StatusCallback(c *gin.Context, auth types.SimplePrinciple, assistantId uint64, assistantConversationId uint64) (*internal_type.StatusInfo, error) {
 	body, err := c.GetRawData()
 	if err != nil {
-		tpc.logger.Errorf("failed to read request body with error %+v", err)
+		vng.logger.Errorf("failed to read request body with error %+v", err)
 		return nil, fmt.Errorf("failed to read request body")
 	}
 
 	var payload map[string]interface{}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		tpc.logger.Errorf("failed to parse request body: %+v", err)
+		vng.logger.Errorf("failed to parse request body: %+v", err)
 		return nil, fmt.Errorf("failed to parse request body")
 	}
 
 	status, ok := payload["status"].(string)
 	if !ok {
-		tpc.logger.Errorf("status not found or invalid in payload")
+		vng.logger.Errorf("status not found or invalid in payload")
 		return nil, fmt.Errorf("status not found in payload")
 	}
-	tpc.logger.Debugf("event processed | status: %s, payload: %+v", status, payload)
+	vng.logger.Debugf("event processed | status: %s, payload: %+v", status, payload)
 	return &internal_type.StatusInfo{Event: status, Payload: payload}, nil
 }
 
-func (vt *vonageTelephony) OutboundCall(
+func (vng *vonageTelephony) OutboundCall(
 	auth types.SimplePrinciple,
 	toPhone string,
 	fromPhone string,
@@ -70,7 +99,7 @@ func (vt *vonageTelephony) OutboundCall(
 ) (*internal_type.CallInfo, error) {
 	info := &internal_type.CallInfo{Provider: vonageProvider}
 
-	cAuth, err := vt.Auth(vaultCredential)
+	cAuth, err := vonageAuth(vaultCredential)
 	if err != nil {
 		info.Status = "FAILED"
 		info.ErrorMessage = fmt.Sprintf("authentication error: %s", err.Error())
@@ -83,10 +112,10 @@ func (vt *vonageTelephony) OutboundCall(
 	connectAction := ncco.Ncco{}
 	nccoConnect := ncco.ConnectAction{
 		EventType: "synchronous",
-		EventUrl:  []string{fmt.Sprintf("https://%s/%s", vt.appCfg.PublicAssistantHost, internal_type.GetContextEventPath(vonageProvider, contextID))},
+		EventUrl:  []string{fmt.Sprintf("https://%s/%s", vng.appCfg.PublicAssistantHost, internal_type.GetContextEventPath(vonageProvider, contextID))},
 		Endpoint: []ncco.Endpoint{ncco.WebSocketEndpoint{
 			Uri: fmt.Sprintf("wss://%s/%s",
-				vt.appCfg.PublicAssistantHost,
+				vng.appCfg.PublicAssistantHost,
 				internal_type.GetContextAnswerPath(vonageProvider, contextID)),
 			ContentType: "audio/l16;rate=16000",
 		}},
@@ -120,7 +149,7 @@ func (vt *vonageTelephony) OutboundCall(
 	return info, nil
 }
 
-func (vt *vonageTelephony) InboundCall(c *gin.Context, auth types.SimplePrinciple, assistantId uint64, clientNumber string, assistantConversationId uint64) error {
+func (vng *vonageTelephony) InboundCall(c *gin.Context, auth types.SimplePrinciple, assistantId uint64, clientNumber string, assistantConversationId uint64) error {
 	contextID, _ := c.Get("contextId")
 	ctxID := fmt.Sprintf("%v", contextID)
 
@@ -128,12 +157,12 @@ func (vt *vonageTelephony) InboundCall(c *gin.Context, auth types.SimplePrincipl
 		{
 			"action":    "connect",
 			"eventType": "synchronous",
-			"eventUrl":  []string{fmt.Sprintf("https://%s/%s", vt.appCfg.PublicAssistantHost, internal_type.GetContextEventPath("vonage", ctxID))},
+			"eventUrl":  []string{fmt.Sprintf("https://%s/%s", vng.appCfg.PublicAssistantHost, internal_type.GetContextEventPath("vonage", ctxID))},
 			"endpoint": []gin.H{
 				{
 					"type": "websocket",
 					"uri": fmt.Sprintf("wss://%s/%s",
-						vt.appCfg.PublicAssistantHost,
+						vng.appCfg.PublicAssistantHost,
 						internal_type.GetContextAnswerPath("vonage", ctxID)),
 					"content-type": "audio/l16;rate=16000",
 				},
@@ -143,7 +172,7 @@ func (vt *vonageTelephony) InboundCall(c *gin.Context, auth types.SimplePrincipl
 	return nil
 }
 
-func (tpc *vonageTelephony) ReceiveCall(c *gin.Context) (*internal_type.CallInfo, error) {
+func (vng *vonageTelephony) ReceiveCall(c *gin.Context) (*internal_type.CallInfo, error) {
 	queryParams := make(map[string]string)
 	for key, values := range c.Request.URL.Query() {
 		if len(values) > 0 {
@@ -172,20 +201,4 @@ func (tpc *vonageTelephony) ReceiveCall(c *gin.Context) (*internal_type.CallInfo
 		info.ChannelUUID = v
 	}
 	return info, nil
-}
-
-func (tpc *vonageTelephony) Auth(vaultCredential *protos.VaultCredential) (vonage.Auth, error) {
-	privateKey, ok := vaultCredential.GetValue().AsMap()["private_key"]
-	if !ok {
-		return nil, fmt.Errorf("illegal vault config privateKey is not found")
-	}
-	applicationId, ok := vaultCredential.GetValue().AsMap()["application_id"]
-	if !ok {
-		return nil, fmt.Errorf("illegal vault config application_id is not found")
-	}
-	clientAuth, err := vonage.CreateAuthFromAppPrivateKey(applicationId.(string), []byte(privateKey.(string)))
-	if err != nil {
-		return nil, err
-	}
-	return clientAuth, nil
 }

@@ -449,6 +449,16 @@ func (conversationService *assistantConversationService) ApplyConversationMetric
 	return mtrs, nil
 }
 
+func (s *assistantConversationService) PersistMetrics(ctx context.Context, auth types.SimplePrinciple, assistantID, conversationID uint64, metrics []*types.Metric) error {
+	_, err := s.ApplyConversationMetrics(ctx, auth, assistantID, conversationID, metrics)
+	return err
+}
+
+func (s *assistantConversationService) PersistMetadata(ctx context.Context, auth types.SimplePrinciple, assistantID, conversationID uint64, metadata []*types.Metadata) error {
+	_, err := s.ApplyConversationMetadata(ctx, auth, assistantID, conversationID, metadata)
+	return err
+}
+
 /* */
 func (conversationService *assistantConversationService) CreateConversationMetric(
 	ctx context.Context,

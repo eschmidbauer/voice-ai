@@ -15,10 +15,6 @@ import (
 	"github.com/rapidaai/protos"
 )
 
-// =============================================================================
-// Stage 1: CallReceived → parse webhook → WebhookParsed
-// =============================================================================
-
 func (d *Dispatcher) handleCallReceived(ctx context.Context, v CallReceivedPipeline, resultCh chan<- *PipelineResult) {
 	d.logger.Infow("Pipeline: CallReceived", "provider", v.Provider, "assistant_id", v.AssistantID)
 
@@ -37,7 +33,6 @@ func (d *Dispatcher) handleCallReceived(ctx context.Context, v CallReceivedPipel
 		return
 	}
 
-	// Pass resultCh forward — it will be sent by the final stage
 	d.resultChStore(v.ID, resultCh)
 
 	d.OnPipeline(ctx, WebhookParsedPipeline{
@@ -49,10 +44,6 @@ func (d *Dispatcher) handleCallReceived(ctx context.Context, v CallReceivedPipel
 		GinContext:  v.GinContext,
 	})
 }
-
-// =============================================================================
-// Stage 2: WebhookParsed → load assistant → AssistantResolved
-// =============================================================================
 
 func (d *Dispatcher) handleWebhookParsed(ctx context.Context, v WebhookParsedPipeline) {
 	d.logger.Infow("Pipeline: WebhookParsed", "caller", v.CallInfo.CallerNumber)
@@ -78,11 +69,6 @@ func (d *Dispatcher) handleWebhookParsed(ctx context.Context, v WebhookParsedPip
 		GinContext:  v.GinContext,
 	})
 }
-
-// =============================================================================
-// Stage 3: AssistantResolved → create conversation + context → ConversationCreated
-// PLUGGABLE: call screening, queue, etc. can be inserted here
-// =============================================================================
 
 func (d *Dispatcher) handleAssistantResolved(ctx context.Context, v AssistantResolvedPipeline) {
 	d.logger.Infow("Pipeline: AssistantResolved", "assistant_id", v.AssistantID)
@@ -118,10 +104,6 @@ func (d *Dispatcher) handleAssistantResolved(ctx context.Context, v AssistantRes
 		GinContext:     v.GinContext,
 	})
 }
-
-// =============================================================================
-// Stage 4: ConversationCreated → create observer + emit telemetry → ProviderAnswering
-// =============================================================================
 
 func (d *Dispatcher) handleConversationCreated(ctx context.Context, v ConversationCreatedPipeline) {
 	d.logger.Infow("Pipeline: ConversationCreated",
@@ -166,7 +148,6 @@ func (d *Dispatcher) handleConversationCreated(ctx context.Context, v Conversati
 		}
 	}
 
-	// Standard call_received event
 	d.emitEvent(ctx, v.ContextID, obs.ComponentTelephony, map[string]string{
 		obs.DataType:      obs.EventCallReceived,
 		obs.DataProvider:  v.Provider,
@@ -185,10 +166,6 @@ func (d *Dispatcher) handleConversationCreated(ctx context.Context, v Conversati
 		GinContext:     v.GinContext,
 	})
 }
-
-// =============================================================================
-// Stage 5: ProviderAnswering → instruct provider to answer → ProviderAnswered
-// =============================================================================
 
 func (d *Dispatcher) handleProviderAnswering(ctx context.Context, v ProviderAnsweringPipeline) {
 	d.logger.Infow("Pipeline: ProviderAnswering", "context_id", v.ContextID)
@@ -209,10 +186,6 @@ func (d *Dispatcher) handleProviderAnswering(ctx context.Context, v ProviderAnsw
 	d.OnPipeline(ctx, ProviderAnsweredPipeline{ID: v.ContextID, ContextID: v.ContextID})
 }
 
-// =============================================================================
-// Stage 6: ProviderAnswered — observability only
-// =============================================================================
-
 func (d *Dispatcher) handleProviderAnswered(ctx context.Context, v ProviderAnsweredPipeline) {
 	d.logger.Infow("Pipeline: ProviderAnswered", "context_id", v.ContextID)
 	d.emitEvent(ctx, v.ID, obs.ComponentTelephony, map[string]string{
@@ -220,10 +193,6 @@ func (d *Dispatcher) handleProviderAnswered(ctx context.Context, v ProviderAnswe
 		obs.DataContextID: v.ContextID,
 	})
 }
-
-// =============================================================================
-// Helpers for result channel forwarding across stages
-// =============================================================================
 
 // resultChStore stores a result channel for a call (forwarded across stages).
 func (d *Dispatcher) resultChStore(callID string, ch chan<- *PipelineResult) {

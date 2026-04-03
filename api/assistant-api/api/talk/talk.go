@@ -6,6 +6,7 @@
 package assistant_talk_api
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"net"
@@ -121,9 +122,12 @@ func newConversationApiCore(cfg *config.AssistantConfig, logger commons.Logger,
 		OnResolveSession: func(ctx context.Context, contextID string) (*callcontext.CallContext, *protos.VaultCredential, error) {
 			return inbound.ResolveCallSessionByContext(ctx, contextID)
 		},
-		OnCreateStreamer: func(ctx context.Context, cc *callcontext.CallContext, vc *protos.VaultCredential, ws *websocket.Conn, conn net.Conn) (internal_type.Streamer, error) {
+		OnCreateStreamer: func(ctx context.Context, cc *callcontext.CallContext, vc *protos.VaultCredential, ws *websocket.Conn, conn net.Conn, reader *bufio.Reader, writer *bufio.Writer) (internal_type.Streamer, error) {
 			return channel_telephony.Telephony(cc.Provider).NewStreamer(logger, cc, vc, channel_telephony.StreamerOption{
-				WebSocketConn: ws,
+				WebSocketConn:     ws,
+				AudioSocketConn:   conn,
+				AudioSocketReader: reader,
+				AudioSocketWriter: writer,
 			})
 		},
 		OnCreateTalker: func(ctx context.Context, streamer internal_type.Streamer) (internal_type.Talking, error) {
@@ -147,16 +151,7 @@ func newConversationApiCore(cfg *config.AssistantConfig, logger commons.Logger,
 				ConversationID: conversationID,
 				ProjectID:      projectID,
 				OrganizationID: orgID,
-				Persist: observe.PersistFunc{
-					ApplyMetrics: func(ctx context.Context, auth types.SimplePrinciple, aID, cID uint64, metrics []*types.Metric) error {
-						_, err := conversationService.ApplyConversationMetrics(ctx, auth, aID, cID, metrics)
-						return err
-					},
-					ApplyMetadata: func(ctx context.Context, auth types.SimplePrinciple, aID, cID uint64, metadata []*types.Metadata) error {
-						_, err := conversationService.ApplyConversationMetadata(ctx, auth, aID, cID, metadata)
-						return err
-					},
-				},
+				Persist: conversationService,
 			})
 		},
 		OnCompleteSession: func(ctx context.Context, contextID string) {
@@ -204,6 +199,11 @@ func NewWebRtcApi(config *config.AssistantConfig, logger commons.Logger,
 	sipServer *sip_infra.Server,
 ) assistant_api.WebRTCServer {
 	return &ConversationGrpcApi{*newConversationApiCore(config, logger, postgres, redis, opensearch, sipServer)}
+}
+
+// Pipeline returns the channel pipeline dispatcher for use by external engines (e.g. AudioSocket).
+func (cApi *ConversationApi) Pipeline() *channel_pipeline.Dispatcher {
+	return cApi.channelPipeline
 }
 
 func NewConversationApi(config *config.AssistantConfig, logger commons.Logger,

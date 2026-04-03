@@ -6,7 +6,11 @@
 
 package internal_asterisk
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strconv"
+	"strings"
+)
 
 // AsteriskMediaEvent represents media events from Asterisk WebSocket
 // Based on chan_websocket protocol from Asterisk
@@ -43,8 +47,7 @@ func ParseAsteriskEvent(data string) (*AsteriskMediaEvent, error) {
 		event.Channel = v
 	}
 	if v, ok := params["optimal_frame_size"]; ok {
-		var size int
-		if _, err := parseIntFromString(v, &size); err == nil {
+		if size, err := strconv.Atoi(v); err == nil {
 			event.OptimalFrameSize = size
 		}
 	}
@@ -64,7 +67,7 @@ func parseEventType(data string) string {
 // parseKeyValuePairs parses "key:value" pairs from a space-separated string
 func parseKeyValuePairs(data string) map[string]string {
 	result := make(map[string]string)
-	parts := splitBySpace(data)
+	parts := strings.Fields(data)
 
 	for _, part := range parts[1:] { // Skip the event type
 		for i, c := range part {
@@ -78,42 +81,6 @@ func parseKeyValuePairs(data string) map[string]string {
 	}
 
 	return result
-}
-
-// splitBySpace splits a string by spaces
-func splitBySpace(data string) []string {
-	var result []string
-	var current string
-
-	for _, c := range data {
-		if c == ' ' {
-			if current != "" {
-				result = append(result, current)
-				current = ""
-			}
-		} else {
-			current += string(c)
-		}
-	}
-
-	if current != "" {
-		result = append(result, current)
-	}
-
-	return result
-}
-
-// parseIntFromString parses an integer from a string
-func parseIntFromString(s string, out *int) (bool, error) {
-	var value int
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			return false, nil
-		}
-		value = value*10 + int(c-'0')
-	}
-	*out = value
-	return true, nil
 }
 
 // AsteriskARIEvent represents an ARI event from Asterisk

@@ -1,0 +1,198 @@
+package sip_infra
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/structpb"
+
+	"github.com/rapidaai/protos"
+)
+
+func makeVaultCredential(m map[string]interface{}) *protos.VaultCredential {
+	s, _ := structpb.NewStruct(m)
+	return &protos.VaultCredential{Value: s}
+}
+
+func TestParseConfigFromVault_NilCredential(t *testing.T) {
+	_, err := ParseConfigFromVault(nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "vault credential is required")
+}
+
+func TestParseConfigFromVault_NilValue(t *testing.T) {
+	_, err := ParseConfigFromVault(&protos.VaultCredential{})
+	require.Error(t, err)
+}
+
+func TestParseConfigFromVault_BasicFields(t *testing.T) {
+	cfg, err := ParseConfigFromVault(makeVaultCredential(map[string]interface{}{
+		"sip_username": "user1",
+		"sip_password": "pass1",
+		"sip_server":   "pbx.example.com",
+		"sip_realm":    "example.com",
+		"sip_domain":   "sip.example.com",
+	}))
+	require.NoError(t, err)
+	assert.Equal(t, "user1", cfg.Username)
+	assert.Equal(t, "pass1", cfg.Password)
+	assert.Equal(t, "pbx.example.com", cfg.Server)
+	assert.Equal(t, "example.com", cfg.Realm)
+	assert.Equal(t, "sip.example.com", cfg.Domain)
+}
+
+func TestParseConfigFromVault_SIPURIWithPort(t *testing.T) {
+	cfg, err := ParseConfigFromVault(makeVaultCredential(map[string]interface{}{
+		"sip_uri":      "sip:192.168.1.5:5060",
+		"sip_username": "u",
+		"sip_password": "p",
+	}))
+	require.NoError(t, err)
+	assert.Equal(t, "192.168.1.5", cfg.Server)
+	assert.Equal(t, 5060, cfg.Port)
+}
+
+func TestParseConfigFromVault_SIPURIWithoutPort(t *testing.T) {
+	cfg, err := ParseConfigFromVault(makeVaultCredential(map[string]interface{}{
+		"sip_uri":      "sip:pstn.twilio.com",
+		"sip_username": "u",
+		"sip_password": "p",
+	}))
+	require.NoError(t, err)
+	assert.Equal(t, "pstn.twilio.com", cfg.Server)
+	assert.Equal(t, 0, cfg.Port)
+}
+
+func TestParseConfigFromVault_SIPSScheme(t *testing.T) {
+	cfg, err := ParseConfigFromVault(makeVaultCredential(map[string]interface{}{
+		"sip_uri":      "sips:secure.example.com:5061",
+		"sip_username": "u",
+		"sip_password": "p",
+	}))
+	require.NoError(t, err)
+	assert.Equal(t, "secure.example.com", cfg.Server)
+	assert.Equal(t, 5061, cfg.Port)
+}
+
+func TestParseConfigFromVault_ServerOverridesSIPURI(t *testing.T) {
+	cfg, err := ParseConfigFromVault(makeVaultCredential(map[string]interface{}{
+		"sip_uri":      "sip:old.host.com:5060",
+		"sip_server":   "new.host.com",
+		"sip_username": "u",
+		"sip_password": "p",
+	}))
+	require.NoError(t, err)
+	assert.Equal(t, "new.host.com", cfg.Server)
+	// Port from URI is preserved
+	assert.Equal(t, 5060, cfg.Port)
+}
+
+func TestParseConfigFromVault_ExplicitPort(t *testing.T) {
+	cfg, err := ParseConfigFromVault(makeVaultCredential(map[string]interface{}{
+		"sip_server":   "host.com",
+		"sip_port":     float64(5080),
+		"sip_username": "u",
+		"sip_password": "p",
+	}))
+	require.NoError(t, err)
+	assert.Equal(t, 5080, cfg.Port)
+}
+
+func TestParseConfigFromVault_PortStringFormat(t *testing.T) {
+	cfg, err := ParseConfigFromVault(makeVaultCredential(map[string]interface{}{
+		"sip_server":   "host.com",
+		"sip_port":     "5080",
+		"sip_username": "u",
+		"sip_password": "p",
+	}))
+	require.NoError(t, err)
+	// structpb converts numbers to float64, but string port is tested via parsePortValue
+	assert.Equal(t, 5080, cfg.Port)
+}
+
+func TestParseConfigFromVault_CallerID(t *testing.T) {
+	cfg, err := ParseConfigFromVault(makeVaultCredential(map[string]interface{}{
+		"sip_server":    "host.com",
+		"sip_username":  "u",
+		"sip_password":  "p",
+		"sip_caller_id": "+15551234567",
+	}))
+	require.NoError(t, err)
+	assert.Equal(t, "+15551234567", cfg.CallerID)
+}
+
+func TestParseConfigFromVault_CustomHeaders(t *testing.T) {
+	cfg, err := ParseConfigFromVault(makeVaultCredential(map[string]interface{}{
+		"sip_server":   "host.com",
+		"sip_username": "u",
+		"sip_password": "p",
+		"sip_headers":  `{"X-Custom":"foo","X-Other":"bar"}`,
+	}))
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{
+		"X-Custom": "foo",
+		"X-Other":  "bar",
+	}, cfg.CustomHeaders)
+}
+
+func TestParseConfigFromVault_InvalidHeadersIgnored(t *testing.T) {
+	cfg, err := ParseConfigFromVault(makeVaultCredential(map[string]interface{}{
+		"sip_server":   "host.com",
+		"sip_username": "u",
+		"sip_password": "p",
+		"sip_headers":  "not-valid-json",
+	}))
+	require.NoError(t, err)
+	assert.Nil(t, cfg.CustomHeaders)
+}
+
+func TestExtractDIDFromURI_PhoneNumber(t *testing.T) {
+	did := ExtractDIDFromURI("sip:15551234567@pstn.twilio.com")
+	assert.Equal(t, "+15551234567", did)
+}
+
+func TestExtractDIDFromURI_AlreadyE164(t *testing.T) {
+	did := ExtractDIDFromURI("sip:+15551234567@pstn.twilio.com")
+	assert.Equal(t, "+15551234567", did)
+}
+
+func TestExtractDIDFromURI_SkipsCredentialPair(t *testing.T) {
+	did := ExtractDIDFromURI("sip:12345:apikey@host.com")
+	assert.Equal(t, "", did)
+}
+
+func TestExtractDIDFromURI_Empty(t *testing.T) {
+	did := ExtractDIDFromURI("")
+	assert.Equal(t, "", did)
+}
+
+func TestExtractDIDFromURI_ShortUser(t *testing.T) {
+	// Users with 5 or fewer chars don't get "+" prefix
+	did := ExtractDIDFromURI("sip:ext42@pbx.local")
+	assert.Equal(t, "ext42", did)
+}
+
+func TestApplyOperationalDefaults_FillsUnset(t *testing.T) {
+	cfg := &Config{Server: "host.com"}
+	cfg.ApplyOperationalDefaults(5060, TransportTCP, 10000, 20000)
+	assert.Equal(t, 5060, cfg.Port)
+	assert.Equal(t, TransportTCP, cfg.Transport)
+	assert.Equal(t, 10000, cfg.RTPPortRangeStart)
+	assert.Equal(t, 20000, cfg.RTPPortRangeEnd)
+}
+
+func TestApplyOperationalDefaults_DoesNotOverwrite(t *testing.T) {
+	cfg := &Config{
+		Server:            "host.com",
+		Port:              5080,
+		Transport:         TransportUDP,
+		RTPPortRangeStart: 12000,
+		RTPPortRangeEnd:   14000,
+	}
+	cfg.ApplyOperationalDefaults(5060, TransportTCP, 10000, 20000)
+	assert.Equal(t, 5080, cfg.Port)
+	assert.Equal(t, TransportUDP, cfg.Transport)
+	assert.Equal(t, 12000, cfg.RTPPortRangeStart)
+	assert.Equal(t, 14000, cfg.RTPPortRangeEnd)
+}

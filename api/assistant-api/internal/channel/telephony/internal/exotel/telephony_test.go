@@ -14,9 +14,96 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rapidaai/api/assistant-api/config"
 	internal_type "github.com/rapidaai/api/assistant-api/internal/type"
+	"github.com/rapidaai/pkg/utils"
+	"github.com/rapidaai/protos"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/structpb"
 )
+
+func testVaultCredential(t *testing.T, values map[string]interface{}) *protos.VaultCredential {
+	t.Helper()
+	v, err := structpb.NewStruct(values)
+	if err != nil {
+		t.Fatalf("failed to create vault credential: %v", err)
+	}
+	return &protos.VaultCredential{Value: v}
+}
+
+func TestClientUrl_ValidCredentials(t *testing.T) {
+	cred := testVaultCredential(t, map[string]interface{}{
+		"account_sid":   "exotel-sid",
+		"client_id":     "client-id",
+		"client_secret": "secret-token",
+	})
+	exo := &exotelTelephony{}
+
+	result, err := exo.ClientUrl(cred, utils.Option{})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Contains(t, *result, "client-id:secret-token")
+	assert.Contains(t, *result, "exotel-sid")
+}
+
+func TestClientUrl_NilVaultValue(t *testing.T) {
+	cred := &protos.VaultCredential{Value: nil}
+	exo := &exotelTelephony{}
+
+	result, err := exo.ClientUrl(cred, utils.Option{})
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "vault credential value is nil")
+}
+
+func TestClientUrl_MissingAccountSid(t *testing.T) {
+	cred := testVaultCredential(t, map[string]interface{}{
+		"client_id":     "client-id",
+		"client_secret": "secret-token",
+	})
+	exo := &exotelTelephony{}
+
+	result, err := exo.ClientUrl(cred, utils.Option{})
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "accountSid")
+}
+
+func TestAppUrl_NilVaultValue(t *testing.T) {
+	cred := &protos.VaultCredential{Value: nil}
+	exo := &exotelTelephony{}
+	opts := utils.Option{"app_id": "test-app"}
+
+	result, err := exo.AppUrl(cred, opts)
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "vault credential value is nil")
+}
+
+func TestAppUrl_ValidCredentials(t *testing.T) {
+	cred := testVaultCredential(t, map[string]interface{}{
+		"account_sid": "exotel-sid",
+	})
+	exo := &exotelTelephony{}
+	opts := utils.Option{"app_id": "test-app"}
+
+	result, err := exo.AppUrl(cred, opts)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Contains(t, *result, "exotel-sid")
+	assert.Contains(t, *result, "test-app")
+}
+
+func TestAppUrl_MissingAppId(t *testing.T) {
+	cred := testVaultCredential(t, map[string]interface{}{
+		"account_sid": "exotel-sid",
+	})
+	exo := &exotelTelephony{}
+
+	result, err := exo.AppUrl(cred, utils.Option{})
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "app_id")
+}
 
 // TestReceiveCall tests the ReceiveCall method with Exotel webhook parameters
 func TestReceiveCall(t *testing.T) {
@@ -102,7 +189,7 @@ func TestReceiveCall(t *testing.T) {
 				"CustomField": "v1/talk/exotel/ctx/abc123",
 				"CallFrom":    "+919876543210",
 			},
-			expectedError: false, // No error — provider already wrote the response
+			expectedError: false, // No error -- provider already wrote the response
 			expectedPhone: "",
 			checkCallInfo: func(t *testing.T, info *internal_type.CallInfo) {
 				// CallInfo is nil when CustomField is present (outbound redirect)

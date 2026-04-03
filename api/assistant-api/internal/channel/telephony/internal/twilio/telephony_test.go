@@ -13,9 +13,83 @@ import (
 
 	"github.com/gin-gonic/gin"
 	internal_type "github.com/rapidaai/api/assistant-api/internal/type"
+	"github.com/rapidaai/protos"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/structpb"
 )
+
+func testVaultCredential(t *testing.T, values map[string]interface{}) *protos.VaultCredential {
+	t.Helper()
+	v, err := structpb.NewStruct(values)
+	if err != nil {
+		t.Fatalf("failed to create vault credential: %v", err)
+	}
+	return &protos.VaultCredential{Value: v}
+}
+
+func TestTwilioClientParams_ValidCredentials(t *testing.T) {
+	cred := testVaultCredential(t, map[string]interface{}{
+		"account_sid":   "AC1234567890",
+		"account_token": "token_abc",
+	})
+
+	params, err := twilioClientParams(cred)
+	require.NoError(t, err)
+	require.NotNil(t, params)
+	assert.Equal(t, "AC1234567890", params.Username)
+	assert.Equal(t, "token_abc", params.Password)
+}
+
+func TestTwilioClientParams_NilVaultValue(t *testing.T) {
+	cred := &protos.VaultCredential{Value: nil}
+
+	params, err := twilioClientParams(cred)
+	assert.Error(t, err)
+	assert.Nil(t, params)
+	assert.Contains(t, err.Error(), "vault credential value is nil")
+}
+
+func TestTwilioClientParams_MissingAccountSid(t *testing.T) {
+	cred := testVaultCredential(t, map[string]interface{}{
+		"account_token": "token_abc",
+	})
+
+	params, err := twilioClientParams(cred)
+	assert.Error(t, err)
+	assert.Nil(t, params)
+	assert.Contains(t, err.Error(), "accountSid")
+}
+
+func TestTwilioClientParams_MissingAccountToken(t *testing.T) {
+	cred := testVaultCredential(t, map[string]interface{}{
+		"account_sid": "AC1234567890",
+	})
+
+	params, err := twilioClientParams(cred)
+	assert.Error(t, err)
+	assert.Nil(t, params)
+	assert.Contains(t, err.Error(), "account_token")
+}
+
+func TestTwilioClient_ValidCredentials(t *testing.T) {
+	cred := testVaultCredential(t, map[string]interface{}{
+		"account_sid":   "AC1234567890",
+		"account_token": "token_abc",
+	})
+
+	client, err := twilioClient(cred)
+	require.NoError(t, err)
+	assert.NotNil(t, client)
+}
+
+func TestTwilioClient_NilVaultValue(t *testing.T) {
+	cred := &protos.VaultCredential{Value: nil}
+
+	client, err := twilioClient(cred)
+	assert.Error(t, err)
+	assert.Nil(t, client)
+}
 
 // TestReceiveCall tests the ReceiveCall method with Twilio webhook parameters
 func TestReceiveCall(t *testing.T) {

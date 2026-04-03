@@ -83,9 +83,10 @@ func TalkCallbackApiRoute(
 	redis connectors.RedisConnector,
 	opensearch connectors.OpenSearchConnector,
 	sipServer *sip_infra.Server,
+	talkApi *assistantTalkApi.ConversationApi,
 ) {
 	apiv1 := engine.Group("v1/talk")
-	talkRpcApi := assistantTalkApi.NewConversationApi(cfg, logger, postgres, redis, opensearch, opensearch, sipServer)
+	talkRpcApi := talkApi
 	{
 		// global catch-all event logging
 		apiv1.GET("/:telephony/event/:assistantId", talkRpcApi.UnviersalCallback)

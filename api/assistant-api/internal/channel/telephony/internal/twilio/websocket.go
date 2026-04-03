@@ -9,7 +9,6 @@ package internal_twilio_telephony
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 
 	"github.com/gorilla/websocket"
 	internal_audio "github.com/rapidaai/api/assistant-api/internal/audio"
@@ -19,18 +18,14 @@ import (
 	internal_type "github.com/rapidaai/api/assistant-api/internal/type"
 	"github.com/rapidaai/pkg/commons"
 	"github.com/rapidaai/protos"
-	"github.com/twilio/twilio-go"
 	openapi "github.com/twilio/twilio-go/rest/api/v2010"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// RAPIDA_AUDIO_CONFIG is the internal Rapida audio format (linear16 16kHz).
-// TTS output arrives in this format and must be resampled to mulaw 8kHz
-// before sending to Twilio.
-var RAPIDA_AUDIO_CONFIG = internal_audio.NewLinear16khzMonoAudioConfig()
-
-// MULAW_8K_AUDIO_CONFIG is the Twilio-native audio format.
-var MULAW_8K_AUDIO_CONFIG = internal_audio.NewMulaw8khzMonoAudioConfig()
+var (
+	rapida16kConfig = internal_audio.NewLinear16khzMonoAudioConfig()
+	mulaw8kConfig   = internal_audio.NewMulaw8khzMonoAudioConfig()
+)
 
 type twilioWebsocketStreamer struct {
 	internal_telephony_base.BaseTelephonyStreamer
@@ -108,8 +103,7 @@ func (tws *twilioWebsocketStreamer) Send(response internal_type.Stream) error {
 	case *protos.ConversationAssistantMessage:
 		switch content := data.Message.(type) {
 		case *protos.ConversationAssistantMessage_Audio:
-			// Resample from internal Rapida format (linear16 16kHz) to Twilio format (mulaw 8kHz)
-			audioData, err := tws.Resampler().Resample(content.Audio, RAPIDA_AUDIO_CONFIG, MULAW_8K_AUDIO_CONFIG)
+			audioData, err := tws.Resampler().Resample(content.Audio, rapida16kConfig, mulaw8kConfig)
 			if err != nil {
 				tws.Logger.Warnw("Failed to resample output audio to mulaw 8kHz, forwarding raw bytes",
 					"error", err.Error(),
@@ -130,7 +124,6 @@ func (tws *twilioWebsocketStreamer) Send(response internal_type.Stream) error {
 						return
 					}
 				}
-				// Flush remaining audio when response is marked complete
 				if data.GetCompleted() && buf.Len() > 0 {
 					remainingChunk := buf.Bytes()
 					if err := tws.sendTwilioMessage("media", map[string]interface{}{
@@ -155,7 +148,7 @@ func (tws *twilioWebsocketStreamer) Send(response internal_type.Stream) error {
 	case *protos.ConversationDirective:
 		if data.GetType() == protos.ConversationDirective_END_CONVERSATION {
 			if tws.GetConversationUuid() != "" {
-				client, err := tws.client(tws.VaultCredential())
+				client, err := twilioClient(tws.VaultCredential())
 				if err != nil {
 					tws.Logger.Errorf("Error creating Twilio client:", err)
 					if err := tws.Cancel(); err != nil {
@@ -181,7 +174,6 @@ func (tws *twilioWebsocketStreamer) Send(response internal_type.Stream) error {
 	return nil
 }
 
-// start event contains streamSid to be used for subsequent media messages
 func (tws *twilioWebsocketStreamer) handleStartEvent(mediaEvent internal_twilio.TwilioMediaEvent) {
 	tws.streamID = mediaEvent.StreamSid
 }
@@ -249,27 +241,4 @@ func (tws *twilioWebsocketStreamer) sendTwilioMessage(
 func (tws *twilioWebsocketStreamer) handleError(message string, err error) error {
 	tws.Logger.Error(message, "error", err.Error())
 	return err
-}
-
-func (tpc *twilioWebsocketStreamer) client(vaultCredential *protos.VaultCredential) (*twilio.RestClient, error) {
-	clientParams, err := tpc.clientParam(vaultCredential)
-	if err != nil {
-		return nil, err
-	}
-	return twilio.NewRestClientWithParams(*clientParams), nil
-}
-
-func (tpc *twilioWebsocketStreamer) clientParam(vaultCredential *protos.VaultCredential) (*twilio.ClientParams, error) {
-	accountSid, ok := vaultCredential.GetValue().AsMap()["account_sid"]
-	if !ok {
-		return nil, fmt.Errorf("illegal vault config accountSid is not found")
-	}
-	authToken, ok := vaultCredential.GetValue().AsMap()["account_token"]
-	if !ok {
-		return nil, fmt.Errorf("illegal vault config account_token not found")
-	}
-	return &twilio.ClientParams{
-		Username: accountSid.(string),
-		Password: authToken.(string),
-	}, nil
 }

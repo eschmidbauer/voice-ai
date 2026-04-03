@@ -13,9 +13,64 @@ import (
 
 	"github.com/gin-gonic/gin"
 	internal_type "github.com/rapidaai/api/assistant-api/internal/type"
+	"github.com/rapidaai/protos"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/structpb"
 )
+
+func testVaultCredential(t *testing.T, values map[string]interface{}) *protos.VaultCredential {
+	t.Helper()
+	v, err := structpb.NewStruct(values)
+	if err != nil {
+		t.Fatalf("failed to create vault credential: %v", err)
+	}
+	return &protos.VaultCredential{Value: v}
+}
+
+func TestVonageAuth_ValidCredentials(t *testing.T) {
+	// vonage.CreateAuthFromAppPrivateKey requires a valid PEM key, so this
+	// test verifies the vault parsing path up to the SDK call. We expect an
+	// error from the SDK due to the non-PEM key, but NOT a vault-parsing error.
+	cred := testVaultCredential(t, map[string]interface{}{
+		"private_key":    "not-a-real-pem-key",
+		"application_id": "app-123",
+	})
+
+	_, err := vonageAuth(cred)
+	// The SDK will reject the fake key, but the vault parsing succeeded.
+	assert.Error(t, err)
+	assert.NotContains(t, err.Error(), "vault credential")
+	assert.NotContains(t, err.Error(), "illegal vault config")
+}
+
+func TestVonageAuth_NilVaultValue(t *testing.T) {
+	cred := &protos.VaultCredential{Value: nil}
+
+	_, err := vonageAuth(cred)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "vault credential value is nil")
+}
+
+func TestVonageAuth_MissingPrivateKey(t *testing.T) {
+	cred := testVaultCredential(t, map[string]interface{}{
+		"application_id": "app-123",
+	})
+
+	_, err := vonageAuth(cred)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "privateKey")
+}
+
+func TestVonageAuth_MissingApplicationId(t *testing.T) {
+	cred := testVaultCredential(t, map[string]interface{}{
+		"private_key": "some-key",
+	})
+
+	_, err := vonageAuth(cred)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "application_id")
+}
 
 // TestReceiveCall tests the ReceiveCall method with Vonage webhook parameters
 func TestReceiveCall(t *testing.T) {

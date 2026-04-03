@@ -7,6 +7,7 @@
 package channel_pipeline
 
 import (
+	"bufio"
 	"errors"
 	"net"
 	"time"
@@ -23,17 +24,10 @@ var (
 	ErrCallbackNotConfigured = errors.New("pipeline callback not configured")
 )
 
-// Pipeline is the base interface for all channel call lifecycle stages.
 type Pipeline interface {
 	CallID() string
 }
 
-// =============================================================================
-// Inbound call stages (stage → stage, each does ONE thing)
-// =============================================================================
-
-// CallReceivedPipeline — Stage 1: Telephony webhook arrived.
-// Handler: parse webhook via provider → emit WebhookParsedPipeline
 type CallReceivedPipeline struct {
 	ID          string
 	Provider    string
@@ -44,8 +38,6 @@ type CallReceivedPipeline struct {
 
 func (p CallReceivedPipeline) CallID() string { return p.ID }
 
-// WebhookParsedPipeline — Stage 2: Webhook parsed into CallInfo.
-// Handler: load assistant from DB → emit AssistantResolvedPipeline
 type WebhookParsedPipeline struct {
 	ID          string
 	Provider    string
@@ -57,9 +49,6 @@ type WebhookParsedPipeline struct {
 
 func (p WebhookParsedPipeline) CallID() string { return p.ID }
 
-// AssistantResolvedPipeline — Stage 3: Assistant loaded.
-// Handler: create conversation + save call context → emit ConversationCreatedPipeline
-// PLUGGABLE: insert call screening / call queue between this and ConversationCreated
 type AssistantResolvedPipeline struct {
 	ID          string
 	Provider    string
@@ -72,8 +61,6 @@ type AssistantResolvedPipeline struct {
 
 func (p AssistantResolvedPipeline) CallID() string { return p.ID }
 
-// ConversationCreatedPipeline — Stage 4: Conversation + call context stored.
-// Handler: create observer, emit telemetry → emit ProviderAnsweringPipeline
 type ConversationCreatedPipeline struct {
 	ID             string
 	Provider       string
@@ -88,8 +75,6 @@ type ConversationCreatedPipeline struct {
 
 func (p ConversationCreatedPipeline) CallID() string { return p.ID }
 
-// ProviderAnsweringPipeline — Stage 5: Instruct provider to answer.
-// Handler: tel.InboundCall → emit ProviderAnsweredPipeline
 type ProviderAnsweringPipeline struct {
 	ID             string
 	Provider       string
@@ -103,8 +88,6 @@ type ProviderAnsweringPipeline struct {
 
 func (p ProviderAnsweringPipeline) CallID() string { return p.ID }
 
-// ProviderAnsweredPipeline — Stage 6: Provider answered. Call setup complete.
-// Waiting for WebSocket/AudioSocket connection.
 type ProviderAnsweredPipeline struct {
 	ID        string
 	ContextID string
@@ -112,22 +95,17 @@ type ProviderAnsweredPipeline struct {
 
 func (p ProviderAnsweredPipeline) CallID() string { return p.ID }
 
-// =============================================================================
-// Session stages
-// =============================================================================
-
-// SessionConnectedPipeline — WebSocket/AudioSocket connected.
-// Handler: resolve context, create streamer/talker, run Talk (blocking).
 type SessionConnectedPipeline struct {
 	ID        string
 	ContextID string
 	WebSocket *websocket.Conn
 	Conn      net.Conn
+	Reader    *bufio.Reader
+	Writer    *bufio.Writer
 }
 
 func (p SessionConnectedPipeline) CallID() string { return p.ID }
 
-// SessionInitializedPipeline — Connect() done, STT/TTS/LLM ready.
 type SessionInitializedPipeline struct {
 	ID   string
 	Auth types.SimplePrinciple
@@ -135,14 +113,12 @@ type SessionInitializedPipeline struct {
 
 func (p SessionInitializedPipeline) CallID() string { return p.ID }
 
-// CallActivePipeline — Talk loop running, audio flowing.
 type CallActivePipeline struct {
 	ID string
 }
 
 func (p CallActivePipeline) CallID() string { return p.ID }
 
-// ModeSwitchPipeline — AUDIO ↔ TEXT mode change.
 type ModeSwitchPipeline struct {
 	ID   string
 	From string
@@ -150,10 +126,6 @@ type ModeSwitchPipeline struct {
 }
 
 func (p ModeSwitchPipeline) CallID() string { return p.ID }
-
-// =============================================================================
-// Signal stages (teardown)
-// =============================================================================
 
 type DisconnectRequestedPipeline struct {
 	ID     string
@@ -179,13 +151,6 @@ type CallFailedPipeline struct {
 
 func (p CallFailedPipeline) CallID() string { return p.ID }
 
-// =============================================================================
-// Outbound call stages
-// =============================================================================
-
-// OutboundRequestedPipeline — full outbound call request.
-// Handler drives the complete flow: validate → load assistant → create conversation
-// → save context → create observer → dispatch → return result.
 type OutboundRequestedPipeline struct {
 	ID          string
 	Auth        types.SimplePrinciple
@@ -206,10 +171,6 @@ type OutboundDialedPipeline struct {
 }
 
 func (p OutboundDialedPipeline) CallID() string { return p.ID }
-
-// =============================================================================
-// Control stages (observability)
-// =============================================================================
 
 type EventEmittedPipeline struct {
 	ID    string

@@ -39,15 +39,14 @@ func NewExotelTelephony(config *config.AssistantConfig, logger commons.Logger) (
 	}, nil
 }
 
-func (tpc *exotelTelephony) CatchAllStatusCallback(ctx *gin.Context) (*internal_type.StatusInfo, error) {
+func (exo *exotelTelephony) CatchAllStatusCallback(ctx *gin.Context) (*internal_type.StatusInfo, error) {
 	return nil, nil
 }
 
-// StatusCallback implements [Telephony].
-func (tpc *exotelTelephony) StatusCallback(c *gin.Context, auth types.SimplePrinciple, assistantId uint64, assistantConversationId uint64) (*internal_type.StatusInfo, error) {
+func (exo *exotelTelephony) StatusCallback(c *gin.Context, auth types.SimplePrinciple, assistantId uint64, assistantConversationId uint64) (*internal_type.StatusInfo, error) {
 	form, err := c.MultipartForm()
 	if err != nil {
-		tpc.logger.Errorf("failed to parse multipart form-data with error %+v", err)
+		exo.logger.Errorf("failed to parse multipart form-data with error %+v", err)
 		return nil, fmt.Errorf("failed to parse multipart form-data")
 	}
 
@@ -62,28 +61,40 @@ func (tpc *exotelTelephony) StatusCallback(c *gin.Context, auth types.SimplePrin
 	event := fmt.Sprintf("%v", eventDetails["Status"])
 	return &internal_type.StatusInfo{Event: event, Payload: eventDetails}, nil
 }
-func (tpc *exotelTelephony) ClientUrl(vaultCredential *protos.VaultCredential, opts utils.Option) (*string, error) {
-	accountSid, ok := vaultCredential.GetValue().AsMap()["account_sid"]
+
+func (exo *exotelTelephony) ClientUrl(vaultCredential *protos.VaultCredential, opts utils.Option) (*string, error) {
+	if vaultCredential.GetValue() == nil {
+		return nil, fmt.Errorf("vault credential value is nil")
+	}
+	vaultMap := vaultCredential.GetValue().AsMap()
+	accountSid, ok := vaultMap["account_sid"]
 	if !ok {
 		return nil, fmt.Errorf("illegal vault config accountSid is not found")
 	}
-	clientId, ok := vaultCredential.GetValue().AsMap()["client_id"]
+	clientId, ok := vaultMap["client_id"]
 	if !ok {
 		return nil, fmt.Errorf("illegal vault config client_id not found")
 	}
-	authToken, ok := vaultCredential.GetValue().AsMap()["client_secret"]
+	authToken, ok := vaultMap["client_secret"]
 	if !ok {
-		return nil, fmt.Errorf("illegal vault config")
+		return nil, fmt.Errorf("illegal vault config client_secret not found")
+	}
+	sid, _ := accountSid.(string)
+	cid, _ := clientId.(string)
+	token, _ := authToken.(string)
+	if sid == "" || cid == "" || token == "" {
+		return nil, fmt.Errorf("illegal vault config: credentials must be non-empty strings")
 	}
 	return utils.Ptr(fmt.Sprintf("https://%s:%s@api.exotel.com/v1/Accounts/%s/Calls/connect.json",
-		clientId.(string), authToken.(string), accountSid.(string))), nil
-
+		cid, token, sid)), nil
 }
 
-func (tpc *exotelTelephony) AppUrl(
-	vaultCredential *protos.VaultCredential,
-	opts utils.Option) (*string, error) {
-	accountSid, ok := vaultCredential.GetValue().AsMap()["account_sid"]
+func (exo *exotelTelephony) AppUrl(vaultCredential *protos.VaultCredential, opts utils.Option) (*string, error) {
+	if vaultCredential.GetValue() == nil {
+		return nil, fmt.Errorf("vault credential value is nil")
+	}
+	vaultMap := vaultCredential.GetValue().AsMap()
+	accountSid, ok := vaultMap["account_sid"]
 	if !ok {
 		return nil, fmt.Errorf("illegal vault config accountSid is not found")
 	}
@@ -91,29 +102,30 @@ func (tpc *exotelTelephony) AppUrl(
 	if err != nil {
 		return nil, fmt.Errorf("illegal app_id option is not found")
 	}
-	return utils.Ptr(fmt.Sprintf("http://my.exotel.com/%s/exoml/start_voice/%s", accountSid.(string), app_id)), nil
-
+	sid, _ := accountSid.(string)
+	if sid == "" {
+		return nil, fmt.Errorf("illegal vault config account_sid must be a non-empty string")
+	}
+	return utils.Ptr(fmt.Sprintf("http://my.exotel.com/%s/exoml/start_voice/%s", sid, app_id)), nil
 }
 
-func (tpc *exotelTelephony) OutboundCall(
+func (exo *exotelTelephony) OutboundCall(
 	auth types.SimplePrinciple,
-	// customer number
 	toPhone string,
-	// exo number
 	fromPhone string,
 	assistantId, assistantConversationId uint64,
 	vaultCredential *protos.VaultCredential,
 	opts utils.Option) (*internal_type.CallInfo, error) {
 	info := &internal_type.CallInfo{Provider: exotelProvider}
 
-	clientUrl, err := tpc.ClientUrl(vaultCredential, opts)
+	clientUrl, err := exo.ClientUrl(vaultCredential, opts)
 	if err != nil {
 		info.Status = "FAILED"
 		info.ErrorMessage = fmt.Sprintf("Failed to build url, check credentials: %s", err.Error())
 		return info, err
 	}
 
-	appUrl, err := tpc.AppUrl(vaultCredential, opts)
+	appUrl, err := exo.AppUrl(vaultCredential, opts)
 	if err != nil {
 		info.Status = "FAILED"
 		info.ErrorMessage = fmt.Sprintf("Failed to build app url: %s", err.Error())
@@ -127,8 +139,7 @@ func (tpc *exotelTelephony) OutboundCall(
 	formData.Set("CallerId", fromPhone)
 	formData.Set("To", fromPhone)
 	formData.Set("Url", *appUrl)
-	formData.Set("StatusCallback", fmt.Sprintf("https://%s/%s", tpc.appCfg.PublicAssistantHost, internal_type.GetContextEventPath(exotelProvider, contextID)))
-	// for exotel there is no way to set dynamic path so pass it as custom filed
+	formData.Set("StatusCallback", fmt.Sprintf("https://%s/%s", exo.appCfg.PublicAssistantHost, internal_type.GetContextEventPath(exotelProvider, contextID)))
 	formData.Set("CustomField", internal_type.GetContextAnswerPath(exotelProvider, contextID))
 
 	client := &http.Client{Timeout: 60 * time.Second}
@@ -154,7 +165,7 @@ func (tpc *exotelTelephony) OutboundCall(
 		return info, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		tpc.logger.Errorf("Unexpected HTTP Status: %d, Response Body: %s\n", resp.StatusCode, string(bodyBytes))
+		exo.logger.Errorf("Unexpected HTTP Status: %d, Response Body: %s\n", resp.StatusCode, string(bodyBytes))
 		info.Status = "FAILED"
 		info.ErrorMessage = fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(bodyBytes))
 		info.StatusInfo = internal_type.StatusInfo{Event: "Failed", Payload: string(bodyBytes)}
@@ -175,20 +186,20 @@ func (tpc *exotelTelephony) OutboundCall(
 	return info, nil
 }
 
-func (tpc *exotelTelephony) InboundCall(c *gin.Context, auth types.SimplePrinciple, assistantId uint64, clientNumber string, assistantConversationId uint64) error {
+func (exo *exotelTelephony) InboundCall(c *gin.Context, auth types.SimplePrinciple, assistantId uint64, clientNumber string, assistantConversationId uint64) error {
 	contextID, _ := c.Get("contextId")
 	ctxID := fmt.Sprintf("%v", contextID)
 
 	response := map[string]string{
 		"url": fmt.Sprintf("wss://%s/%s",
-			tpc.appCfg.PublicAssistantHost,
+			exo.appCfg.PublicAssistantHost,
 			internal_type.GetContextAnswerPath("exotel", ctxID)),
 	}
 	c.JSON(http.StatusOK, response)
 	return nil
 }
 
-func (tpc *exotelTelephony) ReceiveCall(c *gin.Context) (*internal_type.CallInfo, error) {
+func (exo *exotelTelephony) ReceiveCall(c *gin.Context) (*internal_type.CallInfo, error) {
 	queryParams := make(map[string]string)
 	for key, values := range c.Request.URL.Query() {
 		if len(values) > 0 {
@@ -196,9 +207,13 @@ func (tpc *exotelTelephony) ReceiveCall(c *gin.Context) (*internal_type.CallInfo
 		}
 	}
 
+	// Exotel outbound redirect: when CustomField is present, this is the
+	// callback from Exotel's outbound flow asking for the WebSocket URL.
+	// Respond with the URL and return nil CallInfo so the pipeline skips
+	// normal inbound call setup.
 	socketUrl, ok := queryParams["CustomField"]
 	if ok {
-		response := map[string]string{"url": fmt.Sprintf("wss://%s/%s", tpc.appCfg.PublicAssistantHost, socketUrl)}
+		response := map[string]string{"url": fmt.Sprintf("wss://%s/%s", exo.appCfg.PublicAssistantHost, socketUrl)}
 		c.JSON(http.StatusOK, response)
 		return nil, nil
 	}

@@ -487,18 +487,16 @@ func (r *genericRequestor) initializeCollectors(ctx context.Context) {
 		ConversationID: r.assistantConversation.Id,
 		ProjectID:      projectID,
 		OrganizationID: orgID,
-		Persist: observe.PersistFunc{
-			ApplyMetrics: func(ctx context.Context, auth types.SimplePrinciple, assistantID, conversationID uint64, metrics []*types.Metric) error {
+		Persist: &observe.ServicePersister{
+			ApplyMetrics: func(ctx context.Context, auth types.SimplePrinciple, assistantID, conversationID uint64, metrics []*types.Metric) (interface{}, error) {
 				dbCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
-				_, err := r.conversationService.ApplyConversationMetrics(dbCtx, auth, assistantID, conversationID, metrics)
-				return err
+				return r.conversationService.ApplyConversationMetrics(dbCtx, auth, assistantID, conversationID, metrics)
 			},
-			ApplyMetadata: func(ctx context.Context, auth types.SimplePrinciple, assistantID, conversationID uint64, metadata []*types.Metadata) error {
+			ApplyMetadata: func(ctx context.Context, auth types.SimplePrinciple, assistantID, conversationID uint64, metadata []*types.Metadata) (interface{}, error) {
 				dbCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
-				_, err := r.conversationService.ApplyConversationMetadata(dbCtx, auth, assistantID, conversationID, metadata)
-				return err
+				return r.conversationService.ApplyConversationMetadata(dbCtx, auth, assistantID, conversationID, metadata)
 			},
 		},
 		Events:  observe.NewEventCollector(r.logger, meta, eventExporters...),

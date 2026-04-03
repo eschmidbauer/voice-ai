@@ -7,6 +7,7 @@
 package channel_pipeline
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"net"
@@ -36,7 +37,6 @@ type PipelineResult struct {
 	ConversationID uint64
 	Error          error
 
-	// CallInfo data — carried from HandleReceiveCall for observer telemetry.
 	Provider     string
 	CallerNumber string
 	CallStatus   string
@@ -86,8 +86,6 @@ type Dispatcher struct {
 	onCompleteSession    OnCompleteSessionFunc
 }
 
-// --- Callback types (each stage has its own callback) ---
-
 // OnReceiveCallFunc parses the provider webhook and returns CallInfo.
 type OnReceiveCallFunc func(ctx context.Context, provider string, ginCtx *gin.Context) (*internal_type.CallInfo, error)
 
@@ -113,7 +111,7 @@ type OnApplyConversationExtrasFunc func(ctx context.Context, auth types.SimplePr
 type OnResolveSessionFunc func(ctx context.Context, contextID string) (*callcontext.CallContext, *protos.VaultCredential, error)
 
 // OnCreateStreamerFunc creates a provider-specific streamer.
-type OnCreateStreamerFunc func(ctx context.Context, cc *callcontext.CallContext, vc *protos.VaultCredential, ws *websocket.Conn, conn net.Conn) (internal_type.Streamer, error)
+type OnCreateStreamerFunc func(ctx context.Context, cc *callcontext.CallContext, vc *protos.VaultCredential, ws *websocket.Conn, conn net.Conn, reader *bufio.Reader, writer *bufio.Writer) (internal_type.Streamer, error)
 
 // OnCreateTalkerFunc creates a talker (genericRequestor).
 type OnCreateTalkerFunc func(ctx context.Context, streamer internal_type.Streamer) (internal_type.Talking, error)
@@ -223,8 +221,6 @@ func (d *Dispatcher) enqueue(ctx context.Context, s Pipeline, resultCh chan<- *P
 	}
 }
 
-// --- Dispatcher goroutines ---
-
 func (d *Dispatcher) runDispatcher(ctx context.Context, ch chan callEnvelope) {
 	for {
 		select {
@@ -248,20 +244,16 @@ func (d *Dispatcher) drain(ch chan callEnvelope) {
 	}
 }
 
-// --- dispatch router ---
-
 func (d *Dispatcher) dispatch(e callEnvelope) {
 	ctx := e.ctx
 	resultCh := e.resultCh
 
 	switch v := e.p.(type) {
-	// Sync handlers (receive resultCh)
 	case CallReceivedPipeline:
 		d.handleCallReceived(ctx, v, resultCh)
 	case SessionConnectedPipeline:
 		d.handleSessionConnected(ctx, v, resultCh)
 
-	// Inbound stages (async, stage → stage)
 	case WebhookParsedPipeline:
 		d.handleWebhookParsed(ctx, v)
 	case AssistantResolvedPipeline:
@@ -296,8 +288,6 @@ func (d *Dispatcher) dispatch(e callEnvelope) {
 		d.logger.Warnw("dispatch: unknown pipeline type", "type", fmt.Sprintf("%T", e.p))
 	}
 }
-
-// --- Observer helpers ---
 
 func (d *Dispatcher) storeObserver(callID string, obs *observe.ConversationObserver) {
 	d.mu.Lock()
@@ -342,8 +332,6 @@ func (d *Dispatcher) emitMetric(ctx context.Context, callID string, metrics []*p
 	}
 	obs.EmitMetric(ctx, metrics)
 }
-
-// --- Hooks helpers ---
 
 func (d *Dispatcher) storeHooks(callID string, h *observe.ConversationHooks) {
 	d.mu.Lock()

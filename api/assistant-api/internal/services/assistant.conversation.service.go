@@ -293,6 +293,11 @@ type AssistantConversationService interface {
 		metrics []*types.Metric,
 	) ([]*internal_conversation_entity.AssistantConversationMetric, error)
 
+	// PersistMetrics/PersistMetadata satisfy observe.ConversationPersister so the
+	// service can be passed directly to the observer without closure wrappers.
+	PersistMetrics(ctx context.Context, auth types.SimplePrinciple, assistantID, conversationID uint64, metrics []*types.Metric) error
+	PersistMetadata(ctx context.Context, auth types.SimplePrinciple, assistantID, conversationID uint64, metadata []*types.Metadata) error
+
 	CreateConversationRecording(
 		ctx context.Context,
 		auth types.SimplePrinciple,

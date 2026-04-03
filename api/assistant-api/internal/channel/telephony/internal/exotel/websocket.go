@@ -21,8 +21,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// LINEAR_8K_AUDIO_CONFIG is the Exotel-native audio format (linear16 8kHz).
-var EXOTEL_LINEAR_8K_AUDIO_CONFIG = internal_audio.NewLinear8khzMonoAudioConfig()
+var exotelLinear8kConfig = internal_audio.NewLinear8khzMonoAudioConfig()
 
 type exotelWebsocketStreamer struct {
 	internal_telephony_base.BaseTelephonyStreamer
@@ -36,7 +35,7 @@ func NewExotelWebsocketStreamer(logger commons.Logger, connection *websocket.Con
 	exotel := &exotelWebsocketStreamer{
 		BaseTelephonyStreamer: internal_telephony_base.NewBaseTelephonyStreamer(
 			logger, cc, vaultCred,
-			internal_telephony_base.WithSourceAudioConfig(EXOTEL_LINEAR_8K_AUDIO_CONFIG),
+			internal_telephony_base.WithSourceAudioConfig(exotelLinear8kConfig),
 		),
 		streamID:   "",
 		connection: connection,
@@ -53,7 +52,6 @@ func (exotel *exotelWebsocketStreamer) runWebSocketReader() {
 	for {
 		_, message, err := conn.ReadMessage()
 		if err != nil {
-			exotel.connection = nil
 			exotel.PushDisconnection(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER)
 			exotel.BaseStreamer.Cancel()
 			return
@@ -104,8 +102,7 @@ func (exotel *exotelWebsocketStreamer) Send(response internal_type.Stream) error
 	case *protos.ConversationAssistantMessage:
 		switch content := data.Message.(type) {
 		case *protos.ConversationAssistantMessage_Audio:
-			// Resample from internal Rapida format (linear16 16kHz) to Exotel format (linear16 8kHz)
-			audioData, err := exotel.Resampler().Resample(content.Audio, internal_audio.RAPIDA_INTERNAL_AUDIO_CONFIG, EXOTEL_LINEAR_8K_AUDIO_CONFIG)
+			audioData, err := exotel.Resampler().Resample(content.Audio, internal_audio.RAPIDA_INTERNAL_AUDIO_CONFIG, exotelLinear8kConfig)
 			if err != nil {
 				exotel.Logger.Warnw("Failed to resample output audio to linear16 8kHz, forwarding raw bytes",
 					"error", err.Error(),
@@ -118,7 +115,7 @@ func (exotel *exotelWebsocketStreamer) Send(response internal_type.Stream) error
 				buf.Write(audioData)
 				for buf.Len() >= exotel.OutputFrameSize() && exotel.streamID != "" {
 					chunk := buf.Next(exotel.OutputFrameSize())
-					if err := exotel.sendingExotelMessage("media", map[string]interface{}{
+					if err := exotel.sendExotelMessage("media", map[string]interface{}{
 						"payload": exotel.Encoder().EncodeToString(chunk),
 					}); err != nil {
 						exotel.Logger.Error("Failed to send audio chunk", "error", err.Error())
@@ -126,10 +123,9 @@ func (exotel *exotelWebsocketStreamer) Send(response internal_type.Stream) error
 						return
 					}
 				}
-				// Flush remaining audio when response is marked complete
 				if data.GetCompleted() && buf.Len() > 0 {
 					remainingChunk := buf.Bytes()
-					if err := exotel.sendingExotelMessage("media", map[string]interface{}{
+					if err := exotel.sendExotelMessage("media", map[string]interface{}{
 						"payload": exotel.Encoder().EncodeToString(remainingChunk),
 					}); err != nil {
 						exotel.Logger.Errorf("Failed to send final audio chunk", "error", err.Error())
@@ -142,10 +138,9 @@ func (exotel *exotelWebsocketStreamer) Send(response internal_type.Stream) error
 			return sendErr
 		}
 	case *protos.ConversationInterruption:
-		// interrupt on word given by stt
 		if data.Type == protos.ConversationInterruption_INTERRUPTION_TYPE_WORD {
 			exotel.ResetOutputBuffer()
-			if err := exotel.sendingExotelMessage("clear", nil); err != nil {
+			if err := exotel.sendExotelMessage("clear", nil); err != nil {
 				exotel.Logger.Errorf("Error sending clear command:", err)
 			}
 		}
@@ -159,7 +154,6 @@ func (exotel *exotelWebsocketStreamer) Send(response internal_type.Stream) error
 	return nil
 }
 
-// start event contains streamSid to be used for subsequent media messages
 func (exotel *exotelWebsocketStreamer) handleStartEvent(mediaEvent internal_exotel.ExotelMediaEvent) {
 	exotel.streamID = mediaEvent.StreamSid
 }
@@ -182,7 +176,7 @@ func (exotel *exotelWebsocketStreamer) handleMediaEvent(mediaEvent internal_exot
 	return audioRequest, nil
 }
 
-func (exotel *exotelWebsocketStreamer) sendingExotelMessage(eventType string, mediaData map[string]interface{}) error {
+func (exotel *exotelWebsocketStreamer) sendExotelMessage(eventType string, mediaData map[string]interface{}) error {
 	if exotel.connection == nil || exotel.streamID == "" {
 		return nil
 	}
@@ -203,16 +197,16 @@ func (exotel *exotelWebsocketStreamer) sendingExotelMessage(eventType string, me
 	return nil
 }
 
-func (exo *exotelWebsocketStreamer) handleError(message string, err error) error {
-	exo.Logger.Error(message, "error", err.Error())
+func (exotel *exotelWebsocketStreamer) handleError(message string, err error) error {
+	exotel.Logger.Error(message, "error", err.Error())
 	return err
 }
 
-func (tws *exotelWebsocketStreamer) Cancel() error {
-	if tws.connection != nil {
-		tws.connection.Close()
-		tws.connection = nil
+func (exotel *exotelWebsocketStreamer) Cancel() error {
+	if exotel.connection != nil {
+		exotel.connection.Close()
+		exotel.connection = nil
 	}
-	tws.BaseStreamer.Cancel()
+	exotel.BaseStreamer.Cancel()
 	return nil
 }

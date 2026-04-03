@@ -10,16 +10,9 @@ import (
 	"fmt"
 
 	"github.com/emiago/sipgo/sip"
-	sip_infra "github.com/rapidaai/api/assistant-api/sip/infra"
 	"github.com/rapidaai/pkg/types"
 )
 
-// extractDIDFromURI delegates to sip_infra.ExtractDIDFromURI.
-func extractDIDFromURI(uri string) string {
-	return sip_infra.ExtractDIDFromURI(uri)
-}
-
-// resolveAssistantByDID delegates to the injected DID resolver.
 func (d *Dispatcher) resolveAssistantByDID(did string) (uint64, types.SimplePrinciple, error) {
 	if d.didResolver == nil {
 		return 0, nil, fmt.Errorf("DID resolver not configured")
@@ -27,7 +20,6 @@ func (d *Dispatcher) resolveAssistantByDID(did string) (uint64, types.SimplePrin
 	return d.didResolver(did)
 }
 
-// sendReject sends a SIP rejection response.
 func (d *Dispatcher) sendReject(tx sip.ServerTransaction, req *sip.Request, statusCode int) {
 	if tx == nil || req == nil {
 		return

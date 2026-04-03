@@ -9,7 +9,6 @@ package internal_vonage_telephony
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 
 	"github.com/gorilla/websocket"
 	callcontext "github.com/rapidaai/api/assistant-api/internal/callcontext"
@@ -107,7 +106,6 @@ func (vng *vonageWebsocketStreamer) Send(response internal_type.Stream) error {
 						return
 					}
 				}
-				// Flush remaining audio when response is marked complete
 				if data.GetCompleted() && buf.Len() > 0 {
 					remainingChunk := buf.Bytes()
 					if err := vng.connection.WriteMessage(websocket.BinaryMessage, remainingChunk); err != nil {
@@ -130,7 +128,7 @@ func (vng *vonageWebsocketStreamer) Send(response internal_type.Stream) error {
 	case *protos.ConversationDirective:
 		if data.GetType() == protos.ConversationDirective_END_CONVERSATION {
 			if vng.GetConversationUuid() != "" {
-				cAuth, err := vng.Auth(vng.VaultCredential())
+				cAuth, err := vonageAuth(vng.VaultCredential())
 				if err != nil {
 					vng.Logger.Errorf("Error creating Vonage client:", err)
 					if err := vng.Cancel(); err != nil {
@@ -147,10 +145,6 @@ func (vng *vonageWebsocketStreamer) Send(response internal_type.Stream) error {
 					return nil
 				}
 			}
-			if err := vng.Cancel(); err != nil {
-				vng.Logger.Errorf("Error disconnecting command:", err)
-			}
-		} else {
 			if err := vng.Cancel(); err != nil {
 				vng.Logger.Errorf("Error disconnecting command:", err)
 			}
@@ -171,31 +165,15 @@ func (vng *vonageWebsocketStreamer) handleMediaEvent(message []byte) (*protos.Co
 	return audioRequest, nil
 }
 
-func (tpc *vonageWebsocketStreamer) Auth(vaultCredential *protos.VaultCredential) (vonage.Auth, error) {
-	privateKey, ok := vaultCredential.GetValue().AsMap()["private_key"]
-	if !ok {
-		return nil, fmt.Errorf("illegal vault config privateKey is not found")
-	}
-	applicationId, ok := vaultCredential.GetValue().AsMap()["application_id"]
-	if !ok {
-		return nil, fmt.Errorf("illegal vault config application_id is not found")
-	}
-	clientAuth, err := vonage.CreateAuthFromAppPrivateKey(applicationId.(string), []byte(privateKey.(string)))
-	if err != nil {
-		return nil, err
-	}
-	return clientAuth, nil
+func (vng *vonageWebsocketStreamer) GetConversationUuid() string {
+	return vng.ChannelUUID
 }
 
-func (tws *vonageWebsocketStreamer) GetConversationUuid() string {
-	return tws.ChannelUUID
-}
-
-func (tws *vonageWebsocketStreamer) Cancel() error {
-	if tws.connection != nil {
-		tws.connection.Close()
-		tws.connection = nil
+func (vng *vonageWebsocketStreamer) Cancel() error {
+	if vng.connection != nil {
+		vng.connection.Close()
+		vng.connection = nil
 	}
-	tws.BaseStreamer.Cancel()
+	vng.BaseStreamer.Cancel()
 	return nil
 }
