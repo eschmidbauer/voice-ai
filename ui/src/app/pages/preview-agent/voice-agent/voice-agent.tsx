@@ -21,24 +21,24 @@ import {
 } from '@/app/components/form/textarea';
 import { InputVarForm } from '@/app/pages/endpoint/view/try-playground/experiment-prompt/components/input-var-form';
 import { InputVarType } from '@/models/common';
-import { useRapidaStore } from '@/hooks';
-import { PageLoader } from '@/app/components/loader/page-loader';
-import { Notification } from '@/app/components/carbon/notification';
 import {
-  YellowNoticeBlock,
-} from '@/app/components/container/message/notice-block';
+  Notification,
+  LinkNotification,
+} from '@/app/components/carbon/notification';
 import { GhostButton, IconOnlyButton } from '@/app/components/carbon/button';
+import { EmptyState } from '@/app/components/carbon/empty-state';
+import { Activity, FilterRemove } from '@carbon/icons-react';
 import {
-  Tabs,
-  TabList,
-  Tab,
   DismissibleTag,
   Tag,
   StructuredListWrapper,
   StructuredListBody,
   StructuredListRow,
   StructuredListCell,
+  StructuredListSkeleton,
 } from '@carbon/react';
+import { Tabs } from '@/app/components/carbon/tabs';
+import { Text } from '@/app/components/carbon/text';
 import { ArrowLeft } from '@carbon/icons-react';
 
 // ---------------------------------------------------------------------------
@@ -222,7 +222,6 @@ export const VoiceAgent: FC<{
     () => new VI(connectConfig, agentConfig, agentCallback),
     [connectConfig, agentConfig, agentCallback],
   );
-
   const [assistant, setAssistant] = useState<Assistant | null>(null);
   const [events, setEvents] = useState<EventEntry[]>([]);
   const [variables, setVariables] = useState<Variable[]>([]);
@@ -232,19 +231,12 @@ export const VoiceAgent: FC<{
     useState<ConversationError.AsObject | null>(null);
   const callbackRegistered = useRef(false);
   const eventsBottomRef = useRef<HTMLDivElement>(null);
-
-  const { loading, showLoader, hideLoader } = useRapidaStore();
-
-  // Fetch assistant info
   useEffect(() => {
-    showLoader('block');
     new VI(connectConfig, agentConfig, agentCallback)
       .getAssistant()
       .then(ex => {
-        hideLoader();
         if (ex.getSuccess()) setAssistant(ex.getData()!);
-      })
-      .catch(() => hideLoader());
+      });
   }, []);
 
   // Load variables from assistant
@@ -347,8 +339,6 @@ export const VoiceAgent: FC<{
     });
   };
 
-  if (loading) return <PageLoader />;
-
   const voiceWarning = debug
     ? !assistant?.getDebuggerdeployment()?.hasInputaudio()
     : !assistant?.getApideployment()?.hasInputaudio();
@@ -383,19 +373,14 @@ export const VoiceAgent: FC<{
             </div>
           )}
           {voiceWarning && (
-            <YellowNoticeBlock className="flex items-center justify-between gap-3">
-              <span className="text-sm">
-                Voice is disabled. Enable it to enjoy a voice experience.
-              </span>
-              <a
-                href={enableVoiceHref}
-                target="_blank"
-                rel="noreferrer"
-                className="shrink-0 text-sm font-medium text-yellow-700 dark:text-yellow-400 hover:underline"
-              >
-                Enable voice
-              </a>
-            </YellowNoticeBlock>
+            <LinkNotification
+              kind="warning"
+              title="Voice disabled"
+              subtitle="Enable voice to enjoy a voice experience with your assistant."
+              linkText="Enable voice"
+              onLinkClick={() => window.open(enableVoiceHref, '_blank')}
+              hideCloseButton
+            />
           )}
           {conversationError && (
             <Notification
@@ -411,18 +396,16 @@ export const VoiceAgent: FC<{
           )}
           {/* Tab bar */}
           <Tabs
+            tabs={[
+              'Messages',
+              events.length > 0 ? `Events (${events.length})` : 'Events',
+            ]}
             selectedIndex={msgTab === 'messages' ? 0 : 1}
-            onChange={({ selectedIndex }) =>
-              setMsgTab(selectedIndex === 0 ? 'messages' : 'events')
-            }
-          >
-            <TabList contained aria-label="Message tabs">
-              <Tab>Messages</Tab>
-              <Tab>
-                {events.length > 0 ? `Events (${events.length})` : 'Events'}
-              </Tab>
-            </TabList>
-          </Tabs>
+            onChange={idx => setMsgTab(idx === 0 ? 'messages' : 'events')}
+            contained
+            isLoading={!assistant}
+            aria-label="Message tabs"
+          />
         </div>
 
         {/* Messages tab */}
@@ -461,9 +444,7 @@ export const VoiceAgent: FC<{
                   ) : (
                     <Tag
                       key={label}
-                      type={
-                        eventFilters.size === 0 ? 'blue' : 'cool-gray'
-                      }
+                      type={eventFilters.size === 0 ? 'blue' : 'cool-gray'}
                       size="md"
                       onClick={() => toggleEventFilter(label)}
                       className="cursor-pointer"
@@ -485,11 +466,20 @@ export const VoiceAgent: FC<{
 
             <div className="flex-1 min-h-0 overflow-y-auto py-1">
               {filteredEvents.length === 0 ? (
-                <div className="flex items-center justify-center h-full text-gray-400 dark:text-gray-500 text-sm/6 font-mono">
-                  {events.length === 0
-                    ? 'No events yet…'
-                    : 'No events match the selected filters.'}
-                </div>
+                <EmptyState
+                  icon={events.length === 0 ? Activity : FilterRemove}
+                  title={
+                    events.length === 0
+                      ? 'No events yet'
+                      : 'No events match the selected filters'
+                  }
+                  subtitle={
+                    events.length === 0
+                      ? 'Events will appear here once a conversation starts.'
+                      : 'Try removing some filters to see more events.'
+                  }
+                  className="h-full"
+                />
               ) : (
                 <table className="w-full table-fixed font-mono text-sm/6 border-collapse">
                   <colgroup>
@@ -550,194 +540,199 @@ export const VoiceAgentDebugger: FC<{
   variables: Variable[];
   events: EventEntry[];
   onChangeArgument: (k: string, v: string) => void;
-}> = memo(
-  ({ debug, voiceAgent, assistant, variables, events, onChangeArgument }) => {
-    const RIGHT_TABS: RightTab[] = ['configuration', 'arguments', 'metrics'];
-    const [tab, setTab] = useState<RightTab>('configuration');
-    const metrics = useMemo(() => computeMetrics(events), [events]);
+}> = memo(({ debug, assistant, variables, events, onChangeArgument }) => {
+  const RIGHT_TABS: RightTab[] = ['configuration', 'arguments', 'metrics'];
+  const [tab, setTab] = useState<RightTab>('configuration');
+  const metrics = useMemo(() => computeMetrics(events), [events]);
 
-    const deployment = assistant
-      ? (debug
-          ? assistant.getDebuggerdeployment()
-          : assistant.getApideployment()) ?? null
-      : null;
-    const stt = deployment?.getInputaudio() ?? null;
-    const tts = deployment?.getOutputaudio() ?? null;
-    const model = assistant?.getAssistantprovidermodel() ?? null;
+  const deployment = assistant
+    ? (debug
+        ? assistant.getDebuggerdeployment()
+        : assistant.getApideployment()) ?? null
+    : null;
+  const stt = deployment?.getInputaudio() ?? null;
+  const tts = deployment?.getOutputaudio() ?? null;
+  const model = assistant?.getAssistantprovidermodel() ?? null;
 
-    return (
-      <div className="flex flex-col h-full overflow-hidden text-sm">
-        {/* Tab bar */}
-        <Tabs
-          selectedIndex={RIGHT_TABS.indexOf(tab)}
-          onChange={({ selectedIndex }) => setTab(RIGHT_TABS[selectedIndex])}
-        >
-          <TabList contained aria-label="Debugger tabs">
-            <Tab>Configuration</Tab>
-            <Tab>Arguments</Tab>
-            <Tab>Metrics</Tab>
-          </TabList>
-        </Tabs>
+  return (
+    <div className="flex flex-col h-full overflow-hidden text-sm">
+      {/* Tab bar */}
+      <Tabs
+        tabs={['Configuration', 'Arguments', 'Metrics']}
+        selectedIndex={RIGHT_TABS.indexOf(tab)}
+        onChange={idx => setTab(RIGHT_TABS[idx])}
+        contained
+        aria-label="Debugger tabs"
+        isLoading={!assistant}
+      />
 
-        {/* ── arguments tab ── */}
-        {tab === 'arguments' && (
-          <div className="flex-1 min-h-0 overflow-y-auto">
-            {variables.length > 0 ? (
-              <div className="divide-y border-b">
-                {variables.map((x, idx) => (
-                  <InputVarForm key={idx} var={x}>
-                    {(x.getType() === InputVarType.stringInput ||
-                      x.getType() === InputVarType.textInput) && (
-                      <TextTextarea
-                        id={x.getName()}
-                        defaultValue={x.getDefaultvalue()}
-                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                          onChangeArgument(x.getName(), e.target.value)
-                        }
-                      />
-                    )}
-                    {x.getType() === InputVarType.paragraph && (
-                      <ParagraphTextarea
-                        id={x.getName()}
-                        defaultValue={x.getDefaultvalue()}
-                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                          onChangeArgument(x.getName(), e.target.value)
-                        }
-                      />
-                    )}
-                    {x.getType() === InputVarType.number && (
-                      <NumberTextarea
-                        id={x.getName()}
-                        defaultValue={x.getDefaultvalue()}
-                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                          onChangeArgument(x.getName(), e.target.value)
-                        }
-                      />
-                    )}
-                    {x.getType() === InputVarType.json && (
-                      <JsonTextarea
-                        id={x.getName()}
-                        defaultValue={x.getDefaultvalue()}
-                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                          onChangeArgument(x.getName(), e.target.value)
-                        }
-                      />
-                    )}
-                    {x.getType() === InputVarType.url && (
-                      <UrlTextarea
-                        id={x.getName()}
-                        defaultValue={x.getDefaultvalue()}
-                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                          onChangeArgument(x.getName(), e.target.value)
-                        }
-                      />
-                    )}
-                  </InputVarForm>
-                ))}
-              </div>
-            ) : (
-              <p className="p-4 text-sm/6 text-gray-400 dark:text-gray-500">
-                No arguments defined.
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* ── configuration tab ── */}
-        {tab === 'configuration' && (
-          <div className="flex-1 min-h-0 overflow-y-auto">
-            {assistant ? (
-              <>
-                <ConfigBlock title="assistant">
-                  <InfoRow label="name" value={assistant.getName()} />
-                  <InfoRow
-                    label="executor"
-                    value={
-                      assistant.hasAssistantprovideragentkit()
-                        ? 'agentkit'
-                        : assistant.hasAssistantproviderwebsocket()
-                          ? 'websocket'
-                          : 'model'
-                    }
-                  />
-                  {assistant.getDescription() && (
-                    <InfoRow
-                      label="description"
-                      value={assistant.getDescription()}
+      {/* ── arguments tab ── */}
+      {tab === 'arguments' && (
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          {variables.length > 0 ? (
+            <div className="divide-y border-b">
+              {variables.map((x, idx) => (
+                <InputVarForm key={idx} var={x}>
+                  {(x.getType() === InputVarType.stringInput ||
+                    x.getType() === InputVarType.textInput) && (
+                    <TextTextarea
+                      id={x.getName()}
+                      defaultValue={x.getDefaultvalue()}
+                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                        onChangeArgument(x.getName(), e.target.value)
+                      }
                     />
                   )}
-                </ConfigBlock>
-
-                {stt && (
-                  <ConfigBlock title="stt">
-                    <InfoRow label="provider" value={stt.getAudioprovider()} />
-                    {stt.getAudiooptionsList().map(m => (
-                      <InfoRow
-                        key={m.getKey()}
-                        label={m.getKey()}
-                        value={m.getValue()}
-                      />
-                    ))}
-                  </ConfigBlock>
-                )}
-
-                {tts && (
-                  <ConfigBlock title="tts">
-                    <InfoRow label="provider" value={tts.getAudioprovider()} />
-                    {tts.getAudiooptionsList().map(m => (
-                      <InfoRow
-                        key={m.getKey()}
-                        label={m.getKey()}
-                        value={m.getValue()}
-                      />
-                    ))}
-                  </ConfigBlock>
-                )}
-
-                {model && (
-                  <ConfigBlock title="llm">
-                    <InfoRow
-                      label="provider"
-                      value={model.getModelprovidername()}
+                  {x.getType() === InputVarType.paragraph && (
+                    <ParagraphTextarea
+                      id={x.getName()}
+                      defaultValue={x.getDefaultvalue()}
+                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                        onChangeArgument(x.getName(), e.target.value)
+                      }
                     />
-                    {model.getAssistantmodeloptionsList().map(m => (
-                      <InfoRow
-                        key={m.getKey()}
-                        label={m.getKey()}
-                        value={m.getValue()}
-                      />
-                    ))}
-                  </ConfigBlock>
+                  )}
+                  {x.getType() === InputVarType.number && (
+                    <NumberTextarea
+                      id={x.getName()}
+                      defaultValue={x.getDefaultvalue()}
+                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                        onChangeArgument(x.getName(), e.target.value)
+                      }
+                    />
+                  )}
+                  {x.getType() === InputVarType.json && (
+                    <JsonTextarea
+                      id={x.getName()}
+                      defaultValue={x.getDefaultvalue()}
+                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                        onChangeArgument(x.getName(), e.target.value)
+                      }
+                    />
+                  )}
+                  {x.getType() === InputVarType.url && (
+                    <UrlTextarea
+                      id={x.getName()}
+                      defaultValue={x.getDefaultvalue()}
+                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                        onChangeArgument(x.getName(), e.target.value)
+                      }
+                    />
+                  )}
+                </InputVarForm>
+              ))}
+            </div>
+          ) : (
+            <Text
+              as="p"
+              className="p-4 text-sm/6 text-gray-400 dark:text-gray-500"
+            >
+              No arguments defined.
+            </Text>
+          )}
+        </div>
+      )}
+
+      {/* ── configuration tab ── */}
+      {tab === 'configuration' && (
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <ConfigBlock
+            title="assistant"
+            isLoading={!assistant}
+            skeletonRows={3}
+          >
+            {assistant && (
+              <>
+                <InfoRow label="name" value={assistant.getName()} />
+                <InfoRow
+                  label="executor"
+                  value={
+                    assistant.hasAssistantprovideragentkit()
+                      ? 'agentkit'
+                      : assistant.hasAssistantproviderwebsocket()
+                        ? 'websocket'
+                        : 'model'
+                  }
+                />
+                {assistant.getDescription() && (
+                  <InfoRow
+                    label="description"
+                    value={assistant.getDescription()}
+                  />
                 )}
               </>
-            ) : (
-              <p className="p-4 text-sm/6 text-gray-400 dark:text-gray-500">
-                Loading…
-              </p>
             )}
-          </div>
-        )}
+          </ConfigBlock>
 
-        {/* ── metrics tab ── */}
-        {tab === 'metrics' && (
-          <div className="flex-1 min-h-0 overflow-y-auto p-4">
-            {Object.keys(metrics).length === 0 ? (
-              <p className="text-sm/6 text-gray-400 dark:text-gray-500">
-                No metrics yet.
-              </p>
-            ) : (
-              <div className="grid grid-cols-2 gap-x-6 gap-y-5">
-                {Object.entries(metrics).map(([k, v]) => (
-                  <MetricCard key={k} label={k} value={String(v)} />
+          <ConfigBlock title="stt" isLoading={!assistant} skeletonRows={2}>
+            {stt && (
+              <>
+                <InfoRow label="provider" value={stt.getAudioprovider()} />
+                {stt.getAudiooptionsList().map(m => (
+                  <InfoRow
+                    key={m.getKey()}
+                    label={m.getKey()}
+                    value={m.getValue()}
+                  />
                 ))}
-              </div>
+              </>
             )}
-          </div>
-        )}
-      </div>
-    );
-  },
-);
+          </ConfigBlock>
+
+          <ConfigBlock title="tts" isLoading={!assistant} skeletonRows={2}>
+            {tts && (
+              <>
+                <InfoRow label="provider" value={tts.getAudioprovider()} />
+                {tts.getAudiooptionsList().map(m => (
+                  <InfoRow
+                    key={m.getKey()}
+                    label={m.getKey()}
+                    value={m.getValue()}
+                  />
+                ))}
+              </>
+            )}
+          </ConfigBlock>
+
+          <ConfigBlock title="llm" isLoading={!assistant} skeletonRows={2}>
+            {model && (
+              <>
+                <InfoRow
+                  label="provider"
+                  value={model.getModelprovidername()}
+                />
+                {model.getAssistantmodeloptionsList().map(m => (
+                  <InfoRow
+                    key={m.getKey()}
+                    label={m.getKey()}
+                    value={m.getValue()}
+                  />
+                ))}
+              </>
+            )}
+          </ConfigBlock>
+        </div>
+      )}
+
+      {/* ── metrics tab ── */}
+      {tab === 'metrics' && (
+        <div className="flex-1 min-h-0 overflow-y-auto p-4">
+          {Object.keys(metrics).length === 0 ? (
+            <Text as="p" className="text-sm/6 text-gray-400 dark:text-gray-500">
+              No metrics yet.
+            </Text>
+          ) : (
+            <div className="grid grid-cols-2 gap-x-6 gap-y-5">
+              {Object.entries(metrics).map(([k, v]) => (
+                <MetricCard key={k} label={k} value={String(v)} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+});
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -749,28 +744,48 @@ export const VoiceAgentDebugger: FC<{
 
 const AssistantPlaceholder: FC<{
   assistant: Assistant | null;
-}> = ({ assistant }) => (
-  <div className="flex flex-col flex-1 min-h-0 items-start justify-end gap-1 px-2 pb-6 select-none">
-    <span className="text-2xl font-semibold text-gray-800 dark:text-gray-100 italic">
-      Hello,
-    </span>
-    <span className="text-lg text-gray-400 dark:text-gray-500 font-semibold italic">
-      How can I help you today?
-    </span>
-  </div>
-);
+}> = ({ assistant }) => {
+  const isLoading = !assistant;
+  return (
+    <div className="flex flex-col flex-1 min-h-0 items-start justify-end gap-1 px-2 pb-6 select-none">
+      <Text
+        as="span"
+        isLoading={isLoading}
+        heading
+        skeletonWidth="200px"
+        className="text-2xl font-semibold text-gray-800 dark:text-gray-100 italic"
+      >
+        Hello,
+      </Text>
+      <Text
+        as="span"
+        isLoading={isLoading}
+        skeletonWidth="280px"
+        className="text-lg text-gray-400 dark:text-gray-500 font-semibold italic"
+      >
+        How can I help you today?
+      </Text>
+    </div>
+  );
+};
 
-export const ConfigBlock: FC<{ title: string; children: React.ReactNode }> = ({
-  title,
-  children,
-}) => (
+export const ConfigBlock: FC<{
+  title: string;
+  children: React.ReactNode;
+  isLoading?: boolean;
+  skeletonRows?: number;
+}> = ({ title, children, isLoading = false, skeletonRows = 3 }) => (
   <div className="border-b border-gray-200 dark:border-gray-700">
     <div className="px-4 pt-3 pb-1 text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">
       {title}
     </div>
-    <StructuredListWrapper isCondensed className="!mb-0">
-      <StructuredListBody>{children}</StructuredListBody>
-    </StructuredListWrapper>
+    {isLoading ? (
+      <StructuredListSkeleton rowCount={skeletonRows} />
+    ) : (
+      <StructuredListWrapper isCondensed className="!mb-0">
+        <StructuredListBody>{children}</StructuredListBody>
+      </StructuredListWrapper>
+    )}
   </div>
 );
 

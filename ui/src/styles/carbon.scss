@@ -282,7 +282,16 @@
 
   &:hover {
     background: none !important;
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
     text-decoration: none;
+  }
+
+  &:focus {
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
   }
 }
 

@@ -1,8 +1,5 @@
 import type { FC, ReactNode } from 'react';
-import {
-  InlineNotification,
-  ActionableNotification,
-} from '@carbon/react';
+import { InlineNotification, ActionableNotification } from '@carbon/react';
 import { cn } from '@/utils';
 
 // ─── Types ───────────────────────────────────────────────────────────────────

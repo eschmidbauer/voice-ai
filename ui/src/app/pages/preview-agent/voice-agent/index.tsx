@@ -1,11 +1,13 @@
 import { Dropdown } from '@/app/components/dropdown';
-import { PrimaryButton, GhostButton, IconOnlyButton } from '@/app/components/carbon/button';
-import { PhoneOutgoing, ArrowLeft } from '@carbon/icons-react';
 import {
-  GreenNoticeBlock,
-  RedNoticeBlock,
-} from '@/app/components/container/message/notice-block';
-import { Tabs, TabList, Tab } from '@carbon/react';
+  PrimaryButton,
+  GhostButton,
+  IconOnlyButton,
+} from '@/app/components/carbon/button';
+import { PhoneOutgoing, ArrowLeft } from '@carbon/icons-react';
+import { Notification } from '@/app/components/carbon/notification';
+import { Tabs } from '@/app/components/carbon/tabs';
+import { Text } from '@/app/components/carbon/text';
 import {
   JsonTextarea,
   NumberTextarea,
@@ -45,7 +47,6 @@ import {
 } from '@rapidaai/react';
 import React, { ChangeEvent, useEffect, useMemo, useState } from 'react';
 import { Navigate, useParams, useSearchParams } from 'react-router-dom';
-import { PageLoader } from '@/app/components/loader/page-loader';
 
 /**
  *
@@ -120,6 +121,7 @@ export const PreviewVoiceAgent = () => {
 
 type PhoneCallStatus = 'idle' | 'calling' | 'success' | 'failed';
 type PhoneDebugTab = 'configuration' | 'arguments';
+const PHONE_DEBUG_TABS: PhoneDebugTab[] = ['configuration', 'arguments'];
 
 //
 export const PreviewPhoneAgent = () => {
@@ -255,12 +257,10 @@ export const PreviewPhoneAgent = () => {
     setErrorMessage('');
   };
 
-  if (!assistant) return <PageLoader />;
-
-  const deployment = assistant.getPhonedeployment() ?? null;
+  const deployment = assistant?.getPhonedeployment() ?? null;
   const stt = deployment?.getInputaudio() ?? null;
   const tts = deployment?.getOutputaudio() ?? null;
-  const model = assistant.getAssistantprovidermodel() ?? null;
+  const model = assistant?.getAssistantprovidermodel() ?? null;
 
   return (
     <div className="h-dvh flex p-8 text-sm/6 w-full gap-3 md:gap-6">
@@ -286,17 +286,26 @@ export const PreviewPhoneAgent = () => {
         <div className="flex-1 flex flex-col items-center justify-center px-8">
           <div className="w-full max-w-lg space-y-6">
             <div className="space-y-1">
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+              <Text
+                as="h2"
+                isLoading={!assistant}
+                heading
+                skeletonWidth="60%"
+                className="text-xl font-semibold text-gray-900 dark:text-gray-100"
+              >
                 Make a Phone Call
-              </h2>
-              <p className="text-gray-500 dark:text-gray-400">
+              </Text>
+              <Text
+                as="p"
+                isLoading={!assistant}
+                skeletonWidth="80%"
+                className="text-gray-500 dark:text-gray-400"
+              >
                 Enter a phone number to start a call with your assistant.
-              </p>
+              </Text>
             </div>
 
-            <div
-              className="flex items-stretch h-10 border border-gray-300 dark:border-gray-700 focus-within:border-blue-600 dark:focus-within:border-blue-600 transition-colors"
-            >
+            <div className="flex items-stretch h-10 border border-gray-300 dark:border-gray-700 focus-within:border-blue-600 dark:focus-within:border-blue-600 transition-colors">
               <div className="w-52 shrink-0 border-r border-gray-300 dark:border-gray-700">
                 <Dropdown
                   className="h-full bg-white dark:bg-gray-950 border-none! outline-hidden! focus-within:border-none! focus-within:outline-hidden! [&_input]:h-full [&>div]:h-full"
@@ -337,13 +346,19 @@ export const PreviewPhoneAgent = () => {
             </div>
 
             {errorMessage && (
-              <RedNoticeBlock>{errorMessage}</RedNoticeBlock>
+              <Notification
+                kind="error"
+                title="Error"
+                subtitle={errorMessage}
+              />
             )}
 
             {callStatus === 'success' && (
-              <GreenNoticeBlock>
-                Call has been created successfully.
-              </GreenNoticeBlock>
+              <Notification
+                kind="success"
+                title="Success"
+                subtitle="Call has been created successfully."
+              />
             )}
 
             <div className="flex items-center justify-between">
@@ -388,7 +403,7 @@ export const PreviewPhoneAgent = () => {
 // ---------------------------------------------------------------------------
 
 const PhoneAgentDebugger: React.FC<{
-  assistant: Assistant;
+  assistant: Assistant | null;
   deployment: ReturnType<Assistant['getPhonedeployment']>;
   stt: any;
   tts: any;
@@ -405,95 +420,107 @@ const PhoneAgentDebugger: React.FC<{
   onChangeArgument,
 }) => {
   const [tab, setTab] = useState<PhoneDebugTab>('configuration');
+  const loading = !assistant;
 
   return (
     <div className="flex flex-col h-full overflow-hidden text-sm">
       {/* Tab bar */}
       <Tabs
-        selectedIndex={tab === 'configuration' ? 0 : 1}
-        onChange={({ selectedIndex }) =>
-          setTab(selectedIndex === 0 ? 'configuration' : 'arguments')
-        }
-      >
-        <TabList contained aria-label="Phone debugger tabs">
-          <Tab>Configuration</Tab>
-          <Tab>Arguments</Tab>
-        </TabList>
-      </Tabs>
+        tabs={PHONE_DEBUG_TABS}
+        selectedIndex={PHONE_DEBUG_TABS.indexOf(tab)}
+        onChange={idx => setTab(PHONE_DEBUG_TABS[idx])}
+        contained
+        aria-label="Phone debugger tabs"
+        isLoading={loading}
+      />
 
       {/* ── configuration tab ── */}
       {tab === 'configuration' && (
         <div className="flex-1 min-h-0 overflow-y-auto">
-          <ConfigBlock title="assistant">
-            <InfoRow label="name" value={assistant.getName()} />
-            {assistant.getDescription() && (
-              <InfoRow label="description" value={assistant.getDescription()} />
+          <ConfigBlock title="assistant" isLoading={loading} skeletonRows={2}>
+            {assistant && (
+              <>
+                <InfoRow label="name" value={assistant.getName()} />
+                {assistant.getDescription() && (
+                  <InfoRow label="description" value={assistant.getDescription()} />
+                )}
+              </>
             )}
           </ConfigBlock>
 
-          <ConfigBlock title="telephony">
-            {deployment?.getPhoneprovidername() && (
-              <InfoRow
-                label="provider"
-                value={deployment.getPhoneprovidername()}
-              />
-            )}
-            <InfoRow
-              label="input mode"
-              value={'Text' + (deployment?.getInputaudio() ? ', Audio' : '')}
-            />
-            <InfoRow
-              label="output mode"
-              value={'Text' + (deployment?.getOutputaudio() ? ', Audio' : '')}
-            />
-          </ConfigBlock>
-
-          {stt && (
-            <ConfigBlock title="stt">
-              <InfoRow label="provider" value={stt.getAudioprovider()} />
-              {stt
-                .getAudiooptionsList()
-                .filter((d: any) => d.getValue())
-                .filter((d: any) => d.getKey().startsWith('listen.'))
-                .map((d: any) => (
+          <ConfigBlock title="telephony" isLoading={loading} skeletonRows={3}>
+            {deployment && (
+              <>
+                {deployment.getPhoneprovidername() && (
                   <InfoRow
-                    key={d.getKey()}
-                    label={d.getKey()}
-                    value={d.getValue()}
+                    label="provider"
+                    value={deployment.getPhoneprovidername()}
                   />
-                ))}
-            </ConfigBlock>
-          )}
-
-          {tts && (
-            <ConfigBlock title="tts">
-              <InfoRow label="provider" value={tts.getAudioprovider()} />
-              {tts
-                .getAudiooptionsList()
-                .filter((d: any) => d.getValue())
-                .filter((d: any) => d.getKey().startsWith('speak.'))
-                .map((d: any) => (
-                  <InfoRow
-                    key={d.getKey()}
-                    label={d.getKey()}
-                    value={d.getValue()}
-                  />
-                ))}
-            </ConfigBlock>
-          )}
-
-          {model && (
-            <ConfigBlock title="llm">
-              <InfoRow label="provider" value={model.getModelprovidername()} />
-              {model.getAssistantmodeloptionsList().map((m: any) => (
+                )}
                 <InfoRow
-                  key={m.getKey()}
-                  label={m.getKey()}
-                  value={m.getValue()}
+                  label="input mode"
+                  value={'Text' + (deployment.getInputaudio() ? ', Audio' : '')}
                 />
-              ))}
-            </ConfigBlock>
-          )}
+                <InfoRow
+                  label="output mode"
+                  value={'Text' + (deployment.getOutputaudio() ? ', Audio' : '')}
+                />
+              </>
+            )}
+          </ConfigBlock>
+
+          <ConfigBlock title="stt" isLoading={loading} skeletonRows={2}>
+            {stt && (
+              <>
+                <InfoRow label="provider" value={stt.getAudioprovider()} />
+                {stt
+                  .getAudiooptionsList()
+                  .filter((d: any) => d.getValue())
+                  .filter((d: any) => d.getKey().startsWith('listen.'))
+                  .map((d: any) => (
+                    <InfoRow
+                      key={d.getKey()}
+                      label={d.getKey()}
+                      value={d.getValue()}
+                    />
+                  ))}
+              </>
+            )}
+          </ConfigBlock>
+
+          <ConfigBlock title="tts" isLoading={loading} skeletonRows={2}>
+            {tts && (
+              <>
+                <InfoRow label="provider" value={tts.getAudioprovider()} />
+                {tts
+                  .getAudiooptionsList()
+                  .filter((d: any) => d.getValue())
+                  .filter((d: any) => d.getKey().startsWith('speak.'))
+                  .map((d: any) => (
+                    <InfoRow
+                      key={d.getKey()}
+                      label={d.getKey()}
+                      value={d.getValue()}
+                    />
+                  ))}
+              </>
+            )}
+          </ConfigBlock>
+
+          <ConfigBlock title="llm" isLoading={loading} skeletonRows={2}>
+            {model && (
+              <>
+                <InfoRow label="provider" value={model.getModelprovidername()} />
+                {model.getAssistantmodeloptionsList().map((m: any) => (
+                  <InfoRow
+                    key={m.getKey()}
+                    label={m.getKey()}
+                    value={m.getValue()}
+                  />
+                ))}
+              </>
+            )}
+          </ConfigBlock>
         </div>
       )}
 
