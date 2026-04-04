@@ -4,11 +4,11 @@ import {
   useInputModeToggleAgent,
   VoiceAgent,
 } from '@rapidaai/react';
-import { AudioLines, Loader2, Send, StopCircleIcon } from 'lucide-react';
+import { Send, VoiceMode, StopFilledAlt } from '@carbon/icons-react';
 import { FC, HTMLAttributes } from 'react';
 import { useForm } from 'react-hook-form';
-import { cn } from '@/utils';
 import { ScalableTextarea } from '@/app/components/form/textarea';
+import { PrimaryButton } from '@/app/components/carbon/button';
 
 interface SimpleMessagingAcitonProps extends HTMLAttributes<HTMLDivElement> {
   placeholder?: string;
@@ -63,54 +63,39 @@ export const SimpleMessagingAction: FC<SimpleMessagingAcitonProps> = ({
         />
 
         {/* Action row — always below textarea, right-aligned */}
-        <div className="flex items-center justify-end px-3 pb-3 pt-1 border-t border-gray-100 dark:border-gray-800">
-          <div className="flex items-stretch border border-gray-200 dark:border-gray-700 divide-x divide-gray-200 dark:divide-gray-700">
-            {isValid ? (
-              <button
-                type="submit"
-                className="h-9 px-4 flex items-center gap-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 transition-colors"
-              >
-                <Send className="w-4 h-4 flex-shrink-0" strokeWidth={1.5} />
-                Send
-              </button>
-            ) : (
-              <button
-                type="button"
-                disabled={isConnecting}
-                onClick={async () => {
-                  await handleVoiceToggle();
-                  !isConnected && (await handleConnectAgent());
-                }}
-                className="h-9 px-4 flex items-center gap-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 disabled:opacity-60 transition-colors"
-              >
-                {isConnecting ? (
-                  <Loader2
-                    className="w-4 h-4 flex-shrink-0 animate-spin"
-                    strokeWidth={1.5}
-                  />
-                ) : (
-                  <AudioLines
-                    className="w-4 h-4 flex-shrink-0"
-                    strokeWidth={1.5}
-                  />
-                )}
-                {isConnecting ? 'Connecting...' : 'Voice'}
-              </button>
-            )}
-            {(isConnected || isConnecting) && (
-              <button
-                type="button"
-                disabled={!isConnected && !isConnecting}
-                onClick={async () => {
-                  await handleDisconnectAgent();
-                }}
-                className="h-9 px-4 flex items-center gap-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 transition-colors"
-              >
-                <StopCircleIcon className="w-4 h-4 flex-shrink-0" strokeWidth={1.5} />
+        <div className="flex items-center justify-end px-3 pb-3 pt-1 border-t border-gray-100 dark:border-gray-800 gap-2">
+          {isValid ? (
+            <PrimaryButton size="md" type="submit" renderIcon={Send}>
+              Send
+            </PrimaryButton>
+          ) : (
+            <PrimaryButton
+              size="md"
+              isLoading={isConnecting}
+              renderIcon={VoiceMode}
+              onClick={async () => {
+                await handleVoiceToggle();
+                !isConnected && (await handleConnectAgent());
+              }}
+            >
+              {isConnecting ? 'Connecting...' : 'Voice'}
+            </PrimaryButton>
+          )}
+          {(isConnected || isConnecting) && (
+            <button
+              type="button"
+              disabled={!isConnected && !isConnecting}
+              onClick={async () => {
+                await handleDisconnectAgent();
+              }}
+              className="group h-10 px-3 flex items-center justify-center bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white transition-all duration-200 cursor-pointer"
+            >
+              <StopFilledAlt size={16} className="shrink-0" />
+              <span className="max-w-0 group-hover:max-w-[60px] overflow-hidden transition-all duration-200 whitespace-nowrap group-hover:ml-2 text-sm font-medium">
                 Stop
-              </button>
-            )}
-          </div>
+              </span>
+            </button>
+          )}
         </div>
       </form>
     </div>

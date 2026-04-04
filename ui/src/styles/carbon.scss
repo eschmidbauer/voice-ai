@@ -44,6 +44,8 @@
 @use '@carbon/react/scss/components/ui-shell';
 @use '@carbon/react/scss/components/popover';
 @use '@carbon/react/scss/components/date-picker';
+@use '@carbon/react/scss/components/tabs';
+@use '@carbon/react/scss/components/structured-list';
 
 // ─── DatePicker calendar background ─────────────────────────────────────────
 .flatpickr-calendar,
@@ -84,6 +86,12 @@
 // ─── Popover width override ─────────────────────────────────────────────────
 .cds--popover-content {
   max-inline-size: none;
+}
+
+// ─── Tooltip / popover z-index ──────────────────────────────────────────────
+.cds--tooltip-content,
+.cds--popover {
+  z-index: 9999;
 }
 
 // ─── Batch action buttons ───────────────────────────────────────────────────

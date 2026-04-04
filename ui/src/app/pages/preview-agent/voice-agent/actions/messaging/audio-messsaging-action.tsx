@@ -1,13 +1,13 @@
 import { FC, HTMLAttributes, useState, useMemo, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { ChevronDown, Check } from 'lucide-react';
 import {
-  ChevronDown,
-  MessageSquareText,
-  Mic,
-  MicOff,
-  Check,
-  StopCircleIcon,
-} from 'lucide-react';
+  Microphone,
+  MicrophoneOff,
+  Chat,
+  StopFilledAlt,
+} from '@carbon/icons-react';
+import { GhostButton } from '@/app/components/carbon/button';
 import {
   useConnectAgent,
   MultibandAudioVisualizerComponent,
@@ -18,8 +18,6 @@ import {
   VoiceAgent,
 } from '@rapidaai/react';
 import { cn } from '@/utils';
-import { DangerButton } from '@/app/components/carbon/button';
-import { Spinner } from '@/app/components/loader/spinner';
 
 /**
  *
@@ -94,32 +92,23 @@ export const AudioMessagingAction: FC<AudioMessagingActionProps> = ({
     <div className={cn('relative flex items-center p-2 py-3 gap-4', className)}>
       <div className="flex items-center justify-center w-full">
         <div className="flex flex-row border divide-x">
-          <DangerButton
-            size="sm"
-            className="group h-9 px-3 flex flex-row items-center justify-center transition-all duration-300 hover:opacity-80 overflow-hidden w-fit bg-red-500/10 hover:bg-red-500/15 active:bg-red-500/20 dark:bg-red-500/10 dark:hover:bg-red-500/15 dark:active:bg-red-500/20 text-red-500 hover:text-red-500 rounded-none"
+          <button
+            type="button"
             disabled={!isConnected}
             onClick={async () => {
               await handleToggleMute();
             }}
+            className="group h-10 px-3 flex items-center justify-center border border-red-600 text-red-600 hover:bg-red-600 hover:text-white disabled:opacity-50 transition-all duration-200 cursor-pointer"
           >
-            <div className="flex items-center justify-center">
-              {isMuted ? (
-                <>
-                  <MicOff className="w-4.5 h-4.5" strokeWidth={1.5} />
-                  <span className="max-w-0 group-hover:max-w-xs transition-all duration-200 origin-left scale-x-0 group-hover:scale-x-100 group-hover:opacity-100 opacity-0 whitespace-nowrap text-sm overflow-hidden group-hover:ml-2 font-medium">
-                    Click to unmute
-                  </span>
-                </>
-              ) : (
-                <>
-                  <Mic className="w-4.5 h-4.5" strokeWidth={1.5} />
-                  <span className="max-w-0 group-hover:max-w-xs transition-all duration-200 origin-left scale-x-0 group-hover:scale-x-100 group-hover:opacity-100 opacity-0 whitespace-nowrap text-sm overflow-hidden group-hover:ml-2 font-medium">
-                    Click to mute
-                  </span>
-                </>
-              )}
-            </div>
-          </DangerButton>
+            {isMuted ? (
+              <MicrophoneOff size={16} className="shrink-0" />
+            ) : (
+              <Microphone size={16} className="shrink-0" />
+            )}
+            <span className="max-w-0 group-hover:max-w-[120px] overflow-hidden transition-all duration-200 whitespace-nowrap group-hover:ml-2 text-sm font-medium">
+              {isMuted ? 'Unmute' : 'Mute'}
+            </span>
+          </button>
           <div className="px-2 flex items-center gap-2">
             <MultibandAudioVisualizerComponent
               classNames="gap-1"
@@ -195,54 +184,28 @@ export const AudioMessagingAction: FC<AudioMessagingActionProps> = ({
               )}
             </FlyoutLink>
           </div>
-          <button
-            aria-label="Starting Voice"
-            type="button"
+          <GhostButton
+            size="md"
             disabled={!isConnected}
+            renderIcon={Chat}
             onClick={async () => {
               await handleTextToggle();
             }}
-            className="group h-9 px-3 flex flex-row items-center justify-center transition-all duration-300 hover:opacity-80 overflow-hidden w-fit cursor-pointer"
           >
-            <MessageSquareText
-              className="w-4.5 h-4.5 flex-shrink-0"
-              strokeWidth={1.5}
-            />
-            <span className="max-w-0 group-hover:max-w-xs transition-all duration-200 origin-left scale-x-0 group-hover:scale-x-100 group-hover:opacity-100 opacity-0 whitespace-nowrap text-sm overflow-hidden group-hover:ml-2 font-medium">
-              Switch to text
-            </span>
-          </button>
+            Text
+          </GhostButton>
           <button
-            aria-label="Stoping Voice"
             type="button"
             disabled={!isConnected && !isConnecting}
             onClick={async () => {
               await handleDisconnectAgent();
             }}
-            className="cursor-pointer group h-9 px-3 flex flex-row items-center justify-center transition-all duration-300 hover:opacity-80 overflow-hidden w-fit bg-red-500 text-white"
+            className="group h-10 px-3 flex items-center justify-center bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white transition-all duration-200 cursor-pointer"
           >
-            {isConnecting ? (
-              <>
-                <Spinner className="w-4 h-4 !border-white" />
-                <span className="ml-2 whitespace-nowrap text-sm font-medium">
-                  Connecting
-                </span>
-              </>
-            ) : isConnected ? (
-              <>
-                <StopCircleIcon className="w-4 h-4 !border-white" />
-                <span className="max-w-0 group-hover:max-w-xs transition-all duration-200 origin-left scale-x-0 group-hover:scale-x-100 group-hover:opacity-100 opacity-0 whitespace-nowrap text-sm overflow-hidden group-hover:ml-2 font-medium">
-                  Stop
-                </span>
-              </>
-            ) : (
-              <>
-                <StopCircleIcon className="w-4 h-4 !border-white opacity-50" />
-                <span className="max-w-0 group-hover:max-w-xs transition-all duration-200 origin-left scale-x-0 group-hover:scale-x-100 group-hover:opacity-100 opacity-0 whitespace-nowrap text-sm overflow-hidden group-hover:ml-2 font-medium">
-                  Stop
-                </span>
-              </>
-            )}
+            <StopFilledAlt size={16} className="shrink-0" />
+            <span className="max-w-0 group-hover:max-w-[80px] overflow-hidden transition-all duration-200 whitespace-nowrap group-hover:ml-2 text-sm font-medium">
+              {isConnecting ? 'Connecting' : 'Stop'}
+            </span>
           </button>
         </div>
       </div>

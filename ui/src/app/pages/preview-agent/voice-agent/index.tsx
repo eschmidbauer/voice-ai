@@ -1,9 +1,11 @@
-import { GreenNoticeBlock } from '@/app/components/container/message/notice-block';
 import { Dropdown } from '@/app/components/dropdown';
-import { PrimaryButton } from '@/app/components/carbon/button';
-import { ChevronRight } from '@carbon/icons-react';
-import { ErrorMessage } from '@/app/components/form/error-message';
-import { Input } from '@/app/components/form/input';
+import { PrimaryButton, GhostButton, IconOnlyButton } from '@/app/components/carbon/button';
+import { PhoneOutgoing, ArrowLeft } from '@carbon/icons-react';
+import {
+  GreenNoticeBlock,
+  RedNoticeBlock,
+} from '@/app/components/container/message/notice-block';
+import { Tabs, TabList, Tab } from '@carbon/react';
 import {
   JsonTextarea,
   NumberTextarea,
@@ -25,7 +27,7 @@ import {
 import { CONFIG } from '@/configs';
 import { useCurrentCredential } from '@/hooks/use-credential';
 import { InputVarType } from '@/models/common';
-import { cn, randomMeaningfullName } from '@/utils';
+import { randomMeaningfullName } from '@/utils';
 import { getStatusMetric } from '@/utils/metadata';
 import {
   AgentConfig,
@@ -41,12 +43,9 @@ import {
   GetAssistantRequest,
   Variable,
 } from '@rapidaai/react';
-import { ChevronLeft } from 'lucide-react';
 import React, { ChangeEvent, useEffect, useMemo, useState } from 'react';
 import { Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { PageLoader } from '@/app/components/loader/page-loader';
-import { PageHeaderBlock } from '@/app/components/blocks/page-header-block';
-import { PageTitleBlock } from '@/app/components/blocks/page-title-block';
 
 /**
  *
@@ -268,17 +267,20 @@ export const PreviewPhoneAgent = () => {
       {/* ── Left: phone call form ───────────────────────────────────── */}
       <div className="flex flex-col overflow-hidden h-full w-2/3 border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-950">
         {/* Header */}
-        <PageHeaderBlock className="border-b pl-3 shrink-0">
-          <a
-            href={`/deployment/assistant/${assistantId}/overview`}
-            className="flex items-center hover:text-red-600 hover:cursor-pointer"
-          >
-            <ChevronLeft className="w-5 h-5 mr-1" strokeWidth={1.5} />
-            <PageTitleBlock className="text-sm/6">
-              Back to Assistant
-            </PageTitleBlock>
-          </a>
-        </PageHeaderBlock>
+        <div className="flex items-center gap-1.5 px-3 py-2 border-b border-gray-200 dark:border-gray-800 shrink-0">
+          <IconOnlyButton
+            kind="ghost"
+            size="sm"
+            renderIcon={ArrowLeft}
+            iconDescription="Back to Assistant"
+            onClick={() => {
+              window.location.href = `/deployment/assistant/${assistantId}/overview`;
+            }}
+          />
+          <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+            Back to Assistant
+          </span>
+        </div>
 
         {/* Body */}
         <div className="flex-1 flex flex-col items-center justify-center px-8">
@@ -293,19 +295,11 @@ export const PreviewPhoneAgent = () => {
             </div>
 
             <div
-              className={cn(
-                'p-px text-sm!',
-                'outline-solid outline-transparent',
-                'focus-within:outline-blue-600 focus:outline-blue-600 -outline-offset-1',
-                'border-b border-gray-300 dark:border-gray-700',
-                'dark:focus-within:border-blue-600 focus-within:border-blue-600',
-                'transition-all duration-200 ease-in-out',
-                'flex relative divide-x',
-              )}
+              className="flex items-stretch h-10 border border-gray-300 dark:border-gray-700 focus-within:border-blue-600 dark:focus-within:border-blue-600 transition-colors"
             >
-              <div className="w-48 relative">
+              <div className="w-52 shrink-0 border-r border-gray-300 dark:border-gray-700">
                 <Dropdown
-                  className="bg-white max-w-full dark:bg-gray-950 focus-within:border-none! focus-within:outline-hidden! border-none! outline-hidden"
+                  className="h-full bg-white dark:bg-gray-950 border-none! outline-hidden! focus-within:border-none! focus-within:outline-hidden! [&_input]:h-full [&>div]:h-full"
                   currentValue={country}
                   setValue={v => setCountry(v)}
                   allValue={filteredCountries}
@@ -330,10 +324,10 @@ export const PreviewPhoneAgent = () => {
                   )}
                 />
               </div>
-              <Input
+              <input
                 type="tel"
                 placeholder="Enter your phone number"
-                className="bg-white max-w-full dark:bg-gray-950 focus-within:border-none! focus-within:outline-hidden! border-none!"
+                className="flex-1 h-full px-4 text-sm bg-transparent outline-none text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
                 value={phoneNumber}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                   setPhoneNumber(e.target.value);
@@ -342,7 +336,9 @@ export const PreviewPhoneAgent = () => {
               />
             </div>
 
-            <ErrorMessage message={errorMessage} />
+            {errorMessage && (
+              <RedNoticeBlock>{errorMessage}</RedNoticeBlock>
+            )}
 
             {callStatus === 'success' && (
               <GreenNoticeBlock>
@@ -352,19 +348,15 @@ export const PreviewPhoneAgent = () => {
 
             <div className="flex items-center justify-between">
               {callStatus === 'success' ? (
-                <button
-                  type="button"
-                  onClick={handleReset}
-                  className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
-                >
+                <GhostButton size="sm" onClick={handleReset}>
                   Make another call
-                </button>
+                </GhostButton>
               ) : (
                 <span />
               )}
               <PrimaryButton
                 size="md"
-                renderIcon={ChevronRight}
+                renderIcon={PhoneOutgoing}
                 onClick={handleSubmit}
                 isLoading={callStatus === 'calling'}
               >
@@ -417,23 +409,17 @@ const PhoneAgentDebugger: React.FC<{
   return (
     <div className="flex flex-col h-full overflow-hidden text-sm">
       {/* Tab bar */}
-      <div className="shrink-0 flex items-center border-b border-gray-200 dark:border-gray-700">
-        {(['configuration', 'arguments'] as PhoneDebugTab[]).map(t => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setTab(t)}
-            className={cn(
-              'px-3 py-2.5 text-sm/6 font-medium border-b-2 transition-colors',
-              tab === t
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200',
-            )}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        selectedIndex={tab === 'configuration' ? 0 : 1}
+        onChange={({ selectedIndex }) =>
+          setTab(selectedIndex === 0 ? 'configuration' : 'arguments')
+        }
+      >
+        <TabList contained aria-label="Phone debugger tabs">
+          <Tab>Configuration</Tab>
+          <Tab>Arguments</Tab>
+        </TabList>
+      </Tabs>
 
       {/* ── configuration tab ── */}
       {tab === 'configuration' && (
