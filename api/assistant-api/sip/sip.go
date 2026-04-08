@@ -42,6 +42,7 @@ import (
 type SIPEngine struct {
 	cfg    *config.AssistantConfig
 	logger commons.Logger
+	mu     sync.RWMutex
 	server *sip_infra.Server
 
 	ctx    context.Context
@@ -135,6 +136,7 @@ func (m *SIPEngine) Connect(ctx context.Context) error {
 	server.SetOnInvite(m.onInvite)
 	server.SetOnBye(m.onBye)
 	server.SetOnCancel(m.onCancel)
+	server.SetOnError(m.onError)
 
 	if err := server.Start(); err != nil {
 		return fmt.Errorf("failed to start SIP server: %w", err)
@@ -166,6 +168,8 @@ func (m *SIPEngine) Connect(ctx context.Context) error {
 }
 
 func (m *SIPEngine) GetServer() *sip_infra.Server {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.server
 }
 
@@ -318,8 +322,61 @@ func (m *SIPEngine) onCancel(session *sip_infra.Session) error {
 	return nil
 }
 
+// onError handles SIP-level errors (e.g., outbound call failed before pipeline ran).
+// For outbound calls with a conversation_id in metadata, creates a short-lived observer
+// to persist the FAILED status metric so the conversation is not left indeterminate.
+func (m *SIPEngine) onError(session *sip_infra.Session, callErr error) {
+	callID := session.GetCallID()
+	m.logger.Warnw("SIP error", "call_id", callID, "error", callErr)
+
+	convIDVal, hasConv := session.GetMetadata("conversation_id")
+	if !hasConv {
+		return
+	}
+	convID, ok := convIDVal.(uint64)
+	if !ok || convID == 0 {
+		return
+	}
+
+	authVal, _ := session.GetMetadata("auth")
+	auth, _ := authVal.(types.SimplePrinciple)
+	if auth == nil {
+		return
+	}
+
+	assistantIDVal, _ := session.GetMetadata("assistant_id")
+	assistantID, _ := assistantIDVal.(uint64)
+
+	setup := &sip_pipeline.CallSetupResult{
+		AssistantID:    assistantID,
+		ConversationID: convID,
+	}
+	if auth.GetCurrentProjectId() != nil {
+		setup.ProjectID = *auth.GetCurrentProjectId()
+	}
+	if auth.GetCurrentOrganizationId() != nil {
+		setup.OrganizationID = *auth.GetCurrentOrganizationId()
+	}
+
+	observer := m.createObserver(m.ctx, setup, auth)
+	if observer != nil {
+		reason := "call_failed"
+		if callErr != nil {
+			reason = callErr.Error()
+		}
+		observer.EmitMetric(m.ctx, observe.CallStatusMetric("FAILED", reason))
+		observer.EmitEvent(m.ctx, observe.ComponentSIP, map[string]string{
+			observe.DataType:   observe.EventCallEnded,
+			observe.DataReason: reason,
+		})
+		observer.Shutdown(m.ctx)
+	}
+}
+
 func (m *SIPEngine) EndCall(callID string) error {
+	m.mu.RLock()
 	srv := m.server
+	m.mu.RUnlock()
 	if srv == nil {
 		return fmt.Errorf("SIP server not running")
 	}
@@ -331,8 +388,11 @@ func (m *SIPEngine) EndCall(callID string) error {
 }
 
 func (m *SIPEngine) GetActiveCalls() int {
-	if m.server != nil {
-		return m.server.SessionCount()
+	m.mu.RLock()
+	srv := m.server
+	m.mu.RUnlock()
+	if srv != nil {
+		return srv.SessionCount()
 	}
 	return 0
 }
@@ -344,9 +404,12 @@ func (m *SIPEngine) Stop() {
 	if m.cancel != nil {
 		m.cancel()
 	}
-	if m.server != nil {
-		m.server.Stop()
-		m.server = nil
+	m.mu.Lock()
+	srv := m.server
+	m.server = nil
+	m.mu.Unlock()
+	if srv != nil {
+		srv.Stop()
 	}
 	m.logger.Infow("SIP Manager stopped")
 }
@@ -667,8 +730,9 @@ func (m *SIPEngine) pipelineCallSetup(ctx context.Context, session *sip_infra.Se
 }
 
 // pipelineCallStart creates a streamer and talker, then blocks on talker.Talk
-// until the call ends.
-func (m *SIPEngine) pipelineCallStart(ctx context.Context, session *sip_infra.Session, setup *sip_pipeline.CallSetupResult, vaultCred interface{}, sipConfig *sip_infra.Config, direction string) {
+// until the call ends. Returns error for setup failures (streamer/talker creation);
+// nil means the call connected and Talk() completed normally or via disconnect.
+func (m *SIPEngine) pipelineCallStart(ctx context.Context, session *sip_infra.Session, setup *sip_pipeline.CallSetupResult, vaultCred interface{}, sipConfig *sip_infra.Config, direction string) error {
 	callID := session.GetCallID()
 	isOutbound := session.GetInfo().Direction == sip_infra.CallDirectionOutbound
 
@@ -683,7 +747,7 @@ func (m *SIPEngine) pipelineCallStart(ctx context.Context, session *sip_infra.Se
 
 	if session.IsEnded() {
 		m.logger.Warnw("Session already ended before call start", "call_id", callID)
-		return
+		return fmt.Errorf("session_ended_before_start")
 	}
 
 	authVal, _ := session.GetMetadata("auth")
@@ -708,7 +772,7 @@ func (m *SIPEngine) pipelineCallStart(ctx context.Context, session *sip_infra.Se
 	select {
 	case <-session.ByeReceived():
 		m.logger.Infow("BYE received before call start", "call_id", callID)
-		return
+		return fmt.Errorf("bye_before_start")
 	default:
 	}
 
@@ -727,14 +791,14 @@ func (m *SIPEngine) pipelineCallStart(ctx context.Context, session *sip_infra.Se
 		})
 	if err != nil {
 		m.logger.Error("Failed to create SIP streamer", "error", err, "call_id", callID)
-		return
+		return fmt.Errorf("streamer_failed: %w", err)
 	}
 
 	if session.IsEnded() {
 		if closeable, ok := streamer.(io.Closer); ok {
 			closeable.Close()
 		}
-		return
+		return fmt.Errorf("session_ended_after_streamer")
 	}
 
 	talker, err := internal_adapter.GetTalker(
@@ -746,7 +810,7 @@ func (m *SIPEngine) pipelineCallStart(ctx context.Context, session *sip_infra.Se
 			closeable.Close()
 		}
 		m.logger.Error("Failed to create SIP talker", "error", err, "call_id", callID)
-		return
+		return fmt.Errorf("talker_failed: %w", err)
 	}
 
 	m.logger.Infow("SIP call started",
@@ -760,10 +824,13 @@ func (m *SIPEngine) pipelineCallStart(ctx context.Context, session *sip_infra.Se
 	}
 
 	m.logger.Infow("SIP call ended", "call_id", callID)
+	return nil
 }
 
 func (m *SIPEngine) pipelineCallEnd(callID string) {
+	m.mu.RLock()
 	srv := m.server
+	m.mu.RUnlock()
 	if srv == nil {
 		return
 	}

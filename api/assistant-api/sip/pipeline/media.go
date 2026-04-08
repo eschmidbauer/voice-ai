@@ -83,9 +83,11 @@ func (d *Dispatcher) handleSessionEstablished(ctx context.Context, v sip_infra.S
 	go func() {
 		startTime := time.Now()
 		reason := "talk_completed"
+		status := "COMPLETED"
 		defer func() {
 			if r := recover(); r != nil {
 				reason = fmt.Sprintf("panic: %v", r)
+				status = "FAILED"
 				d.logger.Error("Pipeline: onCallStart panicked", "call_id", v.ID, "panic", r)
 			}
 
@@ -94,6 +96,7 @@ func (d *Dispatcher) handleSessionEstablished(ctx context.Context, v sip_infra.S
 					obs.DataType:   obs.EventCallEnded,
 					obs.DataReason: reason,
 				})
+				observer.EmitMetric(ctx, obs.CallStatusMetric(status, reason))
 				observer.Shutdown(ctx)
 			}
 			if hooks != nil {
@@ -106,8 +109,12 @@ func (d *Dispatcher) handleSessionEstablished(ctx context.Context, v sip_infra.S
 			d.logger.Infow("Pipeline: CallEnded",
 				"call_id", v.ID,
 				"duration", fmt.Sprintf("%dms", time.Since(startTime).Milliseconds()),
-				"reason", reason)
+				"reason", reason,
+				"status", status)
 		}()
-		d.onCallStart(ctx, v.Session, setup, v.VaultCredential, v.Config, string(v.Direction))
+		if err := d.onCallStart(ctx, v.Session, setup, v.VaultCredential, v.Config, string(v.Direction)); err != nil {
+			reason = err.Error()
+			status = "FAILED"
+		}
 	}()
 }

@@ -62,7 +62,7 @@ func TestHandleSessionEstablished_SetupErrorEndsSession(t *testing.T) {
 		OnCallSetup: func(ctx context.Context, session *sip_infra.Session, auth types.SimplePrinciple, assistantID uint64, conversationID uint64) (*CallSetupResult, error) {
 			return nil, fmt.Errorf("setup failed")
 		},
-		OnCallStart: func(ctx context.Context, session *sip_infra.Session, setup *CallSetupResult, vaultCred interface{}, sipConfig *sip_infra.Config, direction string) {},
+		OnCallStart: func(ctx context.Context, session *sip_infra.Session, setup *CallSetupResult, vaultCred interface{}, sipConfig *sip_infra.Config, direction string) error { return nil },
 	})
 
 	s := newPipelineTestSession(t)
@@ -88,7 +88,7 @@ func TestHandleSessionEstablished_PanicStillCallsOnCallEnd(t *testing.T) {
 		OnCallSetup: func(ctx context.Context, session *sip_infra.Session, auth types.SimplePrinciple, assistantID uint64, conversationID uint64) (*CallSetupResult, error) {
 			return &CallSetupResult{AssistantID: assistantID, ConversationID: conversationID}, nil
 		},
-		OnCallStart: func(ctx context.Context, session *sip_infra.Session, setup *CallSetupResult, vaultCred interface{}, sipConfig *sip_infra.Config, direction string) {
+		OnCallStart: func(ctx context.Context, session *sip_infra.Session, setup *CallSetupResult, vaultCred interface{}, sipConfig *sip_infra.Config, direction string) error {
 			panic("boom")
 		},
 		OnCallEnd: func(callID string) {
@@ -133,9 +133,10 @@ func TestDispatcherBackpressureAndTeardownStress(t *testing.T) {
 		OnCallSetup: func(ctx context.Context, session *sip_infra.Session, auth types.SimplePrinciple, assistantID uint64, conversationID uint64) (*CallSetupResult, error) {
 			return &CallSetupResult{AssistantID: assistantID, ConversationID: conversationID}, nil
 		},
-		OnCallStart: func(ctx context.Context, session *sip_infra.Session, setup *CallSetupResult, vaultCred interface{}, sipConfig *sip_infra.Config, direction string) {
+		OnCallStart: func(ctx context.Context, session *sip_infra.Session, setup *CallSetupResult, vaultCred interface{}, sipConfig *sip_infra.Config, direction string) error {
 			startCount.Add(1)
 			session.End()
+			return nil
 		},
 		OnCallEnd: func(callID string) {
 			endCount.Add(1)

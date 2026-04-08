@@ -6,6 +6,8 @@
 
 package observe
 
+import "github.com/rapidaai/protos"
+
 // =============================================================================
 // Event Components — the "who" that emitted the event
 // =============================================================================
@@ -171,3 +173,10 @@ const (
 	DataMessages   = "messages"
 	DataDigit      = "digit"
 )
+
+// CallStatusMetric returns a CONVERSATION_STATUS metric for call lifecycle tracking.
+func CallStatusMetric(status, reason string) []*protos.Metric {
+	return []*protos.Metric{
+		{Name: "status", Value: status, Description: reason},
+	}
+}

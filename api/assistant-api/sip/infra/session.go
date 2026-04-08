@@ -85,8 +85,10 @@ type Session struct {
 	// nil for outbound calls.
 	dialogServerSession *sipgo.DialogServerSession
 
-	// onDisconnect is called during Close/End to perform transport-level call teardown
-	// (e.g., sending SIP BYE). Set by the server that owns this session.
+	// onDisconnect is called via Disconnect() to perform transport-level call teardown
+	// (e.g., sending SIP BYE). NOT called by End() — the caller must invoke
+	// Disconnect() explicitly before End() if a SIP BYE should be sent.
+	// Set by the server that owns this session.
 	onDisconnect func(session *Session)
 }
 

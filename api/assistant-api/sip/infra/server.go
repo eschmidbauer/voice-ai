@@ -1759,6 +1759,7 @@ func (s *Server) handleOutboundDialog(session *Session, rtpHandler *RTPHandler, 
 				"error", err)
 		}
 		session.SetState(CallStateFailed)
+		s.notifyError(session, err)
 		s.removeSession(callID)
 		rtpHandler.Stop()
 		session.End()

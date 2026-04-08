@@ -66,7 +66,7 @@ type CallSetupResult struct {
 	OrganizationID      uint64
 }
 
-type OnCallStartFunc func(ctx context.Context, session *sip_infra.Session, setup *CallSetupResult, vaultCred interface{}, sipConfig *sip_infra.Config, direction string)
+type OnCallStartFunc func(ctx context.Context, session *sip_infra.Session, setup *CallSetupResult, vaultCred interface{}, sipConfig *sip_infra.Config, direction string) error
 
 type OnCallEndFunc func(callID string)
 

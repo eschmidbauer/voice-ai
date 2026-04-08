@@ -19,19 +19,18 @@ func (d *Dispatcher) handleRegisterRequested(ctx context.Context, v sip_infra.Re
 	}
 
 	if err := d.registrationClient.Register(ctx, v.Registration); err != nil {
-		d.OnPipeline(ctx, sip_infra.RegisterFailedPipeline{
-			ID:    v.ID,
-			DID:   v.DID,
-			Error: err,
-		})
+		// Log directly — do NOT call d.OnPipeline here. This handler runs on the
+		// control dispatcher goroutine, and RegisterFailed routes back to controlCh.
+		// If controlCh is full, the send blocks the same goroutine that drains it → deadlock.
+		d.logger.Warnw("Pipeline: RegisterFailed",
+			"did", v.DID,
+			"error", err)
 		return
 	}
 
-	d.OnPipeline(ctx, sip_infra.RegisterActivePipeline{
-		ID:          v.ID,
-		DID:         v.DID,
-		AssistantID: v.Registration.AssistantID,
-	})
+	d.logger.Infow("Pipeline: RegisterActive",
+		"did", v.DID,
+		"assistant_id", v.Registration.AssistantID)
 }
 
 func (d *Dispatcher) handleRegisterActive(ctx context.Context, v sip_infra.RegisterActivePipeline) {
