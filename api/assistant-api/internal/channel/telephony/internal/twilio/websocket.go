@@ -90,8 +90,8 @@ func (tws *twilioWebsocketStreamer) runWebSocketReader() {
 			}
 		case "stop":
 			tws.Logger.Info("Twilio stream stopped")
-			tws.Cancel()
 			tws.PushDisconnection(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER)
+			tws.Cancel()
 			return
 		default:
 			tws.Logger.Warn("Unhandled Twilio event", "event", mediaEvent.Event)

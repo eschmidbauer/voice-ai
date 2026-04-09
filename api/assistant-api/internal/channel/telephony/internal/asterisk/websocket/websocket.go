@@ -118,6 +118,7 @@ func (aws *asteriskWebsocketStreamer) runWebSocketReader() {
 			switch event.Event {
 			case "MEDIA_START":
 				aws.channelName = event.Channel
+				aws.ChannelUUID = event.Channel // propagate to base streamer for client.provider_call_id
 				aws.Logger.Info("Asterisk media started", "channel", aws.channelName, "optimal_frame_size", event.OptimalFrameSize)
 				if event.OptimalFrameSize > 0 {
 					aws.audioProcessor.SetOptimalFrameSize(event.OptimalFrameSize)
@@ -132,8 +133,8 @@ func (aws *asteriskWebsocketStreamer) runWebSocketReader() {
 			case "MEDIA_STOP":
 				aws.Logger.Info("Asterisk media stopped")
 				aws.stopAudioProcessing()
-				aws.Cancel()
 				aws.PushDisconnection(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER)
+				aws.Cancel()
 				return
 			case "MEDIA_XON":
 				aws.audioProcessor.SetXON()

@@ -92,8 +92,8 @@ func (exotel *exotelWebsocketStreamer) runWebSocketReader() {
 				Time: timestamppb.Now(),
 			})
 		case "stop":
-			exotel.Cancel()
 			exotel.PushDisconnection(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER)
+			exotel.Cancel()
 			return
 		default:
 			exotel.Logger.Warn("Unhandled Exotel event", "event", mediaEvent.Event)
