@@ -273,6 +273,28 @@ const (
 	EventTypeRTPStopped EventType = "rtp_stopped"
 )
 
+// =============================================================================
+// Bridge Transfer Constants
+// =============================================================================
+
+const (
+	// BridgeCallTimeout is the maximum time to wait for the transfer target to answer.
+	BridgeCallTimeout = 30 * time.Second
+
+	// BridgeSafetyTimeout tears down the bridge if neither side hangs up.
+	BridgeSafetyTimeout = 5 * time.Minute
+
+	// MetadataBridgeTransferTarget is the session metadata key set by the streamer
+	// when a TRANSFER_CONVERSATION directive is received. The engine reads this
+	// after Talk() returns to orchestrate the bridge.
+	MetadataBridgeTransferTarget = "bridge_transfer_target"
+
+	// MetadataBridgeTransferStatus is set by executeBridgeTransfer to indicate
+	// the outcome. Values: "completed" or "failed". Read by media.go to emit
+	// the correct transfer event.
+	MetadataBridgeTransferStatus = "bridge_transfer_status"
+)
+
 // Event represents events from SIP stack
 type Event struct {
 	Type      EventType              `json:"type"`

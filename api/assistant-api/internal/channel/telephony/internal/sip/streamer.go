@@ -22,7 +22,6 @@ import (
 	"github.com/rapidaai/pkg/commons"
 	rapida_utils "github.com/rapidaai/pkg/utils"
 	"github.com/rapidaai/protos"
-	"github.com/zaf/g711"
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
@@ -125,7 +124,7 @@ func (s *Streamer) forwardIncomingAudio() {
 				return
 			}
 			if codec := rtpHandler.GetCodec(); codec != nil && codec.Name == "PCMA" {
-				audioData = g711.Alaw2Ulaw(audioData)
+				audioData = internal_audio.AlawToUlaw(audioData)
 			}
 			var audioReq *protos.ConversationUserMessage
 			s.WithInputBuffer(func(buf *bytes.Buffer) {
@@ -167,21 +166,19 @@ func (s *Streamer) Send(response internal_type.Stream) error {
 		case protos.ConversationDirective_END_CONVERSATION:
 			return s.Close()
 		case protos.ConversationDirective_TRANSFER_CONVERSATION:
-			to := extractTransferTarget(data.GetArgs())
+			to := s.extractTransferTarget(data.GetArgs())
 			if to == "" {
 				s.Logger.Warnw("Transfer directive missing 'to' target")
 				return nil
 			}
-			s.Logger.Infow("Transferring SIP call", "to", to)
 			s.mu.RLock()
-			session := s.session
-			s.mu.RUnlock()
-			if session != nil {
-				if err := session.SendRefer(to); err != nil {
-					s.Logger.Errorw("SIP REFER failed", "error", err, "to", to)
-				}
+			if s.session != nil {
+				s.session.SetMetadata(sip_infra.MetadataBridgeTransferTarget, to)
 			}
-			return s.Close()
+			s.mu.RUnlock()
+			s.cancel()
+			s.BaseStreamer.Cancel()
+			return nil
 		}
 	}
 	return nil
@@ -205,7 +202,7 @@ func (s *Streamer) sendAudio(audioData []byte) error {
 	}
 
 	if codec != nil && codec.Name == "PCMA" {
-		outData = mulawToAlaw(outData)
+		outData = s.mulawToAlaw(outData)
 	}
 
 	s.BufferAndSendOutput(outData)
@@ -217,10 +214,7 @@ func (s *Streamer) runRTPWriter() {
 	const pacingInterval = 20 * time.Millisecond
 	ticker := time.NewTicker(pacingInterval)
 	defer ticker.Stop()
-
-	// pendingAudio holds 20ms PCM frames waiting for the next tick.
 	var pendingAudio [][]byte
-
 	for {
 		select {
 		case <-s.ctx.Done():
@@ -280,11 +274,18 @@ func (s *Streamer) Close() error {
 	s.BaseStreamer.Cancel()
 	s.ResetInputBuffer()
 
-	s.mu.Lock()
+	s.mu.RLock()
 	session := s.session
-	s.mu.Unlock()
+	s.mu.RUnlock()
 
+	// Bridge transfer owns the session — don't tear it down here
 	if session != nil {
+		if targetVal, ok := session.GetMetadata(sip_infra.MetadataBridgeTransferTarget); ok {
+			if target, ok := targetVal.(string); ok && target != "" {
+				s.Logger.Infow("SIP streamer closed (bridge transfer pending)")
+				return nil
+			}
+		}
 		session.End()
 	}
 
@@ -292,12 +293,12 @@ func (s *Streamer) Close() error {
 	return nil
 }
 
-func mulawToAlaw(in []byte) []byte {
-	return g711.EncodeAlaw(g711.DecodeUlaw(in))
+func (s *Streamer) mulawToAlaw(in []byte) []byte {
+	return internal_audio.UlawToAlaw(in)
 }
 
 // extractTransferTarget reads the "to" field from a ConversationDirective's Args map.
-func extractTransferTarget(args map[string]*anypb.Any) string {
+func (s *Streamer) extractTransferTarget(args map[string]*anypb.Any) string {
 	if args == nil {
 		return ""
 	}

@@ -451,6 +451,15 @@ func (s *Session) SendRefer(target string) error {
 	return fmt.Errorf("no dialog session available for REFER")
 }
 
+// ClearOnDisconnect removes the disconnect callback without invoking it.
+// Used when the remote party initiated teardown (BYE/CANCEL) so session.End()
+// does not send BYE back to a party that already knows the call is over.
+func (s *Session) ClearOnDisconnect() {
+	s.mu.Lock()
+	s.onDisconnect = nil
+	s.mu.Unlock()
+}
+
 // Disconnect performs transport-level call teardown by invoking the onDisconnect callback.
 // This sends a SIP BYE (or equivalent) to the remote party before local cleanup.
 // Safe to call multiple times — the callback is cleared after first invocation.

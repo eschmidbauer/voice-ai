@@ -124,8 +124,10 @@ func (d *Dispatcher) runSession(ctx context.Context, v SessionConnectedPipeline)
 
 	if observer != nil {
 		observer.EmitEvent(ctx, obs.ComponentTelephony, map[string]string{
-			obs.DataType:   obs.EventCallEnded,
-			obs.DataReason: reason,
+			obs.DataType:      obs.EventCallEnded,
+			obs.DataProvider:  cc.Provider,
+			obs.DataDirection: cc.Direction,
+			obs.DataReason:    reason,
 		})
 		observer.EmitMetric(ctx, obs.CallStatusMetric(status, reason))
 		observer.Shutdown(ctx)

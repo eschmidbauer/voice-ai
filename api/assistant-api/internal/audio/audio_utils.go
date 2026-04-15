@@ -8,6 +8,7 @@ package internal_audio
 import (
 	internal_type "github.com/rapidaai/api/assistant-api/internal/type"
 	"github.com/rapidaai/protos"
+	"github.com/zaf/g711"
 )
 
 // BytesPerSample returns the number of bytes per audio sample for the given
@@ -50,6 +51,16 @@ func FrameSize(cfg *protos.AudioConfig) int {
 		return 0
 	}
 	return BytesPerSample(cfg.GetAudioFormat()) * int(cfg.GetChannels())
+}
+
+// AlawToUlaw converts A-law (PCMA) encoded audio to µ-law (PCMU).
+func AlawToUlaw(data []byte) []byte {
+	return g711.Alaw2Ulaw(data)
+}
+
+// UlawToAlaw converts µ-law (PCMU) encoded audio to A-law (PCMA).
+func UlawToAlaw(data []byte) []byte {
+	return g711.EncodeAlaw(g711.DecodeUlaw(data))
 }
 
 // GetAudioInfo returns detailed information about raw audio data based on

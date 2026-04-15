@@ -92,6 +92,8 @@ func (d *Dispatcher) handleSessionEstablished(ctx context.Context, v sip_infra.S
 			obs.DataProvider:  "sip",
 			obs.DataDirection: string(v.Direction),
 		})
+		d.logger.Infow("Pipeline: call_started event emitted",
+			"call_id", v.ID, "direction", v.Direction)
 	}
 
 	go func() {
@@ -107,8 +109,10 @@ func (d *Dispatcher) handleSessionEstablished(ctx context.Context, v sip_infra.S
 
 			if observer != nil {
 				observer.EmitEvent(ctx, obs.ComponentTelephony, map[string]string{
-					obs.DataType:   obs.EventCallEnded,
-					obs.DataReason: reason,
+					obs.DataType:      obs.EventCallEnded,
+					obs.DataProvider:  "sip",
+					obs.DataDirection: string(v.Direction),
+					obs.DataReason:    reason,
 				})
 				observer.EmitMetric(ctx, obs.CallStatusMetric(status, reason))
 				observer.Shutdown(ctx)
@@ -129,6 +133,28 @@ func (d *Dispatcher) handleSessionEstablished(ctx context.Context, v sip_infra.S
 		if err := d.onCallStart(ctx, v.Session, setup, v.VaultCredential, v.Config, string(v.Direction)); err != nil {
 			reason = err.Error()
 			status = "FAILED"
+		}
+
+		// Check if the call ended due to a bridge transfer — emit transfer events
+		if observer != nil {
+			if targetVal, ok := v.Session.GetMetadata(sip_infra.MetadataBridgeTransferTarget); ok {
+				if target, ok := targetVal.(string); ok && target != "" {
+					transferStatus := "failed"
+					if statusVal, ok := v.Session.GetMetadata(sip_infra.MetadataBridgeTransferStatus); ok {
+						if s, ok := statusVal.(string); ok {
+							transferStatus = s
+						}
+					}
+					reason = "transfer_" + transferStatus
+					d.logger.Infow("Pipeline: bridge transfer",
+						"call_id", v.ID, "target", target, "status", transferStatus)
+					observer.EmitEvent(ctx, obs.ComponentTelephony, map[string]string{
+						obs.DataType:   obs.EventTransferRequested,
+						obs.DataTo:     target,
+						obs.DataReason: transferStatus,
+					})
+				}
+			}
 		}
 	}()
 }

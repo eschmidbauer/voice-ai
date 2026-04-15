@@ -991,8 +991,69 @@ func (m *SIPEngine) pipelineCallStart(ctx context.Context, session *sip_infra.Se
 		m.logger.Warnw("SIP talker exited", "error", err, "call_id", callID)
 	}
 
+	// Check if the Talk loop exited because of a bridge transfer request.
+	// The streamer sets this on the session when it receives the directive.
+	if targetVal, ok := session.GetMetadata(sip_infra.MetadataBridgeTransferTarget); ok {
+		if target, ok := targetVal.(string); ok && target != "" {
+			m.logger.Infow("Bridge transfer: Talk exited, initiating outbound call",
+				"call_id", callID, "target", target)
+			m.executeBridgeTransfer(session, sipConfig, target)
+			return nil
+		}
+	}
+
 	m.logger.Infow("SIP call ended", "call_id", callID)
 	return nil
+}
+
+// executeBridgeTransfer places an outbound call to the transfer target and bridges
+// RTP audio between the inbound and outbound sessions. Called from pipelineCallStart
+// when the streamer signals a TRANSFER_CONVERSATION directive via session metadata.
+// Blocks until one side hangs up.
+func (m *SIPEngine) executeBridgeTransfer(inboundSession *sip_infra.Session, sipConfig *sip_infra.Config, target string) {
+	callID := inboundSession.GetCallID()
+
+	cfg := sipConfig
+	if cfg == nil {
+		cfg = inboundSession.GetConfig()
+	}
+
+	// Determine the From URI for the outbound leg
+	fromURI := cfg.CallerID
+	if fromURI == "" {
+		fromURI = cfg.Username
+	}
+
+	bridgeCtx, bridgeCancel := context.WithTimeout(inboundSession.Context(), sip_infra.BridgeCallTimeout)
+	defer bridgeCancel()
+
+	m.mu.RLock()
+	srv := m.server
+	m.mu.RUnlock()
+
+	outboundSession, err := srv.MakeBridgeCall(bridgeCtx, cfg, target, fromURI)
+	if err != nil {
+		m.logger.Errorw("Bridge transfer: outbound call failed",
+			"call_id", callID, "target", target, "error", err)
+		inboundSession.SetMetadata(sip_infra.MetadataBridgeTransferStatus, "failed")
+		if !inboundSession.IsEnded() {
+			inboundSession.End()
+		}
+		return
+	}
+
+	m.logger.Infow("Bridge transfer: outbound answered, bridging audio",
+		"inbound_call_id", callID,
+		"outbound_call_id", outboundSession.GetCallID(),
+		"target", target)
+
+	inboundSession.SetMetadata(sip_infra.MetadataBridgeTransferStatus, "completed")
+
+	// BridgeTransfer blocks until one side hangs up, then tears down both sessions
+	if err := srv.BridgeTransfer(context.Background(), inboundSession, outboundSession); err != nil {
+		m.logger.Errorw("Bridge transfer: bridge failed",
+			"call_id", callID, "error", err)
+	}
 }
 
 func (m *SIPEngine) pipelineCallEnd(callID string) {
