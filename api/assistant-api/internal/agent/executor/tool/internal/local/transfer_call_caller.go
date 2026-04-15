@@ -18,13 +18,10 @@ import (
 
 type transferCallCaller struct {
 	toolCaller
-	transferTo string // preconfigured destination from tool options
+	transferTo string
 }
 
 func (tc *transferCallCaller) Call(ctx context.Context, contextID, toolId string, args map[string]interface{}, communication internal_type.Communication) internal_tool.ToolCallResult {
-	if tc.transferTo == "" {
-		return internal_tool.Result("Missing 'tool.transfer_to' configuration — configure the transfer destination in tool options.", false)
-	}
 	args["to"] = tc.transferTo
 	communication.OnPacket(ctx, internal_type.DirectivePacket{
 		Directive: protos.ConversationDirective_TRANSFER_CONVERSATION,
@@ -36,9 +33,10 @@ func (tc *transferCallCaller) Call(ctx context.Context, contextID, toolId string
 
 func NewTransferCallCaller(ctx context.Context, logger commons.Logger, toolOptions *internal_assistant_entity.AssistantTool, communication internal_type.Communication,
 ) (internal_tool.ToolCaller, error) {
-	var transferTo string
-	if opts := toolOptions.GetOptions(); opts != nil {
-		transferTo, _ = opts.GetString("tool.transfer_to")
+	opts := toolOptions.GetOptions()
+	transferTo, err := opts.GetString("tool.transfer_to")
+	if err != nil {
+		return nil, fmt.Errorf("tool.transfer_to is required: %v", err)
 	}
 	return &transferCallCaller{
 		toolCaller: toolCaller{

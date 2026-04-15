@@ -136,20 +136,14 @@ export const TransferCallToolDefintion = {
     'Call this function to transfer the ongoing call to the configured destination.',
   parameters: JSON.stringify(
     {
+      type: 'object',
       properties: {
-        to: {
-          description:
-            'The phone number or SIP URI to transfer the call to.',
-          type: 'string',
-        },
         reason: {
           description:
             "Brief reason for the transfer, such as 'customer requested human agent' or 'escalation needed'.",
           type: 'string',
         },
       },
-      required: ['to'],
-      type: 'object',
     },
     null,
     2,
