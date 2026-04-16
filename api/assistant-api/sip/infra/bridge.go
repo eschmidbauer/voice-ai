@@ -54,6 +54,13 @@ func (s *Server) MakeBridgeCall(ctx context.Context, cfg *Config, toURI, fromURI
 	if err != nil {
 		answered.rtpHandler.Stop()
 		s.rtpAllocator.Release(invite.rtpPort)
+		// Dialog is already confirmed (ACK sent) — send BYE before closing
+		byeCtx, byeCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer byeCancel()
+		if byeErr := invite.dialogSession.Bye(byeCtx); byeErr != nil {
+			s.logger.Warnw("MakeBridgeCall: failed to send BYE on setup failure",
+				"call_id", invite.callID, "error", byeErr)
+		}
 		invite.dialogSession.Close()
 		return nil, NewSIPError("MakeBridgeCall", invite.callID, "session creation failed", err)
 	}
