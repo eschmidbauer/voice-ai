@@ -426,6 +426,7 @@ func NormalizeDID(did string) string {
 }
 
 // ExtractDIDFromURI extracts the user part from a SIP URI as a phone number (DID).
+// Strips URI parameters (e.g. ;user=phone) that some providers append.
 func ExtractDIDFromURI(uri string) string {
 	raw := strings.TrimPrefix(strings.TrimPrefix(uri, "sip:"), "sips:")
 
@@ -434,6 +435,11 @@ func ExtractDIDFromURI(uri string) string {
 		return ""
 	}
 	user := parts[0]
+
+	// Strip URI parameters (e.g. "+15551234567;user=phone" → "+15551234567")
+	if idx := strings.IndexByte(user, ';'); idx >= 0 {
+		user = user[:idx]
+	}
 
 	// Skip credential pairs (assistantID:apiKey)
 	if strings.Contains(user, ":") {

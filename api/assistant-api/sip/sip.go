@@ -1047,13 +1047,14 @@ func (m *SIPEngine) executeBridgeTransfer(inboundSession *sip_infra.Session, sip
 		"outbound_call_id", outboundSession.GetCallID(),
 		"target", target)
 
-	inboundSession.SetMetadata(sip_infra.MetadataBridgeTransferStatus, "completed")
-
 	// BridgeTransfer blocks until one side hangs up, then tears down both sessions
 	if err := srv.BridgeTransfer(context.Background(), inboundSession, outboundSession); err != nil {
 		m.logger.Errorw("Bridge transfer: bridge failed",
 			"call_id", callID, "error", err)
+		inboundSession.SetMetadata(sip_infra.MetadataBridgeTransferStatus, "failed")
+		return
 	}
+	inboundSession.SetMetadata(sip_infra.MetadataBridgeTransferStatus, "completed")
 }
 
 func (m *SIPEngine) pipelineCallEnd(callID string) {
