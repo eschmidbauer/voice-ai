@@ -37,9 +37,9 @@ type SessionConfig struct {
 	CallID          string // Optional: if empty, a new UUID will be generated
 	Codec           *Codec
 	Logger          commons.Logger
-	Auth            types.SimplePrinciple                  // Authentication principal
-	Assistant       *internal_assistant_entity.Assistant    // Assistant entity
-	VaultCredential *protos.VaultCredential                 // Vault-resolved SIP provider credential
+	Auth            types.SimplePrinciple                // Authentication principal
+	Assistant       *internal_assistant_entity.Assistant // Assistant entity
+	VaultCredential *protos.VaultCredential              // Vault-resolved SIP provider credential
 }
 
 // Session manages a single SIP call session
@@ -69,9 +69,9 @@ type Session struct {
 	metadata map[string]interface{}
 
 	// Authentication and authorization context - available in all session methods
-	auth            types.SimplePrinciple                  // Authentication principal
-	assistant       *internal_assistant_entity.Assistant    // Assistant entity
-	vaultCredential *protos.VaultCredential                 // Vault-resolved SIP provider credential
+	auth            types.SimplePrinciple                // Authentication principal
+	assistant       *internal_assistant_entity.Assistant // Assistant entity
+	vaultCredential *protos.VaultCredential              // Vault-resolved SIP provider credential
 
 	// byeReceived is closed when a SIP BYE is received for this session.
 	// Used to notify startCall about early BYE without fully ending the session.
