@@ -125,11 +125,18 @@ func (d *Dispatcher) handleSessionEstablished(ctx context.Context, v sip_infra.S
 				d.onCallEnd(v.ID)
 			}
 
-			d.logger.Infow("Pipeline: CallEnded",
-				"call_id", v.ID,
-				"duration", fmt.Sprintf("%dms", time.Since(startTime).Milliseconds()),
-				"reason", reason,
-				"status", status)
+			duration := time.Since(startTime)
+			d.OnPipeline(ctx, sip_infra.CallEndedPipeline{
+				ID:       v.ID,
+				Duration: duration,
+				Reason:   reason,
+			})
+			if status == "FAILED" {
+				d.OnPipeline(ctx, sip_infra.CallFailedPipeline{
+					ID:    v.ID,
+					Error: fmt.Errorf("%s", reason),
+				})
+			}
 		}()
 		if err := d.onCallStart(ctx, v.Session, setup, v.VaultCredential, v.Config, string(v.Direction)); err != nil {
 			reason = err.Error()

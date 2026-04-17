@@ -6,6 +6,9 @@
 package internal_audio
 
 import (
+	"encoding/binary"
+	"math"
+
 	internal_type "github.com/rapidaai/api/assistant-api/internal/type"
 	"github.com/rapidaai/protos"
 	"github.com/zaf/g711"
@@ -61,6 +64,45 @@ func AlawToUlaw(data []byte) []byte {
 // UlawToAlaw converts µ-law (PCMU) encoded audio to A-law (PCMA).
 func UlawToAlaw(data []byte) []byte {
 	return g711.EncodeAlaw(g711.DecodeUlaw(data))
+}
+
+// EncodeUlawSample encodes a single 16-bit PCM sample to µ-law.
+func EncodeUlawSample(sample int16) byte {
+	return g711.EncodeUlawFrame(sample)
+}
+
+// GenerateRingbackFrame generates a single 20ms frame of ringback tone as
+// 16kHz linear16 PCM (little-endian). The sampleOffset tracks position within
+// the ringback cycle (1s tone on, 3s silence). Returns the frame and the
+// updated offset for the next call.
+//
+// Usage: call repeatedly with the returned offset to produce continuous ringback.
+// The caller sends each frame through the normal TTS audio path (sendAudio).
+func GenerateRingbackFrame(sampleOffset int) ([]byte, int) {
+	const (
+		sampleRate   = 16000
+		frameMs      = 20
+		toneHz       = 425
+		amplitude    = 8000.0
+		onDurationMs = 1000
+		cycleDurationMs = 4000 // 1s tone + 3s silence
+	)
+
+	samplesPerFrame := sampleRate * frameMs / 1000       // 320 samples
+	onSamples := sampleRate * onDurationMs / 1000         // 16000
+	cycleSamples := sampleRate * cycleDurationMs / 1000   // 64000
+
+	frame := make([]byte, samplesPerFrame*2) // 2 bytes per sample (int16 LE)
+	for i := 0; i < samplesPerFrame; i++ {
+		pos := (sampleOffset + i) % cycleSamples
+		var sample int16
+		if pos < onSamples {
+			sample = int16(amplitude * math.Sin(2*math.Pi*float64(toneHz)*float64(pos)/float64(sampleRate)))
+		}
+		binary.LittleEndian.PutUint16(frame[i*2:], uint16(sample))
+	}
+
+	return frame, sampleOffset + samplesPerFrame
 }
 
 // GetAudioInfo returns detailed information about raw audio data based on

@@ -40,6 +40,10 @@ type Streamer struct {
 	session    *sip_infra.Session
 	rtpHandler *sip_infra.RTPHandler
 
+	transferring        atomic.Bool
+	ringbackCancel      context.CancelFunc
+	onTransferInitiated func(target string)
+
 	ctx    context.Context
 	cancel context.CancelFunc
 }
@@ -123,6 +127,9 @@ func (s *Streamer) forwardIncomingAudio() {
 			if !ok {
 				return
 			}
+			if s.transferring.Load() {
+				continue
+			}
 			if codec := rtpHandler.GetCodec(); codec != nil && codec.Name == "PCMA" {
 				audioData = internal_audio.AlawToUlaw(audioData)
 			}
@@ -176,8 +183,7 @@ func (s *Streamer) Send(response internal_type.Stream) error {
 				s.session.SetMetadata(sip_infra.MetadataBridgeTransferTarget, to)
 			}
 			s.mu.RUnlock()
-			s.cancel()
-			s.BaseStreamer.Cancel()
+			s.EnterTransferMode(to)
 			return nil
 		}
 	}
@@ -262,9 +268,81 @@ func (s *Streamer) handleInterruption() error {
 	return nil
 }
 
-// Close signals the session to tear down. session.End() owns all side effects:
-// BYE (via onDisconnect callback), RTP stop, context cancel, state transition.
-// Streamer only cancels its own local context and resets buffers.
+func (s *Streamer) EnterTransferMode(target string) {
+	if s.transferring.Load() {
+		return
+	}
+	s.transferring.Store(true)
+	s.ClearOutputBuffer()
+
+	s.mu.RLock()
+	session := s.session
+	callback := s.onTransferInitiated
+	s.mu.RUnlock()
+
+	if session != nil {
+		session.SetState(sip_infra.CallStateTransferring)
+	}
+
+	ringbackCtx, ringbackCancel := context.WithCancel(s.ctx)
+	s.mu.Lock()
+	s.ringbackCancel = ringbackCancel
+	s.mu.Unlock()
+	go s.playRingback(ringbackCtx)
+
+	if callback != nil {
+		callback(target)
+	}
+}
+
+func (s *Streamer) ExitTransferMode() {
+	if !s.transferring.Load() {
+		return
+	}
+
+	s.mu.RLock()
+	cancelFn := s.ringbackCancel
+	session := s.session
+	s.mu.RUnlock()
+
+	if cancelFn != nil {
+		cancelFn()
+	}
+	if session != nil {
+		session.SetState(sip_infra.CallStateConnected)
+	}
+
+	s.transferring.Store(false)
+	s.Logger.Infow("Transfer mode: exited, AI resuming")
+}
+
+func (s *Streamer) IsTransferring() bool {
+	return s.transferring.Load()
+}
+
+func (s *Streamer) SetOnTransferInitiated(fn func(target string)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.onTransferInitiated = fn
+}
+
+func (s *Streamer) playRingback(ctx context.Context) {
+	ticker := time.NewTicker(20 * time.Millisecond)
+	defer ticker.Stop()
+
+	offset := 0
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			var frame []byte
+			frame, offset = internal_audio.GenerateRingbackFrame(offset)
+			_ = s.sendAudio(frame)
+		}
+	}
+}
+
 func (s *Streamer) Close() error {
 	if !s.closed.CompareAndSwap(false, true) {
 		return nil
@@ -278,14 +356,11 @@ func (s *Streamer) Close() error {
 	session := s.session
 	s.mu.RUnlock()
 
-	// Bridge transfer owns the session — don't tear it down here
+	if s.transferring.Load() {
+		return nil
+	}
+
 	if session != nil {
-		if targetVal, ok := session.GetMetadata(sip_infra.MetadataBridgeTransferTarget); ok {
-			if target, ok := targetVal.(string); ok && target != "" {
-				s.Logger.Infow("SIP streamer closed (bridge transfer pending)")
-				return nil
-			}
-		}
 		session.End()
 	}
 

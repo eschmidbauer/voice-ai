@@ -120,7 +120,9 @@ func (d *Dispatcher) OnPipeline(ctx context.Context, stages ...sip_infra.Pipelin
 		switch s.(type) {
 		case sip_infra.ByeReceivedPipeline,
 			sip_infra.CancelReceivedPipeline,
-			sip_infra.TransferRequestedPipeline,
+			sip_infra.TransferInitiatedPipeline,
+			sip_infra.TransferConnectedPipeline,
+			sip_infra.TransferFailedPipeline,
 			sip_infra.CallEndedPipeline,
 			sip_infra.CallFailedPipeline:
 			d.signalCh <- e
@@ -172,8 +174,12 @@ func (d *Dispatcher) dispatch(ctx context.Context, p sip_infra.Pipeline) {
 		d.handleByeReceived(ctx, v)
 	case sip_infra.CancelReceivedPipeline:
 		d.handleCancelReceived(ctx, v)
-	case sip_infra.TransferRequestedPipeline:
-		d.handleTransferRequested(ctx, v)
+	case sip_infra.TransferInitiatedPipeline:
+		d.handleTransferInitiated(ctx, v)
+	case sip_infra.TransferConnectedPipeline:
+		d.handleTransferConnected(ctx, v)
+	case sip_infra.TransferFailedPipeline:
+		d.handleTransferFailed(ctx, v)
 	case sip_infra.CallEndedPipeline:
 		d.handleCallEnded(ctx, v)
 	case sip_infra.CallFailedPipeline:

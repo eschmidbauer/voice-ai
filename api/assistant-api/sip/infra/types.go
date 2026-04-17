@@ -7,7 +7,6 @@
 package sip_infra
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,8 +15,6 @@ import (
 	"strings"
 	"time"
 
-	internal_type "github.com/rapidaai/api/assistant-api/internal/type"
-	"github.com/rapidaai/pkg/types"
 	"github.com/rapidaai/protos"
 )
 
@@ -196,13 +193,15 @@ func (c *Config) GetListenAddr() string {
 type CallState string
 
 const (
-	CallStateInitializing CallState = "initializing"
-	CallStateRinging      CallState = "ringing"
-	CallStateConnected    CallState = "connected"
-	CallStateOnHold       CallState = "on_hold"
-	CallStateEnding       CallState = "ending"
-	CallStateEnded        CallState = "ended"
-	CallStateFailed       CallState = "failed"
+	CallStateInitializing    CallState = "initializing"
+	CallStateRinging         CallState = "ringing"
+	CallStateConnected       CallState = "connected"
+	CallStateOnHold          CallState = "on_hold"
+	CallStateTransferring    CallState = "transferring"
+	CallStateBridgeConnected CallState = "bridge_connected"
+	CallStateEnding          CallState = "ending"
+	CallStateEnded           CallState = "ended"
+	CallStateFailed          CallState = "failed"
 )
 
 // String returns the string representation of the call state
@@ -217,7 +216,7 @@ func (s CallState) IsTerminal() bool {
 
 // IsActive returns true if the call is in an active state
 func (s CallState) IsActive() bool {
-	return s == CallStateConnected || s == CallStateRinging || s == CallStateOnHold
+	return s == CallStateConnected || s == CallStateRinging || s == CallStateOnHold || s == CallStateTransferring || s == CallStateBridgeConnected
 }
 
 // CallDirection represents the direction of the call
@@ -327,17 +326,6 @@ type RTPStats struct {
 	BytesReceived   uint64        `json:"bytes_received"`
 	PacketsLost     uint64        `json:"packets_lost"`
 	Jitter          time.Duration `json:"jitter"`
-}
-
-// SIPSession represents an active SIP call session (used by SIP manager)
-type SIPSession struct {
-	CallID      string
-	AssistantID uint64
-	TenantID    string
-	Auth        types.SimplePrinciple
-	Config      *Config
-	Streamer    internal_type.Streamer
-	Cancel      context.CancelFunc
 }
 
 // ParseConfigFromVault extracts SIP provider credentials from a vault credential.

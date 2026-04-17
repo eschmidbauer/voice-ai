@@ -10,13 +10,11 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/emiago/sipgo"
-	"github.com/emiago/sipgo/sip"
 	"github.com/google/uuid"
 	internal_assistant_entity "github.com/rapidaai/api/assistant-api/internal/entity/assistants"
 	"github.com/rapidaai/pkg/commons"
@@ -229,11 +227,12 @@ func (s *Session) isValidTransition(from, to CallState) bool {
 
 	// Define valid transitions
 	validTransitions := map[CallState][]CallState{
-		CallStateInitializing: {CallStateRinging, CallStateConnected},
-		CallStateRinging:      {CallStateConnected, CallStateEnding},
-		CallStateConnected:    {CallStateOnHold, CallStateEnding},
-		CallStateOnHold:       {CallStateConnected, CallStateEnding},
-		CallStateEnding:       {CallStateEnded},
+		CallStateInitializing:    {CallStateRinging, CallStateConnected},
+		CallStateRinging:         {CallStateConnected, CallStateEnding},
+		CallStateConnected:       {CallStateOnHold, CallStateTransferring, CallStateEnding},
+		CallStateOnHold:          {CallStateConnected, CallStateEnding},
+		CallStateTransferring:    {CallStateConnected, CallStateBridgeConnected, CallStateEnding},
+		CallStateBridgeConnected: {CallStateEnding},
 	}
 
 	allowed, exists := validTransitions[from]
@@ -409,51 +408,6 @@ func (s *Session) SetOnDisconnect(fn func(session *Session)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.onDisconnect = fn
-}
-
-// SendRefer sends a SIP REFER to transfer the call to another target.
-// The target can be a phone number (+15551234567) or SIP URI (sip:user@domain).
-// Uses the dialog session (client or server) to send an in-dialog REFER.
-func (s *Session) SendRefer(target string) error {
-	s.mu.RLock()
-	logger := s.logger
-	callID := s.info.CallID
-	s.mu.RUnlock()
-
-	if logger != nil {
-		logger.Infow("Sending SIP REFER", "call_id", callID, "refer_to", target)
-	}
-
-	// Build Refer-To URI
-	referTo := target
-	if !strings.HasPrefix(referTo, "sip:") && !strings.HasPrefix(referTo, "sips:") {
-		referTo = "sip:" + strings.TrimPrefix(target, "+") + "@" + s.config.Server
-	}
-
-	// Try client dialog (outbound calls) first, then server dialog (inbound)
-	if ds := s.GetDialogClientSession(); ds != nil {
-		req := sip.NewRequest(sip.REFER, ds.InviteRequest.Recipient)
-		req.AppendHeader(sip.NewHeader("Refer-To", "<"+referTo+">"))
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if _, err := ds.Do(ctx, req); err != nil {
-			return fmt.Errorf("REFER via client dialog failed: %w", err)
-		}
-		return nil
-	}
-
-	if ds := s.GetDialogServerSession(); ds != nil {
-		req := sip.NewRequest(sip.REFER, sip.Uri{Host: s.config.Server, Port: s.config.Port})
-		req.AppendHeader(sip.NewHeader("Refer-To", "<"+referTo+">"))
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if _, err := ds.Do(ctx, req); err != nil {
-			return fmt.Errorf("REFER via server dialog failed: %w", err)
-		}
-		return nil
-	}
-
-	return fmt.Errorf("no dialog session available for REFER")
 }
 
 // ClearOnDisconnect removes the disconnect callback without invoking it.

@@ -297,64 +297,29 @@ func (m *SIPEngine) onInvite(session *sip_infra.Session, fromURI, toURI string) 
 
 func (m *SIPEngine) onBye(session *sip_infra.Session) error {
 	m.dispatcher.OnPipeline(m.ctx, sip_infra.ByeReceivedPipeline{
-		ID: session.GetInfo().CallID,
+		ID:      session.GetInfo().CallID,
+		Session: session,
 	})
 	return nil
 }
 
 func (m *SIPEngine) onCancel(session *sip_infra.Session) error {
 	m.dispatcher.OnPipeline(m.ctx, sip_infra.CancelReceivedPipeline{
-		ID: session.GetInfo().CallID,
+		ID:      session.GetInfo().CallID,
+		Session: session,
 	})
 	return nil
 }
 
-// onError handles SIP-level errors (e.g., outbound call failed before pipeline ran).
-// For outbound calls with a conversation_id in metadata, creates a short-lived observer
-// to persist the FAILED status metric so the conversation is not left indeterminate.
+// onError handles SIP-level errors by emitting a CallFailedPipeline event.
+// The pipeline handler (signal.go) creates the observer and persists metrics.
 func (m *SIPEngine) onError(session *sip_infra.Session, callErr error) {
-	callID := session.GetCallID()
-	m.logger.Warnw("SIP error", "call_id", callID, "error", callErr)
-
-	convID := session.GetConversationID()
-	if convID == 0 {
-		return
-	}
-
-	auth := session.GetAuth()
-	if auth == nil {
-		return
-	}
-
-	var assistantID uint64
-	if assistant := session.GetAssistant(); assistant != nil {
-		assistantID = assistant.Id
-	}
-
-	setup := &sip_pipeline.CallSetupResult{
-		AssistantID:    assistantID,
-		ConversationID: convID,
-	}
-	if auth.GetCurrentProjectId() != nil {
-		setup.ProjectID = *auth.GetCurrentProjectId()
-	}
-	if auth.GetCurrentOrganizationId() != nil {
-		setup.OrganizationID = *auth.GetCurrentOrganizationId()
-	}
-
-	observer := m.createObserver(m.ctx, setup, auth)
-	if observer != nil {
-		reason := "call_failed"
-		if callErr != nil {
-			reason = callErr.Error()
-		}
-		observer.EmitMetric(m.ctx, observe.CallStatusMetric("FAILED", reason))
-		observer.EmitEvent(m.ctx, observe.ComponentTelephony, map[string]string{
-			observe.DataType:   observe.EventCallEnded,
-			observe.DataReason: reason,
-		})
-		observer.Shutdown(m.ctx)
-	}
+	m.logger.Warnw("SIP error", "call_id", session.GetCallID(), "error", callErr)
+	m.dispatcher.OnPipeline(m.ctx, sip_infra.CallFailedPipeline{
+		ID:      session.GetCallID(),
+		Session: session,
+		Error:   callErr,
+	})
 }
 
 func (m *SIPEngine) EndCall(callID string) error {
@@ -949,6 +914,23 @@ func (m *SIPEngine) pipelineCallStart(ctx context.Context, session *sip_infra.Se
 		return fmt.Errorf("session_ended_after_streamer")
 	}
 
+	type transferable interface {
+		SetOnTransferInitiated(func(string))
+		ExitTransferMode()
+	}
+	if ts, ok := streamer.(transferable); ok {
+		ts.SetOnTransferInitiated(func(target string) {
+			m.dispatcher.OnPipeline(m.ctx, sip_infra.TransferInitiatedPipeline{
+				ID:        callID,
+				Session:   session,
+				TargetURI: target,
+				Config:    sipConfig,
+				OnConnected: func() { cancel() },
+				OnFailed:    func() { ts.ExitTransferMode() },
+			})
+		})
+	}
+
 	talker, err := internal_adapter.GetTalker(
 		utils.PhoneCall, callCtx, m.cfg, m.logger,
 		m.postgres, m.opensearch, m.redis, m.storage, streamer,
@@ -971,75 +953,8 @@ func (m *SIPEngine) pipelineCallStart(ctx context.Context, session *sip_infra.Se
 		m.logger.Warnw("SIP talker exited", "error", err, "call_id", callID)
 	}
 
-	// Check if the Talk loop exited because of a bridge transfer request.
-	// The streamer sets this on the session when it receives the directive.
-	if targetVal, ok := session.GetMetadata(sip_infra.MetadataBridgeTransferTarget); ok {
-		if target, ok := targetVal.(string); ok && target != "" {
-			m.logger.Infow("Bridge transfer: Talk exited, initiating outbound call",
-				"call_id", callID, "target", target)
-			m.executeBridgeTransfer(session, sipConfig, target)
-			return nil
-		}
-	}
-
 	m.logger.Infow("SIP call ended", "call_id", callID)
 	return nil
-}
-
-// executeBridgeTransfer places an outbound call to the transfer target and bridges
-// RTP audio between the inbound and outbound sessions. Called from pipelineCallStart
-// when the streamer signals a TRANSFER_CONVERSATION directive via session metadata.
-// Blocks until one side hangs up.
-func (m *SIPEngine) executeBridgeTransfer(inboundSession *sip_infra.Session, sipConfig *sip_infra.Config, target string) {
-	callID := inboundSession.GetCallID()
-
-	cfg := sipConfig
-	if cfg == nil {
-		cfg = inboundSession.GetConfig()
-	}
-
-	// cfg.CallerID is the assistant's DID — set by fetchSIPConfigAndVaultCredential
-	// for inbound calls. For outbound calls it may be empty (telephony.parseConfig
-	// doesn't set it), so resolve from the assistant's phone deployment.
-	if cfg.CallerID == "" {
-		if assistant := inboundSession.GetAssistant(); assistant != nil && assistant.AssistantPhoneDeployment != nil {
-			if did, err := assistant.AssistantPhoneDeployment.GetOptions().GetString("phone"); err == nil && did != "" {
-				cfg.CallerID = strings.TrimPrefix(did, "+")
-			}
-		}
-	}
-
-	bridgeCtx, bridgeCancel := context.WithTimeout(inboundSession.Context(), sip_infra.BridgeCallTimeout)
-	defer bridgeCancel()
-
-	m.mu.RLock()
-	srv := m.server
-	m.mu.RUnlock()
-
-	outboundSession, err := srv.MakeBridgeCall(bridgeCtx, cfg, target, cfg.CallerID)
-	if err != nil {
-		m.logger.Errorw("Bridge transfer: outbound call failed",
-			"call_id", callID, "target", target, "error", err)
-		inboundSession.SetMetadata(sip_infra.MetadataBridgeTransferStatus, "failed")
-		if !inboundSession.IsEnded() {
-			inboundSession.End()
-		}
-		return
-	}
-
-	m.logger.Infow("Bridge transfer: outbound answered, bridging audio",
-		"inbound_call_id", callID,
-		"outbound_call_id", outboundSession.GetCallID(),
-		"target", target)
-
-	// BridgeTransfer blocks until one side hangs up, then tears down both sessions
-	if err := srv.BridgeTransfer(context.Background(), inboundSession, outboundSession); err != nil {
-		m.logger.Errorw("Bridge transfer: bridge failed",
-			"call_id", callID, "error", err)
-		inboundSession.SetMetadata(sip_infra.MetadataBridgeTransferStatus, "failed")
-		return
-	}
-	inboundSession.SetMetadata(sip_infra.MetadataBridgeTransferStatus, "completed")
 }
 
 func (m *SIPEngine) pipelineCallEnd(callID string) {
@@ -1049,9 +964,17 @@ func (m *SIPEngine) pipelineCallEnd(callID string) {
 	if srv == nil {
 		return
 	}
-	if session, ok := srv.GetSession(callID); ok {
-		session.End()
+	session, ok := srv.GetSession(callID)
+	if !ok {
+		return
 	}
+	// Don't end the session if a bridge transfer is active — the pipeline
+	// transfer handler owns the session lifecycle during bridging.
+	if session.GetState() == sip_infra.CallStateTransferring || session.GetState() == sip_infra.CallStateBridgeConnected {
+		m.logger.Infow("pipelineCallEnd: skipping session.End — transfer active", "call_id", callID)
+		return
+	}
+	session.End()
 }
 
 func (m *SIPEngine) createObserver(ctx context.Context, setup *sip_pipeline.CallSetupResult, auth types.SimplePrinciple) *observe.ConversationObserver {
