@@ -37,6 +37,7 @@ import {
   ValidateTextToSpeechIfInvalid,
 } from '@/app/components/providers/text-to-speech/provider';
 import {
+  GetDefaultTelephonyConfigIfInvalid,
   ValidateTelephonyOptions,
 } from '@/app/components/providers/telephony';
 
@@ -207,9 +208,13 @@ export function useDeploymentSectionEdit(
 
           let fetchedTelephony: TelephonyConfig | undefined;
           if (type === 'phone' && deployment.getPhoneprovidername?.()) {
+            const provider = deployment.getPhoneprovidername() || '';
             fetchedTelephony = {
-              provider: deployment.getPhoneprovidername() || '',
-              parameters: deployment.getPhoneoptionsList?.() || [],
+              provider,
+              parameters: GetDefaultTelephonyConfigIfInvalid(
+                provider,
+                deployment.getPhoneoptionsList?.() || [],
+              ),
             };
             setTelephonyConfig(fetchedTelephony);
           }
@@ -250,10 +255,14 @@ export function useDeploymentSectionEdit(
     setEditError('');
 
     if (section === 'telephony') {
+      const resolvedTelephonyParameters = GetDefaultTelephonyConfigIfInvalid(
+        telephonyConfig.provider,
+        telephonyConfig.parameters,
+      );
       if (
         !ValidateTelephonyOptions(
           telephonyConfig.provider,
-          telephonyConfig.parameters,
+          resolvedTelephonyParameters,
         )
       ) {
         setIsSaving(false);
@@ -382,7 +391,12 @@ export function useDeploymentSectionEdit(
         section === 'telephony' ? telephonyConfig : existingConfig.telephony;
       if (resolvedTelephony) {
         d.setPhoneprovidername(resolvedTelephony.provider);
-        d.setPhoneoptionsList(resolvedTelephony.parameters);
+        d.setPhoneoptionsList(
+          GetDefaultTelephonyConfigIfInvalid(
+            resolvedTelephony.provider,
+            resolvedTelephony.parameters,
+          ),
+        );
       }
       req.setPhone(d);
     }

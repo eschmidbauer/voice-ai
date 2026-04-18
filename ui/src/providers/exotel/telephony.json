@@ -1,0 +1,25 @@
+{
+  "telephony": {
+    "parameters": [
+      {
+        "key": "phone",
+        "label": "Phone",
+        "type": "input",
+        "required": true,
+        "default": "",
+        "placeholder": "Enter exotel phone number",
+        "helpText": "Phone to receive inbound or make outbound call.",
+        "errorMessage": "Please provide a valid Exotel phone number."
+      },
+      {
+        "key": "app_id",
+        "label": "App ID",
+        "type": "input",
+        "required": false,
+        "default": "",
+        "placeholder": "Enter exotel applet app_id",
+        "helpText": "Exotel app_id is the identifier of the flow (or applet) that you want to connect to."
+      }
+    ]
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "telephony": {
+    "parameters": [
+      {
+        "key": "context",
+        "label": "Context",
+        "type": "input",
+        "required": true,
+        "default": "",
+        "placeholder": "e.g., internal",
+        "helpText": "Dialplan context for routing calls.",
+        "errorMessage": "Please provide a valid Asterisk context."
+      },
+      {
+        "key": "extension",
+        "label": "Extension",
+        "type": "input",
+        "required": true,
+        "default": "",
+        "placeholder": "e.g., 1002",
+        "helpText": "Extension number for this assistant.",
+        "errorMessage": "Please provide a valid Asterisk extension."
+      },
+      {
+        "key": "phone",
+        "label": "Caller ID",
+        "type": "input",
+        "required": true,
+        "default": "",
+        "placeholder": "e.g., +15559876543",
+        "helpText": "Caller ID for outbound calls.",
+        "errorMessage": "Please provide a valid caller ID."
+      }
+    ]
+  }
+}

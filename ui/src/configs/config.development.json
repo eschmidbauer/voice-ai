@@ -32,7 +32,7 @@
         },
         "features": {
             "knowledge": false,
-            "telemetry": false
+            "telemetry": true
         }
     }
 }

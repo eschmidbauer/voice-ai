@@ -214,6 +214,8 @@ jest.mock('@/app/pages/assistant/actions/create-deployment/commons/configure-aud
 
 jest.mock('@/app/components/providers/telephony', () => ({
   TelephonyProvider: () => <div>telephony</div>,
+  GetDefaultTelephonyConfigIfInvalid: (_provider: string, parameters: any[]) =>
+    parameters || [],
   ValidateTelephonyOptions: (...args: any[]) =>
     mockValidateTelephonyOptions(...args),
 }));

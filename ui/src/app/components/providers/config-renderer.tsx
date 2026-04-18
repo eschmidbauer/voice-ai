@@ -34,7 +34,15 @@ import { getDefaultsFromConfig } from '@/providers/config-defaults';
 
 export const ConfigRenderer: React.FC<{
   provider: string;
-  category: 'stt' | 'tts' | 'text' | 'vad' | 'eos' | 'noise' | 'telemetry';
+  category:
+    | 'stt'
+    | 'tts'
+    | 'text'
+    | 'telephony'
+    | 'vad'
+    | 'eos'
+    | 'noise'
+    | 'telemetry';
   config: CategoryConfig;
   parameters: Metadata[] | null;
   onParameterChange: (parameters: Metadata[]) => void;

@@ -1,49 +1,59 @@
 import { Metadata, VaultCredential } from '@rapidaai/react';
-import {
-  ConfigureExotelTelephony,
-  ValidateExotelTelephonyOptions,
-} from '@/app/components/providers/telephony/exotel';
-import {
-  ConfigureTwilioTelephony,
-  ValidateTwilioTelephonyOptions,
-} from '@/app/components/providers/telephony/twilio';
-import {
-  ConfigureVonageTelephony,
-  ValidateVonageTelephonyOptions,
-} from '@/app/components/providers/telephony/vonage';
-import {
-  ConfigureSIPTelephony,
-  ValidateSIPTelephonyOptions,
-} from '@/app/components/providers/telephony/sip';
-import {
-  ConfigureAsteriskTelephony,
-  ValidateAsteriskTelephonyOptions,
-} from '@/app/components/providers/telephony/asterisk';
 import { CredentialDropdown } from '@/app/components/dropdown/credential-dropdown';
 import { useCallback } from 'react';
 import { ProviderComponentProps } from '@/app/components/providers';
 import { TELEPHONY_PROVIDER } from '@/providers';
 import { Dropdown } from '@carbon/react';
 import { Stack } from '@/app/components/carbon/form';
+import { loadProviderConfig } from '@/providers/config-loader';
+import { getDefaultsFromConfig, validateFromConfig } from '@/providers/config-defaults';
+import { ConfigRenderer } from '@/app/components/providers/config-renderer';
+
+const VONAGE_PHONE_REGEX = /^\+?[1-9]\d{1,14}$/;
+
+export const GetDefaultTelephonyConfigIfInvalid = (
+  provider: string,
+  parameters: Metadata[],
+): Metadata[] => {
+  const config = loadProviderConfig(provider);
+  if (!config?.telephony) return [];
+  const normalized = getDefaultsFromConfig(
+    config,
+    'telephony',
+    parameters,
+    provider,
+    { includeCredential: false },
+  );
+  const credentialValue =
+    parameters.find(p => p.getKey() === 'rapida.credential_id')?.getValue() ??
+    '';
+  const credential = new Metadata();
+  credential.setKey('rapida.credential_id');
+  credential.setValue(credentialValue);
+  return [credential, ...normalized];
+};
 
 export const ValidateTelephonyOptions = (
   provider: string,
   parameters: Metadata[],
 ): boolean => {
-  switch (provider) {
-    case 'vonage':
-      return ValidateVonageTelephonyOptions(parameters);
-    case 'twilio':
-      return ValidateTwilioTelephonyOptions(parameters);
-    case 'exotel':
-      return ValidateExotelTelephonyOptions(parameters);
-    case 'sip':
-      return ValidateSIPTelephonyOptions(parameters);
-    case 'asterisk':
-      return ValidateAsteriskTelephonyOptions(parameters);
-    default:
-      return false;
+  const config = loadProviderConfig(provider);
+  if (!config?.telephony) return false;
+
+  const validationError = validateFromConfig(
+    config,
+    'telephony',
+    provider,
+    parameters,
+  );
+  if (validationError) return false;
+
+  if (provider === 'vonage') {
+    const phone = parameters.find(opt => opt.getKey() === 'phone')?.getValue();
+    if (!phone || !VONAGE_PHONE_REGEX.test(phone)) return false;
   }
+
+  return true;
 };
 
 export const ConfigureTelephonyComponent: React.FC<ProviderComponentProps> = ({
@@ -51,45 +61,18 @@ export const ConfigureTelephonyComponent: React.FC<ProviderComponentProps> = ({
   parameters,
   onChangeParameter,
 }) => {
-  switch (provider) {
-    case 'exotel':
-      return (
-        <ConfigureExotelTelephony
-          parameters={parameters || []}
-          onParameterChange={onChangeParameter}
-        />
-      );
-    case 'vonage':
-      return (
-        <ConfigureVonageTelephony
-          parameters={parameters || []}
-          onParameterChange={onChangeParameter}
-        />
-      );
-    case 'twilio':
-      return (
-        <ConfigureTwilioTelephony
-          parameters={parameters || []}
-          onParameterChange={onChangeParameter}
-        />
-      );
-    case 'sip':
-      return (
-        <ConfigureSIPTelephony
-          parameters={parameters || []}
-          onParameterChange={onChangeParameter}
-        />
-      );
-    case 'asterisk':
-      return (
-        <ConfigureAsteriskTelephony
-          parameters={parameters || []}
-          onParameterChange={onChangeParameter}
-        />
-      );
-    default:
-      return null;
-  }
+  const config = loadProviderConfig(provider);
+  if (!config?.telephony) return null;
+
+  return (
+    <ConfigRenderer
+      provider={provider}
+      category="telephony"
+      config={config.telephony}
+      parameters={parameters}
+      onParameterChange={onChangeParameter}
+    />
+  );
 };
 
 export const TelephonyProvider: React.FC<ProviderComponentProps> = props => {
@@ -127,7 +110,11 @@ export const TelephonyProvider: React.FC<ProviderComponentProps> = props => {
         selectedItem={selectedProvider}
         itemToString={(item: any) => item?.name || ''}
         onChange={({ selectedItem }: any) => {
-          if (selectedItem) onChangeProvider(selectedItem.code);
+          if (!selectedItem) return;
+          onChangeProvider(selectedItem.code);
+          onChangeParameter(
+            GetDefaultTelephonyConfigIfInvalid(selectedItem.code, []),
+          );
         }}
         helperText="Select a telephony provider for inbound and outbound phone calls."
       />

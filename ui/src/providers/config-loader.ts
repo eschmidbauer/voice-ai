@@ -17,6 +17,7 @@ export type ProviderConfigCategory =
   | 'stt'
   | 'tts'
   | 'text'
+  | 'telephony'
   | 'vad'
   | 'eos'
   | 'noise'
@@ -61,6 +62,7 @@ export interface ProviderConfig {
   stt?: CategoryConfig;
   tts?: CategoryConfig;
   text?: CategoryConfig;
+  telephony?: CategoryConfig;
   vad?: CategoryConfig;
   eos?: CategoryConfig;
   noise?: CategoryConfig;
@@ -207,6 +209,7 @@ export function loadProviderConfig(provider: string): ProviderConfig | null {
     'stt',
     'tts',
     'text',
+    'telephony',
     'vad',
     'eos',
     'noise',

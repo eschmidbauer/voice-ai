@@ -35,6 +35,7 @@ import {
 import { connectionConfig } from '@/configs';
 import {
   TelephonyProvider,
+  GetDefaultTelephonyConfigIfInvalid,
   ValidateTelephonyOptions,
 } from '@/app/components/providers/telephony';
 import { useConfirmDialog } from '@/app/pages/assistant/actions/hooks/use-confirmation';
@@ -164,9 +165,13 @@ const EditAssistantCallDeployment: FC<{ assistantId: string }> = ({
         });
 
         if (deployment.getPhoneprovidername()) {
+          const provider = deployment.getPhoneprovidername() || '';
           setTelephonyConfig({
-            provider: deployment.getPhoneprovidername() || '',
-            parameters: deployment.getPhoneoptionsList() || [],
+            provider,
+            parameters: GetDefaultTelephonyConfigIfInvalid(
+              provider,
+              deployment.getPhoneoptionsList() || [],
+            ),
           });
         }
 
@@ -218,12 +223,11 @@ const EditAssistantCallDeployment: FC<{ assistantId: string }> = ({
     setIsDeploying(true);
     setErrorMessage('');
 
-    if (
-      !ValidateTelephonyOptions(
-        telephonyConfig.provider,
-        telephonyConfig.parameters,
-      )
-    ) {
+    const resolvedTelephonyParameters = GetDefaultTelephonyConfigIfInvalid(
+      telephonyConfig.provider,
+      telephonyConfig.parameters,
+    );
+    if (!ValidateTelephonyOptions(telephonyConfig.provider, resolvedTelephonyParameters)) {
       setIsDeploying(false);
       setErrorMessage('Please provide a valid telephony configuration.');
       return;
@@ -282,7 +286,7 @@ const EditAssistantCallDeployment: FC<{ assistantId: string }> = ({
       deployment.setMaxsessionduration(experienceConfig.maxCallDuration);
 
     deployment.setPhoneprovidername(telephonyConfig.provider);
-    deployment.setPhoneoptionsList(telephonyConfig.parameters);
+    deployment.setPhoneoptionsList(resolvedTelephonyParameters);
 
     const inputAudio = new DeploymentAudioProvider();
     inputAudio.setAudioprovider(audioInputConfig.provider);
@@ -359,10 +363,19 @@ const EditAssistantCallDeployment: FC<{ assistantId: string }> = ({
               provider={telephonyConfig.provider}
               parameters={telephonyConfig.parameters}
               onChangeProvider={provider =>
-                setTelephonyConfig({ provider, parameters: [] })
+                setTelephonyConfig({
+                  provider,
+                  parameters: GetDefaultTelephonyConfigIfInvalid(provider, []),
+                })
               }
               onChangeParameter={parameters =>
-                setTelephonyConfig(c => ({ ...c, parameters }))
+                setTelephonyConfig(c => ({
+                  ...c,
+                  parameters: GetDefaultTelephonyConfigIfInvalid(
+                    c.provider,
+                    parameters,
+                  ),
+                }))
               }
             />
           </div>

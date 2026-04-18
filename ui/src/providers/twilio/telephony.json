@@ -1,0 +1,16 @@
+{
+  "telephony": {
+    "parameters": [
+      {
+        "key": "phone",
+        "label": "Phone",
+        "type": "input",
+        "required": true,
+        "default": "",
+        "placeholder": "Enter your Twilio phone number",
+        "helpText": "Phone to receive inbound or make outbound call.",
+        "errorMessage": "Please provide a valid Twilio phone number."
+      }
+    ]
+  }
+}
