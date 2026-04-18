@@ -292,6 +292,14 @@ const (
 	// the outcome. Values: "completed" or "failed". Read by media.go to emit
 	// the correct transfer event.
 	MetadataBridgeTransferStatus = "bridge_transfer_status"
+
+	// MetadataBridgeTransferDuration holds the bridge duration as a string
+	// (time.Duration.String()). Set after BridgeTransfer returns.
+	MetadataBridgeTransferDuration = "bridge_transfer_duration"
+
+	// MetadataBridgeTransferOutboundCallID holds the SIP Call-ID of the
+	// outbound (B-leg) call created for the transfer.
+	MetadataBridgeTransferOutboundCallID = "bridge_transfer_outbound_call_id"
 )
 
 // Event represents events from SIP stack

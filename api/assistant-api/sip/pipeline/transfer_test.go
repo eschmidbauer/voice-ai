@@ -2,6 +2,7 @@ package sip_pipeline
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -290,4 +291,204 @@ func TestTransferInitiatedPipeline_HasOnTeardownField(t *testing.T) {
 func TestCallStateTransferring_IsActive(t *testing.T) {
 	assert.True(t, sip_infra.CallStateTransferring.IsActive())
 	assert.True(t, sip_infra.CallStateBridgeConnected.IsActive())
+}
+
+// =============================================================================
+// Transfer metadata — failure path does NOT set outbound call ID or duration
+// =============================================================================
+
+func TestHandleTransferInitiated_FailureMetadata(t *testing.T) {
+	t.Parallel()
+
+	d := NewDispatcher(&DispatcherConfig{
+		Logger: newPipelineTestLogger(t),
+		// server is nil — will fail immediately
+	})
+
+	s := newTransferTestSession(t)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		d.executeTransfer(context.Background(), sip_infra.TransferInitiatedPipeline{
+			ID:        s.GetCallID(),
+			Session:   s,
+			TargetURI: "918031405561",
+			Config:    newTransferTestConfig(),
+			OnFailed:  func() {},
+		})
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("executeTransfer did not return")
+	}
+
+	// Status must be "failed"
+	statusVal, ok := s.GetMetadata(sip_infra.MetadataBridgeTransferStatus)
+	require.True(t, ok, "MetadataBridgeTransferStatus should be set")
+	assert.Equal(t, "failed", statusVal)
+
+	// Outbound call ID must NOT be set (we never reached the target)
+	_, ok = s.GetMetadata(sip_infra.MetadataBridgeTransferOutboundCallID)
+	assert.False(t, ok, "MetadataBridgeTransferOutboundCallID should NOT be set on early failure")
+
+	// Duration must NOT be set (bridge never started)
+	_, ok = s.GetMetadata(sip_infra.MetadataBridgeTransferDuration)
+	assert.False(t, ok, "MetadataBridgeTransferDuration should NOT be set on early failure")
+}
+
+// =============================================================================
+// categorizeTransferError — classification logic
+// =============================================================================
+
+func TestCategorizeTransferError(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		reason   string
+		err      error
+		expected string
+	}{
+		{
+			name:     "server nil",
+			reason:   "server_nil",
+			err:      nil,
+			expected: "setup",
+		},
+		{
+			name:     "config error",
+			reason:   "config_error",
+			err:      errors.New("invalid config"),
+			expected: "setup",
+		},
+		{
+			name:     "outbound failed with timeout",
+			reason:   "outbound_failed",
+			err:      errors.New("context deadline exceeded"),
+			expected: "network",
+		},
+		{
+			name:     "outbound failed with timeout keyword",
+			reason:   "outbound_failed",
+			err:      errors.New("dial timeout after 30s"),
+			expected: "network",
+		},
+		{
+			name:     "outbound failed with busy",
+			reason:   "outbound_failed",
+			err:      errors.New("SIP 486 Busy Here"),
+			expected: "rejected",
+		},
+		{
+			name:     "outbound failed with 603 declined",
+			reason:   "outbound_failed",
+			err:      errors.New("received 603 Decline"),
+			expected: "rejected",
+		},
+		{
+			name:     "outbound failed generic",
+			reason:   "outbound_failed",
+			err:      errors.New("connection refused"),
+			expected: "network",
+		},
+		{
+			name:     "outbound failed nil error",
+			reason:   "outbound_failed",
+			err:      nil,
+			expected: "network",
+		},
+		{
+			name:     "bridge failed",
+			reason:   "bridge_failed",
+			err:      errors.New("RTP relay error"),
+			expected: "bridge",
+		},
+		{
+			name:     "unknown reason",
+			reason:   "something_else",
+			err:      nil,
+			expected: "unknown",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := categorizeTransferError(tt.reason, tt.err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// =============================================================================
+// handleTransferConnected — does not panic, logs with remote URI
+// =============================================================================
+
+func TestHandleTransferConnected_RichLogging(t *testing.T) {
+	t.Parallel()
+
+	d := NewDispatcher(&DispatcherConfig{
+		Logger: newPipelineTestLogger(t),
+	})
+
+	s := newTransferTestSession(t)
+	outbound := newTransferTestSession(t)
+
+	// Should not panic even with minimal session info
+	d.handleTransferConnected(context.Background(), sip_infra.TransferConnectedPipeline{
+		ID:              "test-connected",
+		InboundSession:  s,
+		OutboundSession: outbound,
+	})
+}
+
+// =============================================================================
+// handleTransferFailed — categorization in logs
+// =============================================================================
+
+func TestHandleTransferFailed_WithCategory(t *testing.T) {
+	t.Parallel()
+
+	d := NewDispatcher(&DispatcherConfig{
+		Logger: newPipelineTestLogger(t),
+	})
+
+	// Should not panic with various error types
+	d.handleTransferFailed(context.Background(), sip_infra.TransferFailedPipeline{
+		ID:     "test-fail-timeout",
+		Error:  errors.New("context deadline exceeded"),
+		Reason: "outbound_failed",
+	})
+
+	d.handleTransferFailed(context.Background(), sip_infra.TransferFailedPipeline{
+		ID:     "test-fail-busy",
+		Error:  errors.New("486 Busy Here"),
+		Reason: "outbound_failed",
+	})
+
+	d.handleTransferFailed(context.Background(), sip_infra.TransferFailedPipeline{
+		ID:     "test-fail-nil-err",
+		Error:  nil,
+		Reason: "server_nil",
+	})
+}
+
+// =============================================================================
+// Metadata constants — verify keys are distinct
+// =============================================================================
+
+func TestMetadataKeyConstants_Distinct(t *testing.T) {
+	keys := []string{
+		sip_infra.MetadataBridgeTransferTarget,
+		sip_infra.MetadataBridgeTransferStatus,
+		sip_infra.MetadataBridgeTransferDuration,
+		sip_infra.MetadataBridgeTransferOutboundCallID,
+	}
+	seen := make(map[string]bool, len(keys))
+	for _, k := range keys {
+		assert.False(t, seen[k], "duplicate metadata key: %s", k)
+		seen[k] = true
+	}
 }

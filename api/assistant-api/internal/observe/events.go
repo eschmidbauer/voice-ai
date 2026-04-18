@@ -104,6 +104,9 @@ const (
 	EventResume            = "resume"
 	EventReInvite          = "reinvite"
 	EventTransferRequested = "transfer_requested"
+	EventTransferConnected = "transfer_connected"
+	EventTransferCompleted = "transfer_completed"
+	EventTransferFailed    = "transfer_failed"
 	EventRegisterActive    = "register_active"
 	EventRegisterFailed    = "register_failed"
 	EventDTMF              = "dtmf"
@@ -140,6 +143,9 @@ const (
 	// --- SIP ---
 	MetricSIPRegisterFailure = "sip.register_failure"
 
+	// --- Transfer ---
+	MetricTransferDurationMs = "transfer.bridge_duration_ms"
+
 	// --- RTP ---
 	MetricRTPPacketsSent     = "rtp.packets_sent"
 	MetricRTPPacketsReceived = "rtp.packets_received"
@@ -174,7 +180,10 @@ const (
 	DataTo        = "to"
 	DataDuration  = "duration_ms"
 	DataMessages  = "messages"
-	DataDigit     = "digit"
+	DataDigit          = "digit"
+	DataTarget         = "target"
+	DataOutboundCallID = "outbound_call_id"
+	DataStatus         = "status"
 )
 
 // =============================================================================
