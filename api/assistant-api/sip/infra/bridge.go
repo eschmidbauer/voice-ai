@@ -81,8 +81,10 @@ func (s *Server) MakeBridgeCall(ctx context.Context, cfg *Config, toURI, fromURI
 	return session, nil
 }
 
-// BridgeTransfer bridges RTP audio between two sessions. Blocks until one side
-// hangs up, a safety timeout is reached, or the context is cancelled.
+// BridgeTransfer forwards outbound→inbound RTP audio and monitors both sessions
+// for hangup. The inbound→outbound direction is handled by the caller (the SIP
+// streamer's forwardIncomingAudio switches destination via bridgeOutRTP).
+// Blocks until one side hangs up, a safety timeout, or context cancellation.
 // Tears down both sessions on exit.
 func (s *Server) BridgeTransfer(ctx context.Context, inbound, outbound *Session) error {
 	inCallID := inbound.GetCallID()
@@ -114,8 +116,9 @@ func (s *Server) BridgeTransfer(ctx context.Context, inbound, outbound *Session)
 	audioCtx, audioCancel := context.WithCancel(ctx)
 	defer audioCancel()
 
-	// Cross-pipe RTP audio between the two sessions
-	go s.forwardBridgeAudio(audioCtx, inRTP.AudioIn(), outRTP.AudioOut(), needsTranscode, inCodec, outCodec)
+	// Outbound→inbound: transfer target voice to caller.
+	// Inbound→outbound (caller voice to target) is handled by the streamer's
+	// forwardIncomingAudio which writes to bridgeOutRTP when set.
 	go s.forwardBridgeAudio(audioCtx, outRTP.AudioIn(), inRTP.AudioOut(), needsTranscode, outCodec, inCodec)
 
 	// Wait for either side to hang up
@@ -151,12 +154,15 @@ func (s *Server) BridgeTransfer(ctx context.Context, inbound, outbound *Session)
 
 // forwardBridgeAudio reads audio from src and writes to dst, transcoding if needed.
 func (s *Server) forwardBridgeAudio(ctx context.Context, src <-chan []byte, dst chan<- []byte, needsTranscode bool, srcCodec, dstCodec *Codec) {
+	defer s.logger.Infow("forwardBridgeAudio: exited", "ctx_err", ctx.Err())
 	for {
 		select {
 		case <-ctx.Done():
+			s.logger.Infow("forwardBridgeAudio: ctx done", "err", ctx.Err())
 			return
 		case data, ok := <-src:
 			if !ok {
+				s.logger.Infow("forwardBridgeAudio: src channel closed")
 				return
 			}
 			if needsTranscode {

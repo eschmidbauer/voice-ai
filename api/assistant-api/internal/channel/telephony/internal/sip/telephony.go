@@ -72,16 +72,22 @@ func (t *sipTelephony) StatusCallback(
 	assistantId uint64,
 	assistantConversationId uint64,
 ) (*internal_type.StatusInfo, error) {
-	body, err := c.GetRawData()
-	if err != nil {
-		t.logger.Error("Failed to read SIP status callback body", "error", err)
-		return nil, fmt.Errorf("failed to read request body")
-	}
+	payload := make(map[string]interface{})
 
-	var payload map[string]interface{}
-	if err := json.Unmarshal(body, &payload); err != nil {
-		t.logger.Error("Failed to parse SIP status callback", "error", err)
-		return nil, fmt.Errorf("failed to parse request body")
+	if body, err := c.GetRawData(); err == nil && len(body) > 0 {
+		if json.Unmarshal(body, &payload) != nil {
+			// Not JSON — try form-encoded
+			if formErr := c.Request.ParseForm(); formErr == nil {
+				for k, v := range c.Request.PostForm {
+					payload[k] = v[0]
+				}
+			}
+		}
+	}
+	if len(payload) == 0 {
+		for k, v := range c.Request.URL.Query() {
+			payload[k] = v[0]
+		}
 	}
 
 	eventType, _ := payload["event"].(string)
@@ -129,10 +135,12 @@ func (t *sipTelephony) OutboundCall(
 		return info, fmt.Errorf("shared SIP server is not running")
 	}
 
+	contextID, _ := opts.GetString("rapida.context_id")
 	session, err := t.sharedServer.MakeCall(context.Background(), cfg, toPhone, fromPhone, sip_infra.MakeCallOptions{
 		Auth:            auth,
 		Assistant:       assistant,
 		ConversationID:  assistantConversationId,
+		ContextID:       contextID,
 		VaultCredential: vaultCredential,
 	})
 	if err != nil {

@@ -65,7 +65,7 @@ type TransferInitiatedPipeline struct {
 	Session     *Session
 	TargetURI   string
 	Config      *Config
-	OnConnected func()
+	OnConnected func(outboundRTP *RTPHandler)
 	OnFailed    func()
 }
 

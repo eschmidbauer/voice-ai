@@ -1439,6 +1439,7 @@ type MakeCallOptions struct {
 	Auth            types.SimplePrinciple
 	Assistant       *internal_assistant_entity.Assistant
 	ConversationID  uint64
+	ContextID       string
 	VaultCredential *protos.VaultCredential
 }
 
@@ -1464,6 +1465,7 @@ func (s *Server) MakeCall(ctx context.Context, cfg *Config, toURI, fromURI strin
 		Auth:            opts.Auth,
 		Assistant:       opts.Assistant,
 		ConversationID:  opts.ConversationID,
+		ContextID:       opts.ContextID,
 		VaultCredential: opts.VaultCredential,
 	})
 	if err != nil {
@@ -1790,7 +1792,7 @@ func (s *Server) prepareOutboundInvite(ctx context.Context, cfg *Config, toURI, 
 	}
 
 	rtpBindIP := s.listenConfig.GetBindAddress()
-	rtpHandler, err := NewRTPHandler(ctx, &RTPConfig{
+	rtpHandler, err := NewRTPHandler(context.Background(), &RTPConfig{
 		LocalIP:     rtpBindIP,
 		LocalPort:   rtpPort,
 		PayloadType: CodecPCMU.PayloadType,

@@ -61,6 +61,7 @@ type SIPEngine struct {
 	assistantService             internal_services.AssistantService
 	deploymentService            internal_services.AssistantDeploymentService
 	vaultClient                  web_client.VaultClient
+	callContextStore             callcontext.Store
 
 	// Registration client for maintaining SIP REGISTER with external providers.
 	registrationClient *sip_infra.RegistrationClient
@@ -85,6 +86,7 @@ func NewSIPEngine(config *config.AssistantConfig, logger commons.Logger,
 		deploymentService:            internal_assistant_service.NewAssistantDeploymentService(config, logger, postgres),
 		storage:                      storage_files.NewStorage(config.AssetStoreConfig, logger),
 		vaultClient:                  web_client.NewVaultClientGRPC(&config.AppConfig, logger, redis),
+		callContextStore:             callcontext.NewStore(postgres, logger),
 	}
 }
 
@@ -829,6 +831,12 @@ func (m *SIPEngine) pipelineCallSetup(ctx context.Context, session *sip_infra.Se
 		result.OrganizationID = *auth.GetCurrentOrganizationId()
 	}
 
+	if ctxID := session.GetContextID(); ctxID != "" {
+		if _, err := m.callContextStore.Claim(ctx, ctxID); err != nil {
+			m.logger.Warnw("Failed to claim call context", "context_id", ctxID, "error", err)
+		}
+	}
+
 	return result, nil
 }
 
@@ -840,9 +848,14 @@ func (m *SIPEngine) pipelineCallStart(ctx context.Context, session *sip_infra.Se
 	isOutbound := session.GetInfo().Direction == sip_infra.CallDirectionOutbound
 
 	// Outbound: ensure session.End() so handleOutboundDialog can proceed.
+	// Skip if a bridge transfer is active — the pipeline transfer handler owns the session.
 	if isOutbound {
 		defer func() {
 			if !session.IsEnded() {
+				state := session.GetState()
+				if state == sip_infra.CallStateTransferring || state == sip_infra.CallStateBridgeConnected {
+					return
+				}
 				session.End()
 			}
 		}()
@@ -916,7 +929,10 @@ func (m *SIPEngine) pipelineCallStart(ctx context.Context, session *sip_infra.Se
 
 	type transferable interface {
 		SetOnTransferInitiated(func(string))
+		SetBridgeOutRTP(*sip_infra.RTPHandler)
+		StopRingback()
 		ExitTransferMode()
+		CancelTalk()
 	}
 	if ts, ok := streamer.(transferable); ok {
 		ts.SetOnTransferInitiated(func(target string) {
@@ -925,8 +941,12 @@ func (m *SIPEngine) pipelineCallStart(ctx context.Context, session *sip_infra.Se
 				Session:   session,
 				TargetURI: target,
 				Config:    sipConfig,
-				OnConnected: func() { cancel() },
-				OnFailed:    func() { ts.ExitTransferMode() },
+				OnConnected: func(outboundRTP *sip_infra.RTPHandler) {
+					ts.StopRingback()
+					ts.SetBridgeOutRTP(outboundRTP)
+					ts.CancelTalk()
+				},
+				OnFailed: func() { ts.ExitTransferMode() },
 			})
 		})
 	}
@@ -951,6 +971,16 @@ func (m *SIPEngine) pipelineCallStart(ctx context.Context, session *sip_infra.Se
 
 	if err := talker.Talk(callCtx, auth); err != nil {
 		m.logger.Warnw("SIP talker exited", "error", err, "call_id", callID)
+	}
+
+	// If a bridge transfer is active, keep callCtx alive so forwardIncomingAudio
+	// continues routing RTP between the inbound and outbound sessions. The bridge
+	// handler ends the session when the bridge completes, unblocking this wait.
+	// The defer cancel() then fires harmlessly (callCtx's parent is already done).
+	state := session.GetState()
+	if state == sip_infra.CallStateTransferring || state == sip_infra.CallStateBridgeConnected {
+		m.logger.Infow("Bridge active after Talk exit, waiting for completion", "call_id", callID)
+		<-session.Context().Done()
 	}
 
 	m.logger.Infow("SIP call ended", "call_id", callID)

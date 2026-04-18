@@ -394,16 +394,7 @@ func TestBridgeTransfer_AudioForwardsBidirectionally(t *testing.T) {
 		done <- srv.BridgeTransfer(ctx, inbound, outbound)
 	}()
 
-	// inbound → outbound
-	inRTP.audioInChan <- []byte{0x01, 0x02}
-	select {
-	case frame := <-outRTP.audioOutChan:
-		assert.Equal(t, []byte{0x01, 0x02}, frame)
-	case <-time.After(200 * time.Millisecond):
-		t.Fatal("audio not forwarded inbound→outbound")
-	}
-
-	// outbound → inbound
+	// outbound → inbound (inbound→outbound is handled by streamer's forwardIncomingAudio)
 	outRTP.audioInChan <- []byte{0x03, 0x04}
 	select {
 	case frame := <-inRTP.audioOutChan:
@@ -429,13 +420,13 @@ func TestBridgeTransfer_TranscodesAcrossCodecs(t *testing.T) {
 		done <- srv.BridgeTransfer(ctx, inbound, outbound)
 	}()
 
-	// A-law from inbound → µ-law on outbound
-	alaw := []byte{0xD5, 0xD5, 0xD5, 0xD5}
-	inRTP.audioInChan <- alaw
+	// µ-law from outbound → A-law on inbound
+	ulaw := []byte{0xFF, 0xFF, 0xFF, 0xFF}
+	outRTP.audioInChan <- ulaw
 	select {
-	case frame := <-outRTP.audioOutChan:
-		assert.Len(t, frame, len(alaw))
-		assert.NotEqual(t, alaw, frame, "should be transcoded PCMA→PCMU")
+	case frame := <-inRTP.audioOutChan:
+		assert.Len(t, frame, len(ulaw))
+		assert.NotEqual(t, ulaw, frame, "should be transcoded PCMU→PCMA")
 	case <-time.After(200 * time.Millisecond):
 		t.Fatal("transcoded audio not forwarded")
 	}

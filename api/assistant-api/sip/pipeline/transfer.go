@@ -70,7 +70,7 @@ func (d *Dispatcher) executeTransfer(ctx context.Context, v sip_infra.TransferIn
 		"target", v.TargetURI)
 
 	if v.OnConnected != nil {
-		v.OnConnected()
+		v.OnConnected(outboundSession.GetRTPHandler())
 	}
 
 	v.Session.SetState(sip_infra.CallStateBridgeConnected)

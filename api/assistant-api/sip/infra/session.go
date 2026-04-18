@@ -38,6 +38,7 @@ type SessionConfig struct {
 	Auth            types.SimplePrinciple                // Authentication principal
 	Assistant       *internal_assistant_entity.Assistant // Assistant entity
 	ConversationID  uint64                               // Conversation ID (outbound: set by channel pipeline)
+	ContextID       string                               // Call context ID (outbound: set by channel pipeline)
 	VaultCredential *protos.VaultCredential              // Vault-resolved SIP provider credential
 }
 
@@ -71,6 +72,7 @@ type Session struct {
 	auth            types.SimplePrinciple                // Authentication principal
 	assistant       *internal_assistant_entity.Assistant // Assistant entity
 	conversationID  uint64                               // Conversation ID
+	contextID       string                               // Call context ID (outbound)
 	vaultCredential *protos.VaultCredential              // Vault-resolved SIP provider credential
 
 	// byeReceived is closed when a SIP BYE is received for this session.
@@ -145,6 +147,7 @@ func NewSession(ctx context.Context, cfg *SessionConfig) (*Session, error) {
 		auth:            cfg.Auth,
 		assistant:       cfg.Assistant,
 		conversationID:  cfg.ConversationID,
+		contextID:       cfg.ContextID,
 		vaultCredential: cfg.VaultCredential,
 		byeReceived:     make(chan struct{}),
 	}
@@ -466,6 +469,12 @@ func (s *Session) GetConversationID() uint64 {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.conversationID
+}
+
+func (s *Session) GetContextID() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.contextID
 }
 
 // SetConversationID sets the conversation ID for this session.

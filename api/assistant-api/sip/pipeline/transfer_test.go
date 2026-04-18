@@ -59,7 +59,7 @@ func TestDispatcher_RoutesTransferStages(t *testing.T) {
 			Session:   s,
 			TargetURI: "918031405561",
 			Config:    newTransferTestConfig(),
-			OnConnected: func() {},
+			OnConnected: func(_ *sip_infra.RTPHandler) {},
 			OnFailed:    func() { failedCount.Add(1) },
 		},
 	)
