@@ -6,6 +6,7 @@
 package internal_type
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -273,6 +274,35 @@ type LLMToolCallPacket struct {
 func (f LLMToolCallPacket) ContextId() string { return f.ContextID }
 func (f LLMToolCallPacket) ToolId() string    { return f.ToolID }
 
+func (f LLMToolCallPacket) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]interface{}{
+		"tool_id":   f.ToolID,
+		"name":      f.Name,
+		"context_id": f.ContextID,
+		"action":    f.Action.String(),
+		"arguments": f.Arguments,
+	})
+}
+
+func (f *LLMToolCallPacket) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		ToolID    string            `json:"tool_id"`
+		Name      string            `json:"name"`
+		ContextID string            `json:"context_id"`
+		Action    string            `json:"action"`
+		Arguments map[string]string `json:"arguments"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	f.ToolID = raw.ToolID
+	f.Name = raw.Name
+	f.ContextID = raw.ContextID
+	f.Action = protos.ToolCallAction(protos.ToolCallAction_value[raw.Action])
+	f.Arguments = raw.Arguments
+	return nil
+}
+
 // LLMToolResultPacket carries the result of a tool execution.
 // Arrives from server-side tools (immediate) or from client/channel (directive).
 type LLMToolResultPacket struct {
@@ -285,6 +315,35 @@ type LLMToolResultPacket struct {
 
 func (f LLMToolResultPacket) ToolId() string    { return f.ToolID }
 func (f LLMToolResultPacket) ContextId() string { return f.ContextID }
+
+func (f LLMToolResultPacket) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]interface{}{
+		"tool_id":    f.ToolID,
+		"name":       f.Name,
+		"context_id": f.ContextID,
+		"action":     f.Action.String(),
+		"result":     f.Result,
+	})
+}
+
+func (f *LLMToolResultPacket) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		ToolID    string            `json:"tool_id"`
+		Name      string            `json:"name"`
+		ContextID string            `json:"context_id"`
+		Action    string            `json:"action"`
+		Result    map[string]string `json:"result"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	f.ToolID = raw.ToolID
+	f.Name = raw.Name
+	f.ContextID = raw.ContextID
+	f.Action = protos.ToolCallAction(protos.ToolCallAction_value[raw.Action])
+	f.Result = raw.Result
+	return nil
+}
 
 // =============================================================================
 // Output Pipeline — aggregate -> speak -> TTS audio -> TTS end

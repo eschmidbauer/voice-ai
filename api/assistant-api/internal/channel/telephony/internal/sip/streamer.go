@@ -76,13 +76,13 @@ func NewStreamer(ctx context.Context,
 	s.audio = NewAudioProcessor(AudioProcessorConfig{
 		RTPHandler: rtpHandler,
 		Resampler:  s.Resampler(),
-		PushInput:  s.PushInput,
+		PushInput:  s.Input,
 	})
 
 	go s.forwardIncomingAudio()
 	go s.audio.RunOutputSender(streamerCtx)
 	go s.audio.RunBridgeRecorder(streamerCtx)
-	s.PushInput(s.CreateConnectionRequest())
+	s.Input(s.CreateConnectionRequest())
 
 	localIP, localPort := rtpHandler.LocalAddr()
 	codecName := "PCMU"
@@ -134,7 +134,7 @@ func (s *Streamer) forwardIncomingAudio() {
 				}
 			})
 			if audioReq != nil {
-				s.PushInput(audioReq)
+				s.Input(audioReq)
 			}
 		}
 	}
@@ -267,7 +267,7 @@ func (s *Streamer) PushBridgeOperatorAudio(audio []byte) {
 }
 
 func (s *Streamer) PushToolCallResult(contextID, toolID, toolName string, action protos.ToolCallAction, result map[string]string) {
-	s.PushInput(&protos.ConversationToolCallResult{
+	s.Input(&protos.ConversationToolCallResult{
 		Id:     contextID,
 		ToolId: toolID,
 		Name:   toolName,

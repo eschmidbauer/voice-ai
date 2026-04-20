@@ -59,13 +59,12 @@ func (cr *genericRequestor) CreateToolLog(
 func (cr *genericRequestor) UpdateToolLog(
 	ctx context.Context,
 	toolCallId string,
-	timeTaken int64,
 	status type_enums.RecordState,
 	response []byte) error {
 	dbCtx, cancel := context.WithTimeout(context.Background(), dbWriteTimeout)
 	defer cancel()
 	_, err := cr.assistantToolService.UpdateLog(
-		dbCtx, cr.Auth(), toolCallId, cr.assistantConversation.Id, timeTaken,
+		dbCtx, cr.Auth(), toolCallId, cr.assistantConversation.Id,
 		status, response,
 	)
 	return err

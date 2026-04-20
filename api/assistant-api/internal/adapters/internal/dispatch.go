@@ -550,7 +550,6 @@ func (talking *genericRequestor) handleInterruption(ctx context.Context, vl inte
 		if err := talking.callEndOfSpeech(ctx, vl); err != nil {
 			talking.logger.Errorf("end of speech error: %v", err)
 		}
-
 		if err := talking.Transition(Interrupted); err != nil {
 			return
 		}
@@ -956,52 +955,42 @@ func (talking *genericRequestor) handleAssistantMessageMetadata(ctx context.Cont
 // =============================================================================
 
 func (talking *genericRequestor) handleToolCall(ctx context.Context, vl internal_type.LLMToolCallPacket) {
-	utils.Go(ctx, func() {
-		req, _ := json.Marshal(map[string]interface{}{
-			"id":        vl.ToolID,
-			"name":      vl.Name,
-			"action":    vl.Action.String(),
-			"arguments": vl.Arguments,
-		})
-		if err := talking.CreateToolLog(ctx, vl.ContextID, vl.ToolID, vl.Name, type_enums.RECORD_IN_PROGRESS, req); err != nil {
-			talking.logger.Errorf("error logging tool call start: %v", err)
+	if talking.assistantExecutor != nil {
+		if err := talking.assistantExecutor.Execute(ctx, talking, vl); err != nil {
+			talking.logger.Errorf("assistant executor error: %v", err)
 		}
-	})
+	}
+	req, _ := json.Marshal(vl)
+	if err := talking.CreateToolLog(ctx, vl.ContextID, vl.ToolID, vl.Name, type_enums.RECORD_IN_PROGRESS, req); err != nil {
+		talking.logger.Errorf("error logging tool call start: %v", err)
+	}
 	talking.OnPacket(ctx, internal_type.ConversationEventPacket{
 		ContextID: vl.ContextID,
 		Name:      observe.ComponentTool,
 		Data:      map[string]string{observe.DataType: observe.EventToolCallStarted, "name": vl.Name, "id": vl.ToolID, "action": vl.Action.String()},
 		Time:      time.Now(),
 	})
+	talking.Notify(ctx, &protos.ConversationToolCall{
+		Id:     vl.ContextID,
+		ToolId: vl.ToolID,
+		Name:   vl.Name,
+		Action: vl.Action,
+		Args:   vl.Arguments,
+		Time:   timestamppb.Now(),
+	})
 
-	// Notify client/streamer for actionable tool calls (end conversation, transfer, etc.)
-	if vl.Action != protos.ToolCallAction_TOOL_CALL_ACTION_UNSPECIFIED {
-		talking.Notify(ctx, &protos.ConversationToolCall{
-			Id:     vl.ContextID,
-			ToolId: vl.ToolID,
-			Name:   vl.Name,
-			Action: vl.Action,
-			Args:   vl.Arguments,
-			Time:   timestamppb.Now(),
-		})
-	}
-
-	if talking.assistantExecutor != nil {
-		utils.Go(ctx, func() {
-			if err := talking.assistantExecutor.Execute(ctx, talking, vl); err != nil {
-				talking.logger.Errorf("assistant executor error: %v", err)
-			}
-		})
-	}
 }
 
 func (talking *genericRequestor) handleToolResult(ctx context.Context, vl internal_type.LLMToolResultPacket) {
-	utils.Go(ctx, func() {
-		res, _ := json.Marshal(vl.Result)
-		if err := talking.UpdateToolLog(ctx, vl.ToolID, 0, type_enums.RECORD_COMPLETE, res); err != nil {
-			talking.logger.Errorf("error logging tool call result: %v", err)
+	if talking.assistantExecutor != nil {
+		if err := talking.assistantExecutor.Execute(ctx, talking, vl); err != nil {
+			talking.logger.Errorf("tool result processing failed: %v", err)
 		}
-	})
+	}
+	res, _ := json.Marshal(vl)
+	if err := talking.UpdateToolLog(ctx, vl.ToolID, type_enums.RECORD_COMPLETE, res); err != nil {
+		talking.logger.Errorf("error logging tool call result: %v", err)
+	}
 
 	talking.OnPacket(ctx, internal_type.ConversationEventPacket{
 		ContextID: vl.ContextID,
@@ -1009,11 +998,7 @@ func (talking *genericRequestor) handleToolResult(ctx context.Context, vl intern
 		Data:      map[string]string{observe.DataType: observe.EventToolCallCompleted, "name": vl.Name, "id": vl.ToolID},
 		Time:      time.Now(),
 	})
-	utils.Go(ctx, func() {
-		if err := talking.assistantExecutor.Execute(ctx, talking, vl); err != nil {
-			talking.logger.Errorf("tool result processing failed: %v", err)
-		}
-	})
+
 }
 
 // =============================================================================

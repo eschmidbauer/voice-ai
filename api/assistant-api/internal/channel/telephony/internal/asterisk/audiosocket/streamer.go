@@ -132,7 +132,7 @@ func (as *Streamer) Context() context.Context {
 }
 
 func (as *Streamer) runFrameReader() {
-	as.PushInputLow(&protos.ConversationEvent{
+	as.Input(&protos.ConversationEvent{
 		Name: "channel",
 		Data: map[string]string{
 			"type":     "connected",
@@ -141,7 +141,7 @@ func (as *Streamer) runFrameReader() {
 		Time: timestamppb.Now(),
 	})
 	if as.initialUUID != "" {
-		as.PushInput(as.CreateConnectionRequest())
+		as.Input(as.CreateConnectionRequest())
 	}
 	for {
 		select {
@@ -152,11 +152,15 @@ func (as *Streamer) runFrameReader() {
 		frame, err := ReadFrame(as.reader)
 		if err != nil {
 			if err == io.EOF {
-				as.PushDisconnection(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER)
+				if msg := as.Disconnect(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER); msg != nil {
+					as.Input(msg)
+				}
 				as.BaseStreamer.Cancel()
 				return
 			}
-			as.PushDisconnection(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER)
+			if msg := as.Disconnect(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER); msg != nil {
+				as.Input(msg)
+			}
 			as.BaseStreamer.Cancel()
 			return
 		}
@@ -164,7 +168,7 @@ func (as *Streamer) runFrameReader() {
 		case FrameTypeUUID:
 			if as.initialUUID == "" {
 				as.initialUUID = strings.TrimSpace(string(frame.Payload))
-				as.PushInput(as.CreateConnectionRequest())
+				as.Input(as.CreateConnectionRequest())
 			}
 		case FrameTypeAudio:
 			if err := as.audioProcessor.ProcessInputAudio(frame.Payload); err != nil {
@@ -179,16 +183,20 @@ func (as *Streamer) runFrameReader() {
 				}
 			})
 			if audioRequest != nil {
-				as.PushInput(audioRequest)
+				as.Input(audioRequest)
 			}
 		case FrameTypeSilence:
 			// no-op
 		case FrameTypeHangup:
-			as.PushDisconnection(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER)
+			if msg := as.Disconnect(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER); msg != nil {
+				as.Input(msg)
+			}
 			as.BaseStreamer.Cancel()
 			return
 		case FrameTypeError:
-			as.PushDisconnection(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER)
+			if msg := as.Disconnect(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER); msg != nil {
+				as.Input(msg)
+			}
 			as.BaseStreamer.Cancel()
 			return
 		}
@@ -216,7 +224,7 @@ func (as *Streamer) Send(response internal_type.Stream) error {
 		case protos.ToolCallAction_TOOL_CALL_ACTION_TRANSFER_CONVERSATION:
 			as.Logger.Warnw("Call transfer not supported for AudioSocket")
 			if data.GetToolId() != "" {
-				as.PushInput(&protos.ConversationToolCallResult{
+				as.Input(&protos.ConversationToolCallResult{
 					Id:     data.GetId(),
 					ToolId: data.GetToolId(), Name: data.GetName(), Action: data.GetAction(),
 					Result: map[string]string{"status": "failed", "reason": "transfer not supported for AudioSocket"},

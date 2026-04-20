@@ -160,16 +160,16 @@ func TestContext_CancelledAfterCancel(t *testing.T) {
 }
 
 // ============================================================================
-// PushInput
+// Input
 // ============================================================================
 
-func TestPushInput_SendsMessage(t *testing.T) {
+func TestInput_SendsNormalMessage(t *testing.T) {
 	bs, _ := newTestStreamer()
 	msg := &protos.ConversationUserMessage{
 		Message: &protos.ConversationUserMessage_Audio{Audio: []byte{1, 2, 3}},
 	}
 
-	bs.PushInput(msg)
+	bs.Input(msg)
 
 	select {
 	case got := <-bs.InputCh:
@@ -179,7 +179,35 @@ func TestPushInput_SendsMessage(t *testing.T) {
 	}
 }
 
-func TestPushInput_DropsWhenFull(t *testing.T) {
+func TestInput_RoutesEventToLow(t *testing.T) {
+	bs, _ := newTestStreamer()
+	msg := &protos.ConversationEvent{Name: "test"}
+
+	bs.Input(msg)
+
+	select {
+	case got := <-bs.LowCh:
+		assert.Equal(t, msg, got)
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("Expected message on LowCh")
+	}
+}
+
+func TestInput_RoutesDisconnectionToCritical(t *testing.T) {
+	bs, _ := newTestStreamer()
+	msg := &protos.ConversationDisconnection{Type: protos.ConversationDisconnection_DISCONNECTION_TYPE_USER}
+
+	bs.Input(msg)
+
+	select {
+	case got := <-bs.CriticalCh:
+		assert.Equal(t, msg, got)
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("Expected message on CriticalCh")
+	}
+}
+
+func TestInput_DropsWhenFull(t *testing.T) {
 	logger, _ := commons.NewApplicationLogger()
 	bs := NewBaseStreamer(logger,
 		WithInputChannelSize(1),
@@ -189,8 +217,8 @@ func TestPushInput_DropsWhenFull(t *testing.T) {
 	msg1 := &protos.ConversationUserMessage{}
 	msg2 := &protos.ConversationUserMessage{}
 
-	bs.PushInput(msg1) // fills the buffer
-	bs.PushInput(msg2) // should be dropped (non-blocking)
+	bs.Input(msg1) // fills the buffer
+	bs.Input(msg2) // should be dropped (non-blocking)
 }
 
 // ============================================================================
@@ -203,7 +231,7 @@ func TestPushOutput_SendsMessage(t *testing.T) {
 		Message: &protos.ConversationAssistantMessage_Audio{Audio: []byte{4, 5}},
 	}
 
-	bs.PushOutput(msg)
+	bs.Output(msg)
 
 	select {
 	case got := <-bs.OutputCh:
@@ -606,76 +634,59 @@ func TestResetOutputBuffer(t *testing.T) {
 }
 
 // ============================================================================
-// PushDisconnection
+// Disconnect
 // ============================================================================
 
-func TestPushDisconnection_SendsDisconnectionMessage(t *testing.T) {
+func TestDisconnect_ReturnsMessage(t *testing.T) {
 	bs, _ := newTestStreamer()
 
-	bs.PushDisconnection(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER)
-
-	select {
-	case msg := <-bs.CriticalCh:
-		dc, ok := msg.(*protos.ConversationDisconnection)
-		require.True(t, ok, "Should be a ConversationDisconnection")
-		assert.Equal(t, protos.ConversationDisconnection_DISCONNECTION_TYPE_USER, dc.Type)
-		assert.NotNil(t, dc.Time)
-	case <-time.After(100 * time.Millisecond):
-		t.Fatal("Expected disconnection on InputCh")
-	}
+	msg := bs.Disconnect(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER)
+	require.NotNil(t, msg)
+	assert.Equal(t, protos.ConversationDisconnection_DISCONNECTION_TYPE_USER, msg.Type)
+	assert.NotNil(t, msg.Time)
 }
 
-func TestPushDisconnection_SetsClosed(t *testing.T) {
+func TestDisconnect_SetsClosed(t *testing.T) {
 	bs, _ := newTestStreamer()
 	assert.False(t, bs.Closed)
 
-	bs.PushDisconnection(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER)
+	bs.Disconnect(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER)
 	assert.True(t, bs.Closed)
 }
 
-func TestPushDisconnection_Idempotent(t *testing.T) {
+func TestDisconnect_Idempotent(t *testing.T) {
 	bs, _ := newTestStreamer()
 
-	bs.PushDisconnection(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER)
-	bs.PushDisconnection(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER) // second call — no-op
+	msg1 := bs.Disconnect(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER)
+	msg2 := bs.Disconnect(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER)
 
-	// Drain the first message
-	<-bs.CriticalCh
-
-	// No second message should exist
-	select {
-	case <-bs.CriticalCh:
-		t.Fatal("PushDisconnection should be idempotent — only one message")
-	default:
-	}
+	assert.NotNil(t, msg1)
+	assert.Nil(t, msg2, "Second call should return nil")
 }
 
-func TestPushDisconnection_ConcurrentCalls(t *testing.T) {
+func TestDisconnect_ConcurrentCalls(t *testing.T) {
 	bs, _ := newTestStreamer()
 	var wg sync.WaitGroup
+	results := make(chan *protos.ConversationDisconnection, 50)
 
 	for i := 0; i < 50; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			bs.PushDisconnection(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER)
+			results <- bs.Disconnect(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER)
 		}()
 	}
 
 	wg.Wait()
+	close(results)
 
-	// Exactly one disconnection message should be on CriticalCh
 	count := 0
-	for {
-		select {
-		case <-bs.CriticalCh:
+	for msg := range results {
+		if msg != nil {
 			count++
-		default:
-			goto done
 		}
 	}
-done:
-	assert.Equal(t, 1, count, "Only one disconnection message regardless of concurrent calls")
+	assert.Equal(t, 1, count, "Only one non-nil message regardless of concurrent calls")
 }
 
 // ============================================================================

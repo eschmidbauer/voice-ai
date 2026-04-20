@@ -60,7 +60,9 @@ func (tws *twilioWebsocketStreamer) runWebSocketReader() {
 	for {
 		_, message, err := conn.ReadMessage()
 		if err != nil {
-			tws.PushDisconnection(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER)
+			if msg := tws.Disconnect(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER); msg != nil {
+				tws.Input(msg)
+			}
 			tws.BaseStreamer.Cancel()
 			return
 		}
@@ -71,15 +73,15 @@ func (tws *twilioWebsocketStreamer) runWebSocketReader() {
 		}
 		switch mediaEvent.Event {
 		case "connected":
-			tws.PushInputLow(&protos.ConversationEvent{
+			tws.Input(&protos.ConversationEvent{
 				Name: "channel",
 				Data: map[string]string{"type": "connected", "provider": "twilio"},
 				Time: timestamppb.Now(),
 			})
 		case "start":
 			tws.handleStartEvent(mediaEvent)
-			tws.PushInput(tws.CreateConnectionRequest())
-			tws.PushInputLow(&protos.ConversationEvent{
+			tws.Input(tws.CreateConnectionRequest())
+			tws.Input(&protos.ConversationEvent{
 				Name: "channel",
 				Data: map[string]string{"type": "stream_started", "provider": "twilio", "stream_id": tws.streamID},
 				Time: timestamppb.Now(),
@@ -87,11 +89,13 @@ func (tws *twilioWebsocketStreamer) runWebSocketReader() {
 		case "media":
 			msg, _ := tws.handleMediaEvent(mediaEvent)
 			if msg != nil {
-				tws.PushInput(msg)
+				tws.Input(msg)
 			}
 		case "stop":
 			tws.Logger.Info("Twilio stream stopped")
-			tws.PushDisconnection(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER)
+			if msg := tws.Disconnect(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER); msg != nil {
+				tws.Input(msg)
+			}
 			tws.Cancel()
 			return
 		default:
@@ -172,7 +176,7 @@ func (tws *twilioWebsocketStreamer) Send(response internal_type.Stream) error {
 		case protos.ToolCallAction_TOOL_CALL_ACTION_TRANSFER_CONVERSATION:
 			to := data.GetArgs()["to"]
 			if to == "" || tws.GetConversationUuid() == "" {
-				tws.PushInput(&protos.ConversationToolCallResult{
+				tws.Input(&protos.ConversationToolCallResult{
 					Id:     data.GetId(),
 					ToolId: data.GetToolId(), Name: data.GetName(), Action: data.GetAction(),
 					Result: map[string]string{"status": "failed", "reason": "missing target or call ID"},
@@ -182,7 +186,7 @@ func (tws *twilioWebsocketStreamer) Send(response internal_type.Stream) error {
 			tws.Logger.Infow("Transferring Twilio call", "to", to)
 			client, err := twilioClient(tws.VaultCredential())
 			if err != nil {
-				tws.PushInput(&protos.ConversationToolCallResult{
+				tws.Input(&protos.ConversationToolCallResult{
 					Id:     data.GetId(),
 					ToolId: data.GetToolId(), Name: data.GetName(), Action: data.GetAction(),
 					Result: map[string]string{"status": "failed", "reason": fmt.Sprintf("twilio client error: %v", err)},
@@ -192,13 +196,13 @@ func (tws *twilioWebsocketStreamer) Send(response internal_type.Stream) error {
 			params := &openapi.UpdateCallParams{}
 			params.SetTwiml(fmt.Sprintf(`<Response><Dial>%s</Dial></Response>`, to))
 			if _, err := client.Api.UpdateCall(tws.GetConversationUuid(), params); err != nil {
-				tws.PushInput(&protos.ConversationToolCallResult{
+				tws.Input(&protos.ConversationToolCallResult{
 					Id:     data.GetId(),
 					ToolId: data.GetToolId(), Name: data.GetName(), Action: data.GetAction(),
 					Result: map[string]string{"status": "failed", "reason": fmt.Sprintf("transfer failed: %v", err)},
 				})
 			} else {
-				tws.PushInput(&protos.ConversationToolCallResult{
+				tws.Input(&protos.ConversationToolCallResult{
 					Id:     data.GetId(),
 					ToolId: data.GetToolId(), Name: data.GetName(), Action: data.GetAction(),
 					Result: map[string]string{"status": "completed"},

@@ -299,6 +299,8 @@ func (eService *assistantToolService) CreateLog(
 	db := eService.postgres.DB(ctx)
 	s3Prefix := eService.ObjectPrefix(*auth.GetCurrentOrganizationId(), *auth.GetCurrentProjectId())
 	_auditId := gorm_generator.ID()
+
+	// store request in blob storage and log the key in db to avoid storing large request/response in db
 	utils.Go(ctx, func() {
 		key := eService.ObjectKey(s3Prefix, _auditId, "request.json")
 		eService.storage.Store(ctx, key, request)
@@ -337,14 +339,13 @@ func (eService *assistantToolService) UpdateLog(
 	auth types.SimplePrinciple,
 	toolCallId string,
 	conversationId uint64,
-	timeTaken int64,
 	status type_enums.RecordState,
 	response []byte,
 ) (*internal_assistant_entity.AssistantToolLog, error) {
 	start := time.Now()
 	db := eService.postgres.DB(ctx)
 	var toolLog internal_assistant_entity.AssistantToolLog
-	if tx := db.Where("tool_call_id = ? AND assistant_conversation_id = ?", toolCallId, conversationId).First(&toolLog); tx.Error != nil {
+	if tx := db.Debug().Where("tool_call_id = ? AND assistant_conversation_id = ?", toolCallId, conversationId).First(&toolLog); tx.Error != nil {
 		return nil, tx.Error
 	}
 
@@ -354,8 +355,8 @@ func (eService *assistantToolService) UpdateLog(
 	})
 
 	tx := db.Model(&toolLog).Updates(map[string]interface{}{
-		"time_taken": timeTaken,
 		"status":     status,
+		"time_taken": gorm.Expr("EXTRACT(EPOCH FROM (NOW() - created_date)) * 1000"),
 	})
 	if tx.Error != nil {
 		eService.logger.Benchmark("eService.UpdateLog", time.Since(start))

@@ -52,7 +52,9 @@ func (vng *vonageWebsocketStreamer) runWebSocketReader() {
 	for {
 		messageType, message, err := conn.ReadMessage()
 		if err != nil {
-			vng.PushDisconnection(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER)
+			if msg := vng.Disconnect(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER); msg != nil {
+				vng.Input(msg)
+			}
 			vng.BaseStreamer.Cancel()
 			return
 		}
@@ -65,14 +67,16 @@ func (vng *vonageWebsocketStreamer) runWebSocketReader() {
 			}
 			switch textEvent["event"] {
 			case "websocket:connected":
-				vng.PushInput(vng.CreateConnectionRequest())
-				vng.PushInputLow(&protos.ConversationEvent{
+				vng.Input(vng.CreateConnectionRequest())
+				vng.Input(&protos.ConversationEvent{
 					Name: "channel",
 					Data: map[string]string{"type": "connected", "provider": "vonage"},
 					Time: timestamppb.Now(),
 				})
 			case "stop":
-				vng.PushDisconnection(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER)
+				if msg := vng.Disconnect(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER); msg != nil {
+					vng.Input(msg)
+				}
 				vng.BaseStreamer.Cancel()
 				return
 			default:
@@ -81,7 +85,7 @@ func (vng *vonageWebsocketStreamer) runWebSocketReader() {
 		case websocket.BinaryMessage:
 			msg, _ := vng.handleMediaEvent(message)
 			if msg != nil {
-				vng.PushInput(msg)
+				vng.Input(msg)
 			}
 		default:
 			vng.Logger.Warn("Unhandled message type", "type", messageType)
@@ -158,7 +162,7 @@ func (vng *vonageWebsocketStreamer) Send(response internal_type.Stream) error {
 		case protos.ToolCallAction_TOOL_CALL_ACTION_TRANSFER_CONVERSATION:
 			vng.Logger.Warnw("Vonage call transfer not yet implemented", "to", data.GetArgs()["to"])
 			if data.GetToolId() != "" {
-				vng.PushInput(&protos.ConversationToolCallResult{
+				vng.Input(&protos.ConversationToolCallResult{
 					Id:     data.GetId(),
 					ToolId: data.GetToolId(), Name: data.GetName(), Action: data.GetAction(),
 					Result: map[string]string{"status": "failed", "reason": "transfer not supported for Vonage"},

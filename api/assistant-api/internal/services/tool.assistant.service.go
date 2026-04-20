@@ -69,7 +69,6 @@ type AssistantToolService interface {
 		auth types.SimplePrinciple,
 		toolCallId string,
 		conversationId uint64,
-		timeTaken int64,
 		status type_enums.RecordState,
 		response []byte,
 	) (*internal_assistant_entity.AssistantToolLog, error)

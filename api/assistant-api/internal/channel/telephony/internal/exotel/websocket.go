@@ -56,7 +56,9 @@ func (exotel *exotelWebsocketStreamer) runWebSocketReader() {
 	for {
 		_, message, err := conn.ReadMessage()
 		if err != nil {
-			exotel.PushDisconnection(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER)
+			if msg := exotel.Disconnect(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER); msg != nil {
+				exotel.Input(msg)
+			}
 			exotel.BaseStreamer.Cancel()
 			return
 		}
@@ -67,15 +69,15 @@ func (exotel *exotelWebsocketStreamer) runWebSocketReader() {
 		}
 		switch mediaEvent.Event {
 		case "connected":
-			exotel.PushInput(exotel.CreateConnectionRequest())
-			exotel.PushInputLow(&protos.ConversationEvent{
+			exotel.Input(exotel.CreateConnectionRequest())
+			exotel.Input(&protos.ConversationEvent{
 				Name: "channel",
 				Data: map[string]string{"type": "connected", "provider": "exotel"},
 				Time: timestamppb.Now(),
 			})
 		case "start":
 			exotel.handleStartEvent(mediaEvent)
-			exotel.PushInputLow(&protos.ConversationEvent{
+			exotel.Input(&protos.ConversationEvent{
 				Name: "channel",
 				Data: map[string]string{"type": "stream_started", "provider": "exotel", "stream_id": exotel.streamID},
 				Time: timestamppb.Now(),
@@ -83,16 +85,18 @@ func (exotel *exotelWebsocketStreamer) runWebSocketReader() {
 		case "media":
 			msg, _ := exotel.handleMediaEvent(mediaEvent)
 			if msg != nil {
-				exotel.PushInput(msg)
+				exotel.Input(msg)
 			}
 		case "dtmf":
-			exotel.PushInputLow(&protos.ConversationEvent{
+			exotel.Input(&protos.ConversationEvent{
 				Name: "channel",
 				Data: map[string]string{"type": "dtmf", "provider": "exotel"},
 				Time: timestamppb.Now(),
 			})
 		case "stop":
-			exotel.PushDisconnection(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER)
+			if msg := exotel.Disconnect(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER); msg != nil {
+				exotel.Input(msg)
+			}
 			exotel.Cancel()
 			return
 		default:
@@ -155,7 +159,7 @@ func (exotel *exotelWebsocketStreamer) Send(response internal_type.Stream) error
 		case protos.ToolCallAction_TOOL_CALL_ACTION_TRANSFER_CONVERSATION:
 			exotel.Logger.Warnw("Call transfer not supported for Exotel")
 			if data.GetToolId() != "" {
-				exotel.PushInput(&protos.ConversationToolCallResult{
+				exotel.Input(&protos.ConversationToolCallResult{
 					Id:     data.GetId(),
 					ToolId: data.GetToolId(), Name: data.GetName(), Action: data.GetAction(),
 					Result: map[string]string{"status": "failed", "reason": "transfer not supported for Exotel"},

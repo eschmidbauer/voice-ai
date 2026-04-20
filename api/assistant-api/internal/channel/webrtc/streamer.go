@@ -34,7 +34,7 @@ import (
 
 // webrtcStreamer implements Streamer using Pion WebRTC for media and gRPC for signaling.
 type webrtcStreamer struct {
-	channel_base.BaseStreamer // channels, buffers, PushInput/PushOutput, Recv, Context
+	channel_base.BaseStreamer // channels, buffers, Input/Output, Recv, Context
 
 	// WebRTC-specific components
 	config     *webrtc_internal.Config
@@ -246,7 +246,7 @@ func (s *webrtcStreamer) setupPeerEventHandlers() {
 			s.Mu.Lock()
 			iceLatencyMs := time.Since(s.iceStartedAt).Milliseconds()
 			s.Mu.Unlock()
-			s.PushInputLow(&protos.ConversationEvent{
+			s.Input(&protos.ConversationEvent{
 				Name: "webrtc",
 				Data: map[string]string{
 					"type":           "peer_connected",
@@ -262,7 +262,7 @@ func (s *webrtcStreamer) setupPeerEventHandlers() {
 			// resolved on a cloud server). Do NOT close the gRPC session; fall
 			// back to text mode so the conversation stays alive.
 			s.Logger.Warnw("WebRTC ICE failed, falling back to text mode", "session", s.sessionID)
-			s.PushInputLow(&protos.ConversationEvent{
+			s.Input(&protos.ConversationEvent{
 				Name: "webrtc",
 				Data: map[string]string{
 					"type":       "peer_failed",
@@ -278,7 +278,7 @@ func (s *webrtcStreamer) setupPeerEventHandlers() {
 			// Only reset audio; do NOT close the gRPC stream/context so the
 			// session can continue in text mode or reconnect.
 			s.Logger.Warnw("WebRTC peer disconnected, resetting audio", "session", s.sessionID)
-			s.PushInputLow(&protos.ConversationEvent{
+			s.Input(&protos.ConversationEvent{
 				Name: "webrtc",
 				Data: map[string]string{
 					"type":       "peer_disconnected",
@@ -296,7 +296,7 @@ func (s *webrtcStreamer) setupPeerEventHandlers() {
 			return
 		}
 		s.Logger.Infow("Remote audio track received", "codec", track.Codec().MimeType)
-		s.PushInputLow(&protos.ConversationEvent{
+		s.Input(&protos.ConversationEvent{
 			Name: "webrtc",
 			Data: map[string]string{
 				"type":       "audio_track_received",
@@ -518,7 +518,7 @@ func (s *webrtcStreamer) sendConfig() {
 		}
 	}
 
-	s.PushOutput(&protos.ServerSignaling{
+	s.Output(&protos.ServerSignaling{
 		SessionId: s.sessionID,
 		Message: &protos.ServerSignaling_Config{
 			Config: &protos.WebRTCConfig{
@@ -532,7 +532,7 @@ func (s *webrtcStreamer) sendConfig() {
 }
 
 func (s *webrtcStreamer) sendOffer(sdp string) {
-	s.PushOutput(&protos.ServerSignaling{
+	s.Output(&protos.ServerSignaling{
 		SessionId: s.sessionID,
 		Message: &protos.ServerSignaling_Sdp{
 			Sdp: &protos.WebRTCSDP{
@@ -544,7 +544,7 @@ func (s *webrtcStreamer) sendOffer(sdp string) {
 }
 
 func (s *webrtcStreamer) sendICECandidate(ice *webrtc_internal.ICECandidate) {
-	s.PushOutput(&protos.ServerSignaling{
+	s.Output(&protos.ServerSignaling{
 		SessionId: s.sessionID,
 		Message: &protos.ServerSignaling_IceCandidate{
 			IceCandidate: &protos.ICECandidate{
@@ -558,14 +558,14 @@ func (s *webrtcStreamer) sendICECandidate(ice *webrtc_internal.ICECandidate) {
 }
 
 func (s *webrtcStreamer) sendReady() {
-	s.PushOutput(&protos.ServerSignaling{
+	s.Output(&protos.ServerSignaling{
 		SessionId: s.sessionID,
 		Message:   &protos.ServerSignaling_Ready{Ready: true},
 	})
 }
 
 func (s *webrtcStreamer) sendClear() {
-	s.PushOutput(&protos.ServerSignaling{
+	s.Output(&protos.ServerSignaling{
 		SessionId: s.sessionID,
 		Message:   &protos.ServerSignaling_Clear{Clear: true},
 	})
@@ -578,23 +578,25 @@ func (s *webrtcStreamer) runGrpcReader() {
 	for {
 		msg, err := s.grpcStream.Recv()
 		if err != nil {
-			s.PushDisconnection(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER)
+			if disc := s.Disconnect(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER); disc != nil {
+				s.Input(disc)
+			}
 			return
 		}
 		switch msg.GetRequest().(type) {
 		case *protos.WebTalkRequest_Initialization:
-			s.PushInput(msg.GetInitialization())
+			s.Input(msg.GetInitialization())
 		case *protos.WebTalkRequest_Configuration:
-			s.PushInput(msg.GetConfiguration())
+			s.Input(msg.GetConfiguration())
 			s.handleConfigurationMessage(msg.GetConfiguration().GetStreamMode())
 		case *protos.WebTalkRequest_Message:
-			s.PushInput(msg.GetMessage())
+			s.Input(msg.GetMessage())
 		case *protos.WebTalkRequest_Metadata:
-			s.PushInput(msg.GetMetadata())
+			s.Input(msg.GetMetadata())
 		case *protos.WebTalkRequest_Metric:
-			s.PushInput(msg.GetMetric())
+			s.Input(msg.GetMetric())
 		case *protos.WebTalkRequest_ToolCallResult:
-			s.PushInput(msg.GetToolCallResult())
+			s.Input(msg.GetToolCallResult())
 		case *protos.WebTalkRequest_Signaling:
 			s.handleClientSignaling(msg.GetSignaling())
 		default:
@@ -676,7 +678,9 @@ func (s *webrtcStreamer) handleClientSignaling(signaling *protos.ClientSignaling
 
 	case *protos.ClientSignaling_Disconnect:
 		if msg.Disconnect {
-			s.PushDisconnection(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER)
+			if disc := s.Disconnect(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER); disc != nil {
+				s.Input(disc)
+			}
 		}
 	}
 }
@@ -777,42 +781,44 @@ func (s *webrtcStreamer) Send(response internal_type.Stream) error {
 			s.BufferAndSendOutput(audio48kHz)
 			return nil
 		case *protos.ConversationAssistantMessage_Text:
-			s.PushOutput(data)
+			s.Output(data)
 		}
 	case *protos.ConversationConfiguration:
-		s.PushOutput(data)
+		s.Output(data)
 	case *protos.ConversationInitialization:
-		s.PushOutput(data)
+		s.Output(data)
 	case *protos.ConversationUserMessage:
-		s.PushOutput(data)
+		s.Output(data)
 	case *protos.ConversationInterruption:
 		if data.Type == protos.ConversationInterruption_INTERRUPTION_TYPE_WORD {
 			s.ClearOutputBuffer()
 			s.sendClear()
 		}
-		s.PushOutput(data)
+		s.Output(data)
 	case *protos.ConversationToolCall:
-		s.PushOutput(data)
+		s.Output(data)
 		if data.GetAction() == protos.ToolCallAction_TOOL_CALL_ACTION_END_CONVERSATION {
-			s.PushInput(&protos.ConversationToolCallResult{
-					Id:     data.GetId(),
+			s.Input(&protos.ConversationToolCallResult{
+				Id:     data.GetId(),
 				ToolId: data.GetToolId(),
 				Name:   data.GetName(),
 				Action: data.GetAction(),
 				Result: map[string]string{"status": "completed"},
 			})
-			s.PushDisconnection(protos.ConversationDisconnection_DISCONNECTION_TYPE_TOOL)
+			if disc := s.Disconnect(protos.ConversationDisconnection_DISCONNECTION_TYPE_TOOL); disc != nil {
+				s.Input(disc)
+			}
 		}
 	case *protos.ConversationError:
-		s.PushOutput(data)
+		s.Output(data)
 	case *protos.ConversationEvent:
-		s.PushOutput(data)
+		s.Output(data)
 	case *protos.ConversationMetadata:
-		s.PushOutput(data)
+		s.Output(data)
 	case *protos.ConversationDisconnection:
-		s.PushOutput(data)
+		s.Output(data)
 	case *protos.ConversationMetric:
-		s.PushOutput(data)
+		s.Output(data)
 	}
 	return nil
 }
@@ -832,7 +838,9 @@ func (s *webrtcStreamer) Close() error {
 	if !s.closed.CompareAndSwap(false, true) {
 		return nil
 	}
-	s.PushDisconnection(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER)
+	if disc := s.Disconnect(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER); disc != nil {
+		s.Input(disc)
+	}
 	s.stopAudioProcessing()
 
 	s.Mu.Lock()

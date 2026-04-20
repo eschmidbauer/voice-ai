@@ -99,7 +99,9 @@ func (aws *asteriskWebsocketStreamer) runWebSocketReader() {
 	for {
 		messageType, message, err := conn.ReadMessage()
 		if err != nil {
-			aws.PushDisconnection(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER)
+			if msg := aws.Disconnect(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER); msg != nil {
+				aws.Input(msg)
+			}
 			aws.BaseStreamer.Cancel()
 			return
 		}
@@ -107,7 +109,7 @@ func (aws *asteriskWebsocketStreamer) runWebSocketReader() {
 		case websocket.BinaryMessage:
 			msg, _ := aws.handleAudioData(message)
 			if msg != nil {
-				aws.PushInput(msg)
+				aws.Input(msg)
 			}
 		case websocket.TextMessage:
 			event, err := internal_asterisk.ParseAsteriskEvent(string(message))
@@ -124,8 +126,8 @@ func (aws *asteriskWebsocketStreamer) runWebSocketReader() {
 					aws.audioProcessor.SetOptimalFrameSize(event.OptimalFrameSize)
 				}
 				aws.startOutputSender()
-				aws.PushInput(aws.CreateConnectionRequest())
-				aws.PushInputLow(&protos.ConversationEvent{
+				aws.Input(aws.CreateConnectionRequest())
+				aws.Input(&protos.ConversationEvent{
 					Name: "channel",
 					Data: map[string]string{"type": "media_started", "provider": "asterisk_ws", "channel_name": aws.channelName},
 					Time: timestamppb.Now(),
@@ -133,19 +135,21 @@ func (aws *asteriskWebsocketStreamer) runWebSocketReader() {
 			case "MEDIA_STOP":
 				aws.Logger.Info("Asterisk media stopped")
 				aws.stopAudioProcessing()
-				aws.PushDisconnection(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER)
+				if msg := aws.Disconnect(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER); msg != nil {
+					aws.Input(msg)
+				}
 				aws.Cancel()
 				return
 			case "MEDIA_XON":
 				aws.audioProcessor.SetXON()
-				aws.PushInputLow(&protos.ConversationEvent{
+				aws.Input(&protos.ConversationEvent{
 					Name: "channel",
 					Data: map[string]string{"type": "flow_control", "provider": "asterisk_ws", "state": "xon"},
 					Time: timestamppb.Now(),
 				})
 			case "MEDIA_XOFF":
 				aws.audioProcessor.SetXOFF()
-				aws.PushInputLow(&protos.ConversationEvent{
+				aws.Input(&protos.ConversationEvent{
 					Name: "channel",
 					Data: map[string]string{"type": "flow_control", "provider": "asterisk_ws", "state": "xoff"},
 					Time: timestamppb.Now(),
@@ -160,7 +164,9 @@ func (aws *asteriskWebsocketStreamer) runWebSocketReader() {
 				}
 			}
 		case websocket.CloseMessage:
-			aws.PushDisconnection(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER)
+			if msg := aws.Disconnect(protos.ConversationDisconnection_DISCONNECTION_TYPE_USER); msg != nil {
+				aws.Input(msg)
+			}
 			aws.BaseStreamer.Cancel()
 			return
 		default:
@@ -221,7 +227,7 @@ func (aws *asteriskWebsocketStreamer) Send(response internal_type.Stream) error 
 		case protos.ToolCallAction_TOOL_CALL_ACTION_TRANSFER_CONVERSATION:
 			to := data.GetArgs()["to"]
 			if to == "" || aws.channelName == "" {
-				aws.PushInput(&protos.ConversationToolCallResult{
+				aws.Input(&protos.ConversationToolCallResult{
 					Id:     data.GetId(),
 					ToolId: data.GetToolId(), Name: data.GetName(), Action: data.GetAction(),
 					Result: map[string]string{"status": "failed", "reason": "missing target or channel name"},
@@ -232,13 +238,13 @@ func (aws *asteriskWebsocketStreamer) Send(response internal_type.Stream) error 
 			aws.stopAudioProcessing()
 			if err := aws.redirectViaARI(to); err != nil {
 				aws.Logger.Errorw("ARI redirect failed", "error", err, "to", to)
-				aws.PushInput(&protos.ConversationToolCallResult{
+				aws.Input(&protos.ConversationToolCallResult{
 					Id:     data.GetId(),
 					ToolId: data.GetToolId(), Name: data.GetName(), Action: data.GetAction(),
 					Result: map[string]string{"status": "failed", "reason": fmt.Sprintf("ARI redirect failed: %v", err)},
 				})
 			} else {
-				aws.PushInput(&protos.ConversationToolCallResult{
+				aws.Input(&protos.ConversationToolCallResult{
 					Id:     data.GetId(),
 					ToolId: data.GetToolId(), Name: data.GetName(), Action: data.GetAction(),
 					Result: map[string]string{"status": "completed"},
