@@ -8,6 +8,7 @@ package internal_tool_local
 import (
 	"context"
 	"fmt"
+	"time"
 
 	internal_tool "github.com/rapidaai/api/assistant-api/internal/agent/executor/tool/internal"
 	internal_assistant_entity "github.com/rapidaai/api/assistant-api/internal/entity/assistants"
@@ -19,6 +20,7 @@ import (
 type transferCallCaller struct {
 	toolCaller
 	transferTo      string
+	transferDelay   uint32
 	transferMessage string
 }
 
@@ -26,8 +28,13 @@ func (tc *transferCallCaller) Call(ctx context.Context, contextID, toolId string
 	if to, ok := args["transfer_to"].(string); ok && to != "" {
 		tc.transferTo = to
 	}
+
 	if msg, ok := args["transfer_message"].(string); ok && msg != "" {
 		tc.transferMessage = msg
+	}
+
+	if delay, ok := args["transfer_delay"].(float64); ok {
+		tc.transferDelay = uint32(delay)
 	}
 
 	if tc.transferMessage != "" {
@@ -35,13 +42,19 @@ func (tc *transferCallCaller) Call(ctx context.Context, contextID, toolId string
 			internal_type.InjectMessagePacket{ContextID: contextID, Text: tc.transferMessage},
 		)
 	}
+
+	if tc.transferDelay > 0 {
+		time.Sleep(time.Duration(tc.transferDelay) * time.Millisecond)
+	}
 	communication.OnPacket(ctx,
 		internal_type.LLMToolCallPacket{
 			ToolID:    toolId,
 			Name:      tc.Name(),
 			ContextID: contextID,
 			Action:    protos.ToolCallAction_TOOL_CALL_ACTION_TRANSFER_CONVERSATION,
-			Arguments: map[string]string{"to": tc.transferTo, "message": tc.transferMessage},
+			Arguments: map[string]string{
+				"to":      tc.transferTo,
+				"message": tc.transferMessage, "delay": fmt.Sprintf("%d", tc.transferDelay)},
 		})
 }
 
@@ -52,6 +65,7 @@ func NewTransferCallCaller(ctx context.Context, logger commons.Logger, toolOptio
 	if err != nil {
 		return nil, fmt.Errorf("tool.transfer_to is required: %v", err)
 	}
+	transferDelay, _ := opts.GetUint32("tool.transfer_delay")
 	transferMessage, _ := opts.GetString("tool.transfer_message")
 	return &transferCallCaller{
 		toolCaller: toolCaller{
@@ -59,6 +73,7 @@ func NewTransferCallCaller(ctx context.Context, logger commons.Logger, toolOptio
 			toolOptions: toolOptions,
 		},
 		transferMessage: transferMessage,
+		transferDelay:   transferDelay,
 		transferTo:      transferTo,
 	}, nil
 }

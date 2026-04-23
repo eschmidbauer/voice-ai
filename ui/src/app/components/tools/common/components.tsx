@@ -253,7 +253,7 @@ export const ParameterEditor: FC<ParameterEditorProps> = ({
                   <TextInput id={`param-val-${index}`} labelText="" hideLabel value={val} onChange={e => handleValueChange(index, e.target.value)} placeholder="Value" size="md" />
                 </td>
                 <td className="p-0 text-center">
-                  <Button hasIconOnly renderIcon={TrashCan} iconDescription="Remove" kind="danger--ghost" size="sm" onClick={() => handleRemove(index)} />
+                  <Button hasIconOnly renderIcon={TrashCan} iconDescription="Remove" kind="ghost" size="sm" onClick={() => handleRemove(index)} />
                 </td>
               </tr>
             );

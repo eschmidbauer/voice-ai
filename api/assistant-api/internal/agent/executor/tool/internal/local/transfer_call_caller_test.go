@@ -98,3 +98,22 @@ func TestTransferCallCaller_Call_SIPTarget(t *testing.T) {
 	assert.Equal(t, protos.ToolCallAction_TOOL_CALL_ACTION_TRANSFER_CONVERSATION, tc.Action)
 	assert.Equal(t, "sip:support@pbx.example.com", tc.Arguments["to"])
 }
+
+func TestTransferCallCaller_Call_TransferToFromArgsWithSeparator(t *testing.T) {
+	collector := &packetCollector{}
+	comm := &mockCommunication{collector: collector}
+
+	caller := &transferCallCaller{
+		toolCaller: toolCaller{toolOptions: &internal_assistant_entity.AssistantTool{Name: "transfer_call"}},
+		transferTo: "+15550000000",
+	}
+	args := map[string]interface{}{"transfer_to": "+15551111111SEPERATOR+15552222222"}
+
+	caller.Call(context.Background(), "ctx-sep", "tool-sep", args, comm)
+
+	pkts := collector.all()
+	require.Len(t, pkts, 1)
+	tc, ok := pkts[0].(internal_type.LLMToolCallPacket)
+	require.True(t, ok, "packet[0] must be LLMToolCallPacket")
+	assert.Equal(t, "+15551111111SEPERATOR+15552222222", tc.Arguments["to"], "caller passes raw targets — streamer splits")
+}

@@ -59,7 +59,9 @@ const ConfigSelect: FC<IConfigSelectProps> = ({
                     size="md"
                     onChange={e => {
                       onChange(
-                        options.map((item, i) => (i === index ? e.target.value : item)),
+                        options.map((item, i) =>
+                          i === index ? e.target.value : item,
+                        ),
                       );
                     }}
                   />
@@ -69,9 +71,11 @@ const ConfigSelect: FC<IConfigSelectProps> = ({
                     hasIconOnly
                     renderIcon={TrashCan}
                     iconDescription="Remove"
-                    kind="danger--ghost"
+                    kind="ghost"
                     size="sm"
-                    onClick={() => onChange(options.filter((_, i) => i !== index))}
+                    onClick={() =>
+                      onChange(options.filter((_, i) => i !== index))
+                    }
                   />
                 </td>
               </tr>
@@ -90,7 +94,9 @@ const ConfigSelect: FC<IConfigSelectProps> = ({
         </TertiaryButton>
       </div>
       {helperText && (
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">{helperText}</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+          {helperText}
+        </p>
       )}
     </div>
   );

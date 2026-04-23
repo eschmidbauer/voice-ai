@@ -64,10 +64,12 @@ type TransferInitiatedPipeline struct {
 	ID              string
 	Session         *Session
 	TargetURI       string
+	Targets         []string
 	Config          *Config
 	OnConnected     func(outboundRTP *RTPHandler)
 	OnFailed        func()
 	OnTeardown      func()
+	OnResumeAI      func()
 	OnOperatorAudio func([]byte)
 }
 

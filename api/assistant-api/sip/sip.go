@@ -927,7 +927,7 @@ func (m *SIPEngine) pipelineCallStart(ctx context.Context, session *sip_infra.Se
 	}
 
 	type transferable interface {
-		SetOnTransferInitiated(func(string))
+		SetOnTransferInitiated(func(targets []string, message string))
 		SetBridgeOutRTP(*sip_infra.RTPHandler)
 		ClearBridgeTarget()
 		StopRingback()
@@ -936,15 +936,17 @@ func (m *SIPEngine) pipelineCallStart(ctx context.Context, session *sip_infra.Se
 		PushToolCallResult(contextID, toolID, toolName string, action protos.ToolCallAction, result map[string]string)
 	}
 	if ts, ok := streamer.(transferable); ok {
-		ts.SetOnTransferInitiated(func(target string) {
+		ts.SetOnTransferInitiated(func(targets []string, message string) {
 			toolID, _ := session.GetMetadata("tool_id")
 			toolIDStr, _ := toolID.(string)
 			toolCtxID, _ := session.GetMetadata("tool_context_id")
 			toolCtxIDStr, _ := toolCtxID.(string)
+			primaryTarget := targets[0]
 			m.dispatcher.OnPipeline(m.ctx, sip_infra.TransferInitiatedPipeline{
 				ID:        callID,
 				Session:   session,
-				TargetURI: target,
+				TargetURI: primaryTarget,
+				Targets:   targets,
 				Config:    sipConfig,
 				OnConnected: func(outboundRTP *sip_infra.RTPHandler) {
 					ts.StopRingback()
@@ -955,7 +957,7 @@ func (m *SIPEngine) pipelineCallStart(ctx context.Context, session *sip_infra.Se
 					if toolIDStr != "" {
 						ts.PushToolCallResult(toolCtxIDStr, toolIDStr, "transfer_call", protos.ToolCallAction_TOOL_CALL_ACTION_TRANSFER_CONVERSATION, map[string]string{
 							"status": "failed",
-							"reason": fmt.Sprintf("Transfer to %s failed", target),
+							"reason": fmt.Sprintf("Transfer to %s failed", primaryTarget),
 						})
 					}
 				},
@@ -966,9 +968,12 @@ func (m *SIPEngine) pipelineCallStart(ctx context.Context, session *sip_infra.Se
 						statusStr, _ := status.(string)
 						ts.PushToolCallResult(toolCtxIDStr, toolIDStr, "transfer_call", protos.ToolCallAction_TOOL_CALL_ACTION_TRANSFER_CONVERSATION, map[string]string{
 							"status": statusStr,
-							"reason": fmt.Sprintf("Transfer to %s %s", target, statusStr),
+							"reason": fmt.Sprintf("Transfer to %s %s", primaryTarget, statusStr),
 						})
 					}
+				},
+				OnResumeAI: func() {
+					ts.ExitTransferMode()
 				},
 				OnOperatorAudio: func(audio []byte) { ts.PushBridgeOperatorAudio(audio) },
 			})

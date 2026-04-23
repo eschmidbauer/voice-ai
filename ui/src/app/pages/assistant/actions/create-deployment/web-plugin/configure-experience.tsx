@@ -76,7 +76,9 @@ export const ConfigureExperience: FC<{
                   max={120}
                   step={1}
                   value={parseInt(experienceConfig.idealTimeout || '30')}
-                  onChange={({ value }: { value: number }) => update('idealTimeout', value.toString())}
+                  onChange={({ value }: { value: number }) =>
+                    update('idealTimeout', value.toString())
+                  }
                   helperText="Duration of silence after which Rapida will prompt the user (15–120 s)."
                 />
 
@@ -86,8 +88,12 @@ export const ConfigureExperience: FC<{
                   min={0}
                   max={5}
                   step={1}
-                  value={parseInt(experienceConfig.idleTimeoutBackoffTimes || '2')}
-                  onChange={({ value }: { value: number }) => update('idleTimeoutBackoffTimes', value.toString())}
+                  value={parseInt(
+                    experienceConfig.idleTimeoutBackoffTimes || '2',
+                  )}
+                  onChange={({ value }: { value: number }) =>
+                    update('idleTimeoutBackoffTimes', value.toString())
+                  }
                   helperText="How many times the idle timeout multiplies before ending the session."
                 />
 
@@ -106,7 +112,9 @@ export const ConfigureExperience: FC<{
                   max={600}
                   step={1}
                   value={parseInt(experienceConfig.maxCallDuration || '300')}
-                  onChange={({ value }: { value: number }) => update('maxCallDuration', value.toString())}
+                  onChange={({ value }: { value: number }) =>
+                    update('maxCallDuration', value.toString())
+                  }
                   helperText="Maximum session length before the call is automatically ended (180–600 s)."
                 />
               </Stack>

@@ -81,13 +81,24 @@ func (s *Server) MakeBridgeCall(ctx context.Context, cfg *Config, toURI, fromURI
 	return session, nil
 }
 
+type BridgeEndReason int
+
+const (
+	BridgeEndInboundBye  BridgeEndReason = iota // caller hung up
+	BridgeEndOutboundBye                        // operator/transfer target hung up
+	BridgeEndContext                             // context cancelled
+	BridgeEndTimeout                             // safety timeout
+)
+
 // BridgeTransfer forwards outbound→inbound RTP audio and monitors both sessions
 // for hangup. The inbound→outbound direction is handled by the caller (the SIP
 // streamer's forwardIncomingAudio switches destination via bridgeOutRTP).
 // Blocks until one side hangs up, a safety timeout, or context cancellation.
 // Ends the outbound session on exit; the inbound session lifecycle is owned by
 // the caller (executeTransfer) to avoid racing with metadata writes.
-func (s *Server) BridgeTransfer(ctx context.Context, inbound, outbound *Session, onOperatorAudio func([]byte)) error {
+// Returns the reason the bridge ended so the caller can decide whether to
+// resume the AI (operator hung up) or tear down (caller hung up).
+func (s *Server) BridgeTransfer(ctx context.Context, inbound, outbound *Session, onOperatorAudio func([]byte)) (BridgeEndReason, error) {
 	inCallID := inbound.GetCallID()
 	outCallID := outbound.GetCallID()
 
@@ -100,7 +111,7 @@ func (s *Server) BridgeTransfer(ctx context.Context, inbound, outbound *Session,
 		if !inbound.IsEnded() {
 			inbound.End()
 		}
-		return NewSIPError("BridgeTransfer", inCallID, "RTP handler unavailable", ErrRTPNotInitialized)
+		return BridgeEndContext, NewSIPError("BridgeTransfer", inCallID, "RTP handler unavailable", ErrRTPNotInitialized)
 	}
 
 	inCodec := inbound.GetNegotiatedCodec()
@@ -123,19 +134,26 @@ func (s *Server) BridgeTransfer(ctx context.Context, inbound, outbound *Session,
 	go s.forwardBridgeAudio(audioCtx, outRTP.AudioIn(), inRTP.AudioOut(), needsTranscode, outCodec, inCodec, onOperatorAudio)
 
 	// Wait for either side to hang up
+	var reason BridgeEndReason
 	select {
 	case <-ctx.Done():
+		reason = BridgeEndContext
 		s.logger.Infow("Bridge: context cancelled",
 			"inbound_call_id", inCallID, "outbound_call_id", outCallID, "error", ctx.Err())
 	case <-inbound.ByeReceived():
+		reason = BridgeEndInboundBye
 		s.logger.Infow("Bridge: inbound caller hung up", "inbound_call_id", inCallID)
 	case <-outbound.ByeReceived():
+		reason = BridgeEndOutboundBye
 		s.logger.Infow("Bridge: transfer target hung up", "outbound_call_id", outCallID)
 	case <-inbound.Context().Done():
+		reason = BridgeEndInboundBye
 		s.logger.Infow("Bridge: inbound session ended", "inbound_call_id", inCallID)
 	case <-outbound.Context().Done():
+		reason = BridgeEndOutboundBye
 		s.logger.Infow("Bridge: outbound session ended", "outbound_call_id", outCallID)
 	case <-time.After(BridgeSafetyTimeout):
+		reason = BridgeEndTimeout
 		s.logger.Warnw("Bridge: safety timeout reached, tearing down",
 			"inbound_call_id", inCallID, "outbound_call_id", outCallID)
 	}
@@ -151,8 +169,9 @@ func (s *Server) BridgeTransfer(ctx context.Context, inbound, outbound *Session,
 	}
 
 	s.logger.Infow("Audio bridge completed",
-		"inbound_call_id", inCallID, "outbound_call_id", outCallID)
-	return nil
+		"inbound_call_id", inCallID, "outbound_call_id", outCallID,
+		"reason", reason)
+	return reason, nil
 }
 
 // forwardBridgeAudio reads audio from src and writes to dst, transcoding if needed.

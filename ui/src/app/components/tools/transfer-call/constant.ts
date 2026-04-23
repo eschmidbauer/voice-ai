@@ -5,6 +5,7 @@ import { getOptionValue, buildDefaultMetadata } from '../common';
 // Constants
 // ============================================================================
 
+export const SEPARATOR = '<|||>';
 const REQUIRED_KEYS = ['tool.transfer_to'];
 
 // ============================================================================
@@ -16,7 +17,11 @@ export const GetTransferCallDefaultOptions = (
 ): Metadata[] =>
   buildDefaultMetadata(
     current,
-    [{ key: 'tool.transfer_to' }],
+    [
+      { key: 'tool.transfer_to' },
+      { key: 'tool.transfer_message' },
+      { key: 'tool.transfer_delay', defaultValue: '0' },
+    ],
     REQUIRED_KEYS,
   );
 
@@ -29,7 +34,7 @@ export const ValidateTransferCallDefaultOptions = (
 ): string | undefined => {
   const transferTo = getOptionValue(options, 'tool.transfer_to');
   if (!transferTo || !transferTo.trim()) {
-    return 'Please provide a phone number or SIP URI to transfer calls to.';
+    return 'Please provide at least one phone number or SIP URI to transfer calls to.';
   }
   return undefined;
 };

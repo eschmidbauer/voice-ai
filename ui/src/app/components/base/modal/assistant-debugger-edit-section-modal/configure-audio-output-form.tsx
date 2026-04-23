@@ -79,7 +79,10 @@ export const ConfigureAudioOutputModalForm: React.FC<
     id: d,
     label: d,
   }));
-  const conjunctionItems = CONJUNCTION_BOUNDARIES.map(b => ({ id: b, label: b }));
+  const conjunctionItems = CONJUNCTION_BOUNDARIES.map(b => ({
+    id: b,
+    label: b,
+  }));
 
   const selectedPronunciations = getParamValue(
     'speaker.pronunciation.dictionaries',
@@ -87,7 +90,10 @@ export const ConfigureAudioOutputModalForm: React.FC<
   )
     .split('<|||>')
     .filter(Boolean);
-  const selectedConjunctions = getParamValue('speaker.conjunction.boundaries', '')
+  const selectedConjunctions = getParamValue(
+    'speaker.conjunction.boundaries',
+    '',
+  )
     .split('<|||>')
     .filter(Boolean);
 
@@ -168,8 +174,6 @@ export const ConfigureAudioOutputModalForm: React.FC<
                 id="conjunction-break"
                 labelText="Pause Duration (Milliseconds)"
                 type="number"
-                min={100}
-                max={300}
                 value={getParamValue('speaker.conjunction.break', '240')}
                 onChange={e =>
                   updateParameter('speaker.conjunction.break', e.target.value)

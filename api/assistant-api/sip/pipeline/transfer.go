@@ -8,6 +8,7 @@ package sip_pipeline
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -45,30 +46,64 @@ func (d *Dispatcher) executeTransfer(ctx context.Context, v sip_infra.TransferIn
 		}
 	}
 
+	targets := v.Targets
+	if len(targets) == 0 {
+		targets = []string{v.TargetURI}
+	}
+
 	bridgeCtx, bridgeCancel := context.WithTimeout(v.Session.Context(), sip_infra.BridgeCallTimeout)
 	defer bridgeCancel()
 
-	outboundSession, err := d.server.MakeBridgeCall(bridgeCtx, cfg, v.TargetURI, cfg.CallerID)
-	if err != nil {
-		d.logger.Errorw("Pipeline: transfer_failed — outbound call failed",
-			"call_id", v.ID,
-			"target", v.TargetURI,
-			"reason", "outbound_failed",
-			"error", err)
-		v.Session.SetMetadata(sip_infra.MetadataBridgeTransferStatus, "failed")
+	var outboundSession *sip_infra.Session
+	var connectedTarget string
+	for i, target := range targets {
+		attempt := i + 1
+		d.logger.Infow("Pipeline: transfer_attempt",
+			"call_id", v.ID, "target", target,
+			"attempt", attempt, "total", len(targets))
 
+		session, err := d.server.MakeBridgeCall(bridgeCtx, cfg, target, cfg.CallerID)
+		if err == nil {
+			outboundSession = session
+			connectedTarget = target
+			break
+		}
+
+		d.logger.Warnw("Pipeline: transfer_target_failed",
+			"call_id", v.ID, "target", target,
+			"attempt", attempt, "error", err)
+
+		d.OnPipeline(ctx, sip_infra.EventEmittedPipeline{
+			ID:    v.ID,
+			Event: "transfer_target_failed",
+			Data: map[string]string{
+				"target":  target,
+				"attempt": fmt.Sprintf("%d", attempt),
+				"error":   err.Error(),
+			},
+		})
+
+		if bridgeCtx.Err() != nil {
+			break
+		}
+	}
+
+	if outboundSession == nil {
+		d.logger.Errorw("Pipeline: transfer_failed — all targets exhausted",
+			"call_id", v.ID, "targets", targets)
+		v.Session.SetMetadata(sip_infra.MetadataBridgeTransferStatus, "failed")
 		if v.OnFailed != nil {
 			v.OnFailed()
 		}
-
 		d.OnPipeline(ctx, sip_infra.TransferFailedPipeline{
 			ID:     v.ID,
-			Error:  err,
+			Error:  fmt.Errorf("all %d transfer targets failed", len(targets)),
 			Reason: "outbound_failed",
 		})
 		return
 	}
 
+	v.TargetURI = connectedTarget
 	outboundCallID := outboundSession.GetCallID()
 
 	d.logger.Infow("Pipeline: transfer_connected",
@@ -94,8 +129,10 @@ func (d *Dispatcher) executeTransfer(ctx context.Context, v sip_infra.TransferIn
 	// Track bridge duration from the moment the transfer target answered
 	bridgeStart := time.Now()
 
-	if err := d.server.BridgeTransfer(context.Background(), v.Session, outboundSession, v.OnOperatorAudio); err != nil {
-		bridgeDuration := time.Since(bridgeStart)
+	endReason, err := d.server.BridgeTransfer(context.Background(), v.Session, outboundSession, v.OnOperatorAudio)
+	bridgeDuration := time.Since(bridgeStart)
+
+	if err != nil {
 		d.logger.Errorw("Pipeline: transfer_completed — bridge failed",
 			"call_id", v.ID,
 			"target", v.TargetURI,
@@ -106,24 +143,36 @@ func (d *Dispatcher) executeTransfer(ctx context.Context, v sip_infra.TransferIn
 		v.Session.SetMetadata(sip_infra.MetadataBridgeTransferStatus, "failed")
 		v.Session.SetMetadata(sip_infra.MetadataBridgeTransferDuration, bridgeDuration.String())
 	} else {
-		bridgeDuration := time.Since(bridgeStart)
 		d.logger.Infow("Pipeline: transfer_completed",
 			"call_id", v.ID,
 			"target", v.TargetURI,
 			"outbound_call_id", outboundCallID,
 			"status", "completed",
+			"end_reason", endReason,
 			"bridge_duration", bridgeDuration)
 		v.Session.SetMetadata(sip_infra.MetadataBridgeTransferStatus, "completed")
 		v.Session.SetMetadata(sip_infra.MetadataBridgeTransferDuration, bridgeDuration.String())
+	}
+
+	// Operator (transfer target) hung up — return caller to AI.
+	// Don't end the inbound session; the Talk loop is still running.
+	if endReason == sip_infra.BridgeEndOutboundBye {
+		if v.OnTeardown != nil {
+			v.OnTeardown()
+		}
+		if v.OnResumeAI != nil {
+			v.OnResumeAI()
+		}
+		return
 	}
 
 	if v.OnTeardown != nil {
 		v.OnTeardown()
 	}
 
-	// End the inbound session after metadata is written. This unblocks
-	// pipelineCallStart's session wait, which then reads the metadata
-	// for observer events. BridgeTransfer only ends the outbound leg.
+	// Caller hung up, timeout, or context cancelled — end the inbound session.
+	// This unblocks pipelineCallStart's session wait, which then reads the
+	// metadata for observer events. BridgeTransfer only ends the outbound leg.
 	if !v.Session.IsEnded() {
 		v.Session.End()
 	}

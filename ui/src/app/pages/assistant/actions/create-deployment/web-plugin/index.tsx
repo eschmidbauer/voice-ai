@@ -169,9 +169,7 @@ const ConfigureAssistantWebDeployment: FC<{ assistantId: string }> = ({
             provider: provider.getAudioprovider() || 'deepgram',
             parameters: GetDefaultSpeechToTextIfInvalid(
               provider.getAudioprovider() || 'deepgram',
-              GetDefaultMicrophoneConfig(
-                provider.getAudiooptionsList() || [],
-              ),
+              GetDefaultMicrophoneConfig(provider.getAudiooptionsList() || []),
             ),
           });
         }
@@ -183,13 +181,10 @@ const ConfigureAssistantWebDeployment: FC<{ assistantId: string }> = ({
             provider: provider.getAudioprovider() || 'cartesia',
             parameters: GetDefaultTextToSpeechIfInvalid(
               provider.getAudioprovider() || 'cartesia',
-              GetDefaultSpeakerConfig(
-                provider.getAudiooptionsList() || [],
-              ),
+              GetDefaultSpeakerConfig(provider.getAudiooptionsList() || []),
             ),
           });
         }
-
       })
       .catch(err => {
         hideLoader();
@@ -409,7 +404,8 @@ const ConfigureAssistantWebDeployment: FC<{ assistantId: string }> = ({
               ),
               actions: [
                 <ButtonSet className="!w-full [&>button]:!flex-1 [&>button]:!max-w-none">
-                  <SecondaryButton size="lg"
+                  <SecondaryButton
+                    size="lg"
                     className="w-full h-full"
                     onClick={() =>
                       showDialog(() => goToDeploymentAssistant(assistantId))
@@ -417,7 +413,8 @@ const ConfigureAssistantWebDeployment: FC<{ assistantId: string }> = ({
                   >
                     Cancel
                   </SecondaryButton>
-                  <PrimaryButton size="lg"
+                  <PrimaryButton
+                    size="lg"
                     type="button"
                     className="w-full h-full"
                     onClick={handleNext}
@@ -462,7 +459,8 @@ const ConfigureAssistantWebDeployment: FC<{ assistantId: string }> = ({
                   <GhostButton size="lg" onClick={handlePrevious}>
                     Previous
                   </GhostButton>
-                  <SecondaryButton size="lg"
+                  <SecondaryButton
+                    size="lg"
                     className="w-full h-full"
                     onClick={() =>
                       showDialog(() => goToDeploymentAssistant(assistantId))
@@ -470,7 +468,8 @@ const ConfigureAssistantWebDeployment: FC<{ assistantId: string }> = ({
                   >
                     Cancel
                   </SecondaryButton>
-                  <PrimaryButton size="lg"
+                  <PrimaryButton
+                    size="lg"
                     type="button"
                     className="w-full h-full"
                     onClick={handleNext}
@@ -515,7 +514,8 @@ const ConfigureAssistantWebDeployment: FC<{ assistantId: string }> = ({
                   <GhostButton size="lg" onClick={handlePrevious}>
                     Previous
                   </GhostButton>
-                  <SecondaryButton size="lg"
+                  <SecondaryButton
+                    size="lg"
                     className="w-full h-full"
                     onClick={() =>
                       showDialog(() => goToDeploymentAssistant(assistantId))
@@ -523,7 +523,8 @@ const ConfigureAssistantWebDeployment: FC<{ assistantId: string }> = ({
                   >
                     Cancel
                   </SecondaryButton>
-                  <PrimaryButton size="lg"
+                  <PrimaryButton
+                    size="lg"
                     type="button"
                     className="w-full h-full"
                     isLoading={isDeploying}

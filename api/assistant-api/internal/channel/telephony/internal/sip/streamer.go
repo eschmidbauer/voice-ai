@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -34,7 +35,7 @@ type Streamer struct {
 
 	transferring        atomic.Bool
 	ringbackCancel      context.CancelFunc
-	onTransferInitiated func(target string)
+	onTransferInitiated func(targets []string, message string)
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -125,6 +126,11 @@ func (s *Streamer) forwardIncomingAudio() {
 			if s.audio.ForwardUserAudio(audioData) {
 				continue
 			}
+			// During transfer (ringback playing, bridge not yet set, or teardown race),
+			// discard audio instead of sending to the AI pipeline.
+			if s.transferring.Load() {
+				continue
+			}
 			resampled := s.audio.ProcessInputAudio(audioData)
 			if resampled == nil {
 				continue
@@ -182,22 +188,24 @@ func (s *Streamer) Send(response internal_type.Stream) error {
 			}
 			s.endSession()
 		case protos.ToolCallAction_TOOL_CALL_ACTION_TRANSFER_CONVERSATION:
-			to := data.GetArgs()["to"]
-			if to == "" {
+			raw := data.GetArgs()["to"]
+			if raw == "" {
 				s.Logger.Warnw("Transfer tool call missing 'to' target")
 				s.PushToolCallResult(data.GetId(), data.GetToolId(), data.GetName(), data.GetAction(), map[string]string{
 					"status": "failed", "reason": "missing transfer target",
 				})
 				return nil
 			}
+			targets := splitTransferTargets(raw)
+			message := data.GetArgs()["message"]
 			s.mu.RLock()
 			if s.session != nil {
-				s.session.SetMetadata(sip_infra.MetadataBridgeTransferTarget, to)
+				s.session.SetMetadata(sip_infra.MetadataBridgeTransferTarget, strings.Join(targets, commons.SEPARATOR))
 				s.session.SetMetadata("tool_id", data.GetToolId())
 				s.session.SetMetadata("tool_context_id", data.GetId())
 			}
 			s.mu.RUnlock()
-			s.EnterTransferMode(to)
+			s.EnterTransferMode(targets, message)
 			return nil
 		}
 	}
@@ -208,11 +216,10 @@ func (s *Streamer) Send(response internal_type.Stream) error {
 // Transfer
 // =============================================================================
 
-func (s *Streamer) EnterTransferMode(target string) {
+func (s *Streamer) EnterTransferMode(targets []string, message string) {
 	if !s.transferring.CompareAndSwap(false, true) {
 		return
 	}
-	s.audio.ClearOutputBuffer()
 
 	s.mu.RLock()
 	session := s.session
@@ -223,14 +230,19 @@ func (s *Streamer) EnterTransferMode(target string) {
 		session.SetState(sip_infra.CallStateTransferring)
 	}
 
-	ringbackCtx, ringbackCancel := context.WithCancel(s.ctx)
-	s.mu.Lock()
-	s.ringbackCancel = ringbackCancel
-	s.mu.Unlock()
-	go s.audio.PlayRingback(ringbackCtx)
+	// If a transfer message was provided, TTS is still playing — let it finish.
+	// Otherwise clear the AI output and play a ringback tone.
+	if message == "" {
+		s.audio.ClearOutputBuffer()
+		ringbackCtx, ringbackCancel := context.WithCancel(s.ctx)
+		s.mu.Lock()
+		s.ringbackCancel = ringbackCancel
+		s.mu.Unlock()
+		go s.audio.PlayRingback(ringbackCtx)
+	}
 
 	if callback != nil {
-		callback(target)
+		callback(targets, message)
 	}
 }
 
@@ -295,10 +307,24 @@ func (s *Streamer) PushToolCallResult(contextID, toolID, toolName string, action
 	})
 }
 
-func (s *Streamer) SetOnTransferInitiated(fn func(target string)) {
+func (s *Streamer) SetOnTransferInitiated(fn func(targets []string, message string)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.onTransferInitiated = fn
+}
+
+func splitTransferTargets(raw string) []string {
+	parts := strings.Split(raw, commons.SEPARATOR)
+	var targets []string
+	for _, p := range parts {
+		if t := strings.TrimSpace(p); t != "" {
+			targets = append(targets, t)
+		}
+	}
+	if len(targets) == 0 {
+		return []string{raw}
+	}
+	return targets
 }
 
 func (s *Streamer) endSession() {
