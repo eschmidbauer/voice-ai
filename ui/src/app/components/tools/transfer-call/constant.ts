@@ -7,6 +7,7 @@ import { getOptionValue, buildDefaultMetadata } from '../common';
 
 export const SEPARATOR = '<|||>';
 const REQUIRED_KEYS = ['tool.transfer_to'];
+const ALL_KEYS = [...REQUIRED_KEYS, 'tool.transfer_message', 'tool.transfer_delay'];
 
 // ============================================================================
 // Default Options
@@ -22,7 +23,7 @@ export const GetTransferCallDefaultOptions = (
       { key: 'tool.transfer_message' },
       { key: 'tool.transfer_delay', defaultValue: '0' },
     ],
-    REQUIRED_KEYS,
+    ALL_KEYS,
   );
 
 // ============================================================================
