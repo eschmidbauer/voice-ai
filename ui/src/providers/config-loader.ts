@@ -104,7 +104,11 @@ const MODEL_SELECTOR_CATEGORIES: ReadonlySet<ProviderConfigCategory> = new Set([
   'text',
 ]);
 const TEXT_MODEL_DATA_CANDIDATES = ['text-models.json', 'models.json'] as const;
-const TEXT_CUSTOM_MODEL_PROVIDERS = new Set(['azure-foundry', 'vertexai']);
+const TEXT_CUSTOM_MODEL_PROVIDERS = new Set([
+  'azure-foundry',
+  'vertexai',
+  'openai-compatible',
+]);
 
 function warnProviderLoadFailure(
   scope: 'config' | 'data',

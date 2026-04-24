@@ -1,0 +1,123 @@
+[
+  {
+    "id": "custom/model",
+    "name": "custom-model",
+    "config": {
+      "parameters": [
+        {
+          "key": "model.frequency_penalty",
+          "label": "Frequency Penalty",
+          "type": "slider",
+          "advanced": true,
+          "required": false,
+          "min": -2,
+          "max": 2,
+          "step": 0.1,
+          "helpText": "Number between -2.0 and 2.0. Penalizes new tokens based on their existing frequency."
+        },
+        {
+          "key": "model.temperature",
+          "label": "Temperature",
+          "type": "slider",
+          "advanced": true,
+          "required": false,
+          "default": "0.7",
+          "min": 0,
+          "max": 2,
+          "step": 0.1,
+          "helpText": "What sampling temperature to use. Higher values make output more random."
+        },
+        {
+          "key": "model.top_p",
+          "label": "Top P",
+          "type": "slider",
+          "advanced": true,
+          "required": false,
+          "default": "1",
+          "min": 0,
+          "max": 1,
+          "step": 0.05,
+          "helpText": "Alternative to sampling with temperature, for nucleus sampling."
+        },
+        {
+          "key": "model.presence_penalty",
+          "label": "Presence Penalty",
+          "type": "slider",
+          "advanced": true,
+          "required": false,
+          "min": -2,
+          "max": 2,
+          "step": 0.1,
+          "helpText": "Number between -2.0 and 2.0. Penalizes new tokens based on whether they've appeared in the text so far."
+        },
+        {
+          "key": "model.max_completion_tokens",
+          "label": "Max Completion Tokens",
+          "type": "number",
+          "advanced": true,
+          "required": false,
+          "default": "2048",
+          "min": 1,
+          "helpText": "Upper bound for tokens generated in the completion.",
+          "errorMessage": "Please provide a positive integer for max_completion_tokens."
+        },
+        {
+          "key": "model.tool_choice",
+          "label": "Tool Choices",
+          "type": "select",
+          "advanced": true,
+          "required": false,
+          "choices": [
+            {
+              "label": "None",
+              "value": "none"
+            },
+            {
+              "label": "Auto",
+              "value": "auto"
+            },
+            {
+              "label": "Required",
+              "value": "required"
+            }
+          ],
+          "helpText": "How the model should select which tool (or tools) to use when generating a response."
+        },
+        {
+          "key": "model.response_format",
+          "label": "Response Format",
+          "type": "json",
+          "advanced": true,
+          "required": false,
+          "colSpan": 2,
+          "helpText": "Specifies the format for model output. Enter as JSON."
+        },
+        {
+          "key": "model.stop",
+          "label": "Stop Sequences",
+          "type": "input",
+          "advanced": true,
+          "required": false,
+          "placeholder": "Comma-separated sequences",
+          "helpText": "Comma-separated sequences where generation will stop (server-specific limits may apply)."
+        },
+        {
+          "key": "model.seed",
+          "label": "Seed",
+          "type": "number",
+          "advanced": true,
+          "required": false,
+          "helpText": "Seed for deterministic sampling if the server supports it."
+        },
+        {
+          "key": "model.user",
+          "label": "User",
+          "type": "input",
+          "advanced": true,
+          "required": false,
+          "placeholder": "User identifier"
+        }
+      ]
+    }
+  }
+]

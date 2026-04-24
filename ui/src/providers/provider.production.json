@@ -326,6 +326,30 @@
         "website": "https://openai.com"
     },
     {
+        "code": "openai-compatible",
+        "name": "OpenAI Compatible",
+        "description": "Connect to any self-hosted or third-party LLM server that exposes the OpenAI Chat Completions API (for example vLLM, Ollama, LM Studio, Text Generation Inference).",
+        "image": "https://rapida-assets-01.s3.ap-south-1.amazonaws.com/providers/1987967168452493312.svg",
+        "featureList": [
+            "text",
+            "external"
+        ],
+        "configurations": [
+            {
+                "name": "url",
+                "type": "string",
+                "label": "Base URL"
+            },
+            {
+                "name": "key",
+                "type": "string",
+                "label": "API Key"
+            }
+        ],
+        "humanname": "OpenAI Compatible",
+        "website": "https://platform.openai.com/docs/api-reference/chat"
+    },
+    {
         "code": "mistral",
         "name": "Mistral",
         "description": "Mistral specializes in creating fast, secure, open-source large language models (LLMs).",

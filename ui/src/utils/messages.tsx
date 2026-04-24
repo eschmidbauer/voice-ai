@@ -1,5 +1,3 @@
-import React from 'react';
-
 /**
  * This function has two roles:
  * 1) If the `id` is empty it assings something so does i18next doesn't throw error. Typescript should prevent this anyway
@@ -14,59 +12,22 @@ export const _t = (id: string, ...rest: any[]): [string, ...any[]] => {
   return [id, ...rest];
 };
 
-export const create_knowledge_success_message = (
-  name: string,
-): React.ReactElement => {
-  return (
-    <p>
-      Your knowledge base <strong className="font-medium">{name}</strong> has
-      been successfully created.
-    </p>
-  );
-};
+export const create_knowledge_success_message = (name: string): string =>
+  `Your knowledge base ${name} has been successfully created.`;
 
 export const create_endpoint_version_success_message = (
   endpointName: string,
-): React.ReactElement => {
-  return (
-    <p>
-      New version of endpoint{' '}
-      <strong className="font-medium">{endpointName}</strong> has been
-      successfully created.
-    </p>
-  );
-};
+): string =>
+  `New version of endpoint ${endpointName} has been successfully created.`;
 
-export const create_endpoint_success_message = (
-  endpointName: string,
-): React.ReactElement => {
-  return (
-    <p>
-      Your endpoint <strong className="font-medium">{endpointName}</strong> has
-      been successfully created.
-    </p>
-  );
-};
+export const create_endpoint_success_message = (endpointName: string): string =>
+  `Your endpoint ${endpointName} has been successfully created.`;
 
 export const create_assistant_version_success_message = (
   assistantName: string,
-): React.ReactElement => {
-  return (
-    <p>
-      New version of assistant{' '}
-      <strong className="font-medium">{assistantName}</strong> has been
-      successfully created.
-    </p>
-  );
-};
+): string =>
+  `New version of assistant ${assistantName} has been successfully created.`;
 
 export const create_assistant_success_message = (
   assistantName: string,
-): React.ReactElement => {
-  return (
-    <p>
-      Your assistant <strong className="font-medium">{assistantName}</strong>{' '}
-      has been successfully created.
-    </p>
-  );
-};
+): string => `Your assistant ${assistantName} has been successfully created.`;
